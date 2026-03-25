@@ -1,0 +1,201 @@
+{
+ "workflow_name": "Work Item",
+ "document_type": "Work Item",
+ "is_active": 1,
+ "override_status": 0,
+ "send_email_alert": 0,
+ "workflow_state_field": "workflow_state",
+ "doctype": "Workflow",
+ "states": [
+  {
+   "state": "Open",
+   "doc_status": "0",
+   "style": "",
+   "is_optional_state": 0,
+   "avoid_status_override": 0,
+   "allow_edit": "Business Analyst",
+   "send_email": 1,
+   "doctype": "Workflow Document State"
+  },
+  {
+   "state": "In Progress",
+   "doc_status": "0",
+   "style": "Warning",
+   "is_optional_state": 0,
+   "avoid_status_override": 0,
+   "allow_edit": "Developer",
+   "send_email": 1,
+   "doctype": "Workflow Document State"
+  },
+  {
+   "state": "Pending Action Plan",
+   "doc_status": "0",
+   "style": "Primary",
+   "is_optional_state": 0,
+   "avoid_status_override": 0,
+   "allow_edit": "Developer",
+   "send_email": 1,
+   "doctype": "Workflow Document State"
+  },
+  {
+   "state": "Pending Execution",
+   "doc_status": "0",
+   "style": "Primary",
+   "is_optional_state": 0,
+   "avoid_status_override": 0,
+   "allow_edit": "Developer",
+   "send_email": 1,
+   "doctype": "Workflow Document State"
+  },
+  {
+   "state": "Pending PR",
+   "doc_status": "0",
+   "style": "Primary",
+   "is_optional_state": 0,
+   "avoid_status_override": 0,
+   "allow_edit": "Developer",
+   "send_email": 1,
+   "doctype": "Workflow Document State"
+  },
+  {
+   "state": "Pending Review",
+   "doc_status": "0",
+   "style": "Warning",
+   "is_optional_state": 0,
+   "avoid_status_override": 0,
+   "allow_edit": "Developer",
+   "send_email": 1,
+   "doctype": "Workflow Document State"
+  },
+  {
+   "state": "Changes Requested",
+   "doc_status": "0",
+   "style": "Warning",
+   "is_optional_state": 0,
+   "avoid_status_override": 0,
+   "allow_edit": "Developer",
+   "send_email": 1,
+   "doctype": "Workflow Document State"
+  },
+  {
+   "state": "In Staging",
+   "doc_status": "0",
+   "style": "Primary",
+   "is_optional_state": 0,
+   "avoid_status_override": 0,
+   "allow_edit": "Developer",
+   "send_email": 1,
+   "doctype": "Workflow Document State"
+  },
+  {
+   "state": "Rejected",
+   "doc_status": "0",
+   "style": "Inverse",
+   "is_optional_state": 0,
+   "avoid_status_override": 0,
+   "allow_edit": "Process Owner",
+   "send_email": 1,
+   "doctype": "Workflow Document State"
+  },
+  {
+   "state": "Done",
+   "doc_status": "0",
+   "style": "Success",
+   "is_optional_state": 0,
+   "avoid_status_override": 0,
+   "allow_edit": "Process Owner",
+   "send_email": 1,
+   "doctype": "Workflow Document State"
+  }
+ ],
+ "transitions": [
+  {
+   "state": "Open",
+   "action": "Start Work",
+   "next_state": "In Progress",
+   "allowed": "Developer",
+   "allow_self_approval": 1,
+   "doctype": "Workflow Transition"
+  },
+  {
+   "state": "In Progress",
+   "action": "Create Action Plan",
+   "next_state": "Pending Action Plan",
+   "allowed": "Developer",
+   "allow_self_approval": 1,
+   "doctype": "Workflow Transition"
+  },
+  {
+   "state": "Pending Action Plan",
+   "action": "Approve Plan",
+   "next_state": "Pending Execution",
+   "allowed": "Developer",
+   "allow_self_approval": 1,
+   "doctype": "Workflow Transition"
+  },
+  {
+   "state": "Pending Execution",
+   "action": "Execute Work Item",
+   "next_state": "Pending PR",
+   "allowed": "Developer",
+   "allow_self_approval": 1,
+   "doctype": "Workflow Transition"
+  },
+  {
+   "state": "Pending PR",
+   "action": "Assign Reviewer",
+   "next_state": "Pending Review",
+   "allowed": "Developer",
+   "allow_self_approval": 1,
+   "doctype": "Workflow Transition"
+  },
+  {
+   "state": "Pending Review",
+   "action": "Request Changes",
+   "next_state": "Changes Requested",
+   "allowed": "Developer",
+   "allow_self_approval": 1,
+   "doctype": "Workflow Transition"
+  },
+  {
+   "state": "Pending Review",
+   "action": "Merge PR",
+   "next_state": "In Staging",
+   "allowed": "Developer",
+   "allow_self_approval": 1,
+   "doctype": "Workflow Transition"
+  },
+  {
+   "state": "Changes Requested",
+   "action": "Restart Work",
+   "next_state": "Pending Action Plan",
+   "allowed": "Developer",
+   "allow_self_approval": 1,
+   "doctype": "Workflow Transition"
+  },
+  {
+   "state": "In Staging",
+   "action": "Accept",
+   "next_state": "Done",
+   "allowed": "Process Owner",
+   "allow_self_approval": 1,
+   "doctype": "Workflow Transition"
+  },
+  {
+   "state": "In Staging",
+   "action": "Reject",
+   "next_state": "Rejected",
+   "allowed": "Process Owner",
+   "allow_self_approval": 1,
+   "doctype": "Workflow Transition"
+  },
+  {
+   "state": "Rejected",
+   "action": "Restart Work",
+   "next_state": "In Progress",
+   "allowed": "Developer",
+   "allow_self_approval": 1,
+   "doctype": "Workflow Transition"
+  }
+ ]
+}

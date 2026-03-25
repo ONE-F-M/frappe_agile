@@ -83,12 +83,12 @@ app_license = "mit"
 # ------------
 
 # before_install = "frappe_agile.install.before_install"
-# after_install = "frappe_agile.install.after_install"
+after_install = "frappe_agile.setup.setup.after_install"
 
 # Uninstallation
 # ------------
 
-# before_uninstall = "frappe_agile.uninstall.before_uninstall"
+before_uninstall = "frappe_agile.setup.setup.before_uninstall"
 # after_uninstall = "frappe_agile.uninstall.after_uninstall"
 
 # Integration Setup
@@ -138,10 +138,12 @@ app_license = "mit"
 # Hook on document methods and events
 
 # doc_events = {
-# 	"*": {
-# 		"on_update": "method",
-# 		"on_cancel": "method",
-# 		"on_trash": "method"
+# 	"Work Item": {
+# 		# Re-calculate Sprint.expected_velocity whenever a Work Item is saved or deleted
+# 		"on_update": "frappe_agile.frappe_agile.doctype.sprint.sprint.update_sprint_velocity",
+# 		"on_trash": "frappe_agile.frappe_agile.doctype.sprint.sprint.update_sprint_velocity",
+# 		# Validate that the Work Item's project matches the assigned Sprint's project
+# 		"validate": "frappe_agile.frappe_agile.doctype.sprint.sprint.validate_work_item_sprint",
 # 	}
 # }
 
