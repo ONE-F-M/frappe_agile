@@ -1,10 +1,8 @@
 {
  "actions": [],
- "allow_copy": 0,
- "allow_import": 0,
  "allow_rename": 1,
  "autoname": "format:WI-{######}",
- "creation": "2026-03-25 17:00:00.000000",
+ "creation": "2026-03-25 17:00:00",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
@@ -14,7 +12,6 @@
   "column_break_bnjh",
   "project",
   "status",
-  "workflow_state",
   "work_item_details_section",
   "description",
   "planning_and_assignment_section",
@@ -89,15 +86,16 @@
    "label": "Planning and Assignment"
   },
   {
+   "depends_on": "eval:doc.work_item_type != 'Epic'",
    "fieldname": "sprint",
    "fieldtype": "Link",
    "label": "Sprint",
-   "options": "Sprint",
-   "depends_on": "eval:doc.work_item_type != 'Epic'"
+   "options": "Sprint"
   },
   {
    "fieldname": "story_points",
    "fieldtype": "Float",
+   "in_list_view": 1,
    "label": "Story Points"
   },
   {
@@ -107,10 +105,10 @@
    "options": "User"
   },
   {
+   "fetch_from": "assignee_user.full_name",
    "fieldname": "assignee_name",
    "fieldtype": "Data",
-   "fetch_from": "assignee_user.full_name",
-   "fetch_if_empty": 0,
+   "in_list_view": 1,
    "label": "Assignee Name",
    "read_only": 1
   },
@@ -119,11 +117,11 @@
    "fieldtype": "Column Break"
   },
   {
+   "depends_on": "eval:doc.work_item_type != 'Epic'",
    "fieldname": "epic",
    "fieldtype": "Link",
    "label": "Epic",
-   "options": "Work Item",
-   "depends_on": "eval:doc.work_item_type != 'Epic'"
+   "options": "Work Item"
   },
   {
    "fieldname": "reporter_user",
@@ -132,10 +130,9 @@
    "options": "User"
   },
   {
+   "fetch_from": "reporter_user.full_name",
    "fieldname": "reporter_name",
    "fieldtype": "Data",
-   "fetch_from": "reporter_user.full_name",
-   "fetch_if_empty": 0,
    "label": "Reporter Name",
    "read_only": 1
   },
@@ -172,10 +169,9 @@
    "options": "User"
   },
   {
+   "fetch_from": "pr_reviewer_user.full_name",
    "fieldname": "pr_reviewer_name",
    "fieldtype": "Data",
-   "fetch_from": "pr_reviewer_user.full_name",
-   "fetch_if_empty": 0,
    "label": "PR Reviewer Name",
    "read_only": 1
   },
@@ -190,13 +186,8 @@
   }
  ],
  "index_web_pages_for_search": 1,
- "is_submittable": 0,
- "is_tree": 0,
- "is_virtual": 0,
- "issingle": 0,
- "istable": 0,
  "links": [],
- "modified": "2026-03-25 17:00:00.000000",
+ "modified": "2026-03-27 23:57:37.102964",
  "modified_by": "Administrator",
  "module": "Frappe Agile",
  "name": "Work Item",
@@ -230,7 +221,6 @@
   },
   {
    "create": 1,
-   "delete": 0,
    "email": 1,
    "export": 1,
    "print": 1,
@@ -241,9 +231,9 @@
    "write": 1
   }
  ],
+ "row_format": "Dynamic",
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": [],
- "title_field": "title",
- "track_changes": 0
+ "title_field": "title"
 }
