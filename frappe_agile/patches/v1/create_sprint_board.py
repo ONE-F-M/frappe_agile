@@ -26,6 +26,7 @@ def execute():
 	for idx, status in enumerate(status_options):
 		board.append("columns", {
 			"column_name": status,
+			"idx": idx + 1,
 			"status": "Active",
 			"indicator": "Gray" if status in ["Open"] else "Blue" if status in ["In Progress", "Pending Action Plan", "Pending Execution", "Pending PR", "In Staging"] else "Orange" if status in ["Pending Review", "Changes Requested"] else "Red" if status == "Rejected" else "Green"
 		})

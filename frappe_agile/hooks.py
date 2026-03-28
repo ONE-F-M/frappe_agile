@@ -261,15 +261,5 @@ fixtures = [
 				"Sprint Board"
 			]
 		]
-	},
-	{
-		"dt": "Kanban Board Column",
-		"filters": [
-			[
-				"parent",
-				"=",
-				"Sprint Board"
-			]
-		]
 	}
 ]
