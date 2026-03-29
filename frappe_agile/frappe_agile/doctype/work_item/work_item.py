@@ -15,6 +15,15 @@ class WorkItem(Document):
 		if self.sprint:
 			self._add_to_sprint(self.sprint)
 
+	def before_save(self):
+		"""
+		Ensure workflow_state is kept in sync when `status` is forcefully
+		changed via Kanban Board drag-and-drop.
+		"""
+		if self.status and self.workflow_state != self.status:
+			if frappe.db.exists("Workflow State", self.status):
+				self.workflow_state = self.status
+
 	def on_update(self):
 		"""
 		Keep the Sprint Work Item child table in sync when the sprint

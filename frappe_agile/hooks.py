@@ -44,7 +44,7 @@ app_license = "mit"
 
 # include js in doctype views
 # doctype_js = {"doctype" : "public/js/doctype.js"}
-# doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
+doctype_list_js = {"Work Item": "public/js/work_item_list.js"}
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
 # doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}
 
@@ -147,6 +147,13 @@ before_uninstall = "frappe_agile.setup.setup.before_uninstall"
 # 	}
 # }
 
+doc_events = {
+	"Sprint": {
+		"on_update": "frappe_agile.setup.setup.update_backlog_list_filter",
+		"on_trash": "frappe_agile.setup.setup.update_backlog_list_filter",
+	}
+}
+
 # Scheduled Tasks
 # ---------------
 
@@ -244,3 +251,15 @@ before_uninstall = "frappe_agile.setup.setup.before_uninstall"
 # 	"Logging DocType Name": 30  # days to retain logs
 # }
 
+fixtures = [
+	{
+		"dt": "Kanban Board",
+		"filters": [
+			[
+				"name",
+				"=",
+				"Sprint Board"
+			]
+		]
+	}
+]
