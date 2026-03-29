@@ -147,21 +147,123 @@ All errors are recorded in **Frappe Error Log** (desk → `Error Log` DocType):
 
 ---
 
-## Manual curl Test
+## Local Testing (without GitHub)
+
+You can fully test the webhook locally using `curl` — no GitHub account or tunnel needed.
+
+### Step 1 — Prerequisites
 
 ```bash
-SECRET="your_secret"
-PAYLOAD='{"action":"opened","pull_request":{"html_url":"https://github.com/org/repo/pull/1","merged":false,"title":"","body":"WI-000001 fix","head":{"ref":"feature/fix"}}}'
-SIG="sha256=$(echo -n "$PAYLOAD" | openssl dgst -sha256 -hmac "$SECRET" | awk '{print $2}')"
+# 1. Add the secret to site_config (only once)
+bench --site onefm set-config github_webhook_secret "test-secret-123"
 
-curl -X POST \
-  "https://your-site.com/api/method/frappe_agile.api.github_webhook.handle_github_webhook" \
-  -H "Content-Type: application/json" \
-  -H "X-GitHub-Event: pull_request" \
-  -H "X-Hub-Signature-256: $SIG" \
-  -d "$PAYLOAD"
-# → {"message": {"status": "ok"}}
+# 2. Restart to load the new config
+bench restart
+
+# 3. Verify bench is reachable
+curl -s "http://onefm.localhost:8006/api/method/frappe.ping"
+# → {"message":"pong"}
 ```
+
+### Step 2 — Understand the required Work Item state
+
+Each curl command only works when the Work Item is in the **correct preceding state**.
+The webhook never skips steps — it follows the workflow order:
+
+```
+Open → In Progress → Pending Action Plan → Pending Execution
+                                                  │
+                                           [push curl] ↓
+                                             Pending PR
+                                                  │
+                                        [PR opened curl] ↓
+                                           Pending Review
+                                            /           \
+                               [review curl] ↓       [PR merged curl] ↓
+                               Changes Requested       In Staging
+```
+
+Advance the Work Item to the correct state in the desk first (click the workflow action buttons), then run the matching curl.
+
+> **Quick testing shortcut** — force-set state via bench (local only, do not use in production):
+> ```bash
+> bench --site onefm execute frappe.db.set_value --args '["Work Item","WI-XXXXXX","workflow_state","Pending Execution"]'
+> bench --site onefm clear-cache
+> ```
+
+---
+
+### Step 3 — Run the curl commands
+
+Replace `WI-XXXXXX` with your actual Work Item name throughout.
+
+#### ⚪ Push → `Pending PR`
+*(Work Item must be in `Pending Execution`)*
+
+```bash
+SECRET="test-secret-123"
+PAYLOAD='{"ref":"refs/heads/feature/WI-XXXXXX-fix","commits":[{"message":"fix: WI-XXXXXX implementation"}]}'
+SIG="sha256=$(echo -n "$PAYLOAD" | openssl dgst -sha256 -hmac "$SECRET" | awk '{print $2}')"
+curl -s -X POST "http://onefm.localhost:8006/api/method/frappe_agile.api.github_webhook.handle_github_webhook" \
+  -H "Content-Type: application/json" -H "X-GitHub-Event: push" -H "X-Hub-Signature-256: $SIG" \
+  -d "$PAYLOAD"
+```
+
+#### 🔵 PR Opened → `Pending Review`
+*(Work Item must be in `Pending PR`)*
+
+```bash
+SECRET="test-secret-123"
+PAYLOAD='{"action":"opened","pull_request":{"html_url":"https://github.com/test/repo/pull/1","merged":false,"title":"[WI-XXXXXX] fix","body":"WI-XXXXXX","head":{"ref":"feature/test"}}}'
+SIG="sha256=$(echo -n "$PAYLOAD" | openssl dgst -sha256 -hmac "$SECRET" | awk '{print $2}')"
+curl -s -X POST "http://onefm.localhost:8006/api/method/frappe_agile.api.github_webhook.handle_github_webhook" \
+  -H "Content-Type: application/json" -H "X-GitHub-Event: pull_request" -H "X-Hub-Signature-256: $SIG" \
+  -d "$PAYLOAD"
+```
+
+#### 🟡 Review Changes Requested → `Changes Requested`
+*(Work Item must be in `Pending Review`)*
+
+```bash
+SECRET="test-secret-123"
+PAYLOAD='{"review":{"state":"changes_requested"},"pull_request":{"html_url":"https://github.com/test/repo/pull/1","title":"","body":"WI-XXXXXX","head":{"ref":"feature/test"}}}'
+SIG="sha256=$(echo -n "$PAYLOAD" | openssl dgst -sha256 -hmac "$SECRET" | awk '{print $2}')"
+curl -s -X POST "http://onefm.localhost:8006/api/method/frappe_agile.api.github_webhook.handle_github_webhook" \
+  -H "Content-Type: application/json" -H "X-GitHub-Event: pull_request_review" -H "X-Hub-Signature-256: $SIG" \
+  -d "$PAYLOAD"
+```
+
+#### 🟢 PR Merged → `In Staging`
+*(Work Item must be in `Pending Review`)*
+
+```bash
+SECRET="test-secret-123"
+PAYLOAD='{"action":"closed","pull_request":{"html_url":"https://github.com/test/repo/pull/1","merged":true,"title":"","body":"WI-XXXXXX","head":{"ref":"feature/test"}}}'
+SIG="sha256=$(echo -n "$PAYLOAD" | openssl dgst -sha256 -hmac "$SECRET" | awk '{print $2}')"
+curl -s -X POST "http://onefm.localhost:8006/api/method/frappe_agile.api.github_webhook.handle_github_webhook" \
+  -H "Content-Type: application/json" -H "X-GitHub-Event: pull_request" -H "X-Hub-Signature-256: $SIG" \
+  -d "$PAYLOAD"
+```
+
+**Expected response for all:** `{"message": {"status": "ok"}}`
+
+---
+
+### Step 4 — Verify & Troubleshoot
+
+```bash
+# Check current workflow_state of a Work Item
+bench --site onefm execute frappe.db.get_value --args '["Work Item","WI-XXXXXX","workflow_state"]'
+```
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `Expecting value: line 1 column 1` | Bench not running | Run `bench start` |
+| `{"status":"ok"}` but state unchanged | WI not in required state | Check state with bench execute above |
+| `_server_messages: Not a valid Workflow Action` | Same as above | Advance WI to correct state first |
+| `signature mismatch` in Error Log | Secret mismatch | Ensure `site_config.json` secret matches `$SECRET` |
+
+Check **desk → Error Log** and search `GitHub Webhook` for detailed error messages.
 
 ---
 

@@ -31,7 +31,7 @@ import re
 
 import frappe
 from frappe import _
-from frappe.model.workflow import apply_workflow
+from frappe.model.workflow import WorkflowTransitionError, apply_workflow
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -242,12 +242,16 @@ def _apply(wi_name: str, action: str, pr_url: str = ""):
             f"GitHub Webhook: applied '{action}' to {wi_name} (PR: {pr_url or 'n/a'})"
         )
 
-    except frappe.exceptions.WorkflowPermissionError as exc:
+    except WorkflowTransitionError as exc:
+        current_state = frappe.db.get_value("Work Item", wi_name, "workflow_state")
         frappe.log_error(
-            title=f"GitHub Webhook – workflow permission error on {wi_name}",
-            message=str(exc),
+            title=f"GitHub Webhook – invalid transition '{action}' on {wi_name}",
+            message=(
+                f"Action '{action}' is not valid from current state '{current_state}'. "
+                f"PR: {pr_url or 'n/a'}. Error: {exc}"
+            ),
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception:  # noqa: BLE001
         frappe.log_error(
             title=f"GitHub Webhook – unexpected error applying '{action}' to {wi_name}",
             message=frappe.get_traceback(),
