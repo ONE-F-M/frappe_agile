@@ -70,6 +70,7 @@
   {
    "fieldname": "status",
    "fieldtype": "Select",
+   "hidden": 1,
    "label": "Status",
    "options": "Open\nIn Progress\nPending Action Plan\nPending Execution\nPending PR\nPending Review\nChanges Requested\nIn Staging\nRejected\nDone"
   },
