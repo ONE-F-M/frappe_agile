@@ -123,12 +123,16 @@ If the Work Item is already at `Pending Review` or later, it is **not touched**
 
 The handler searches for `WI-\d+` (case-insensitive) in this priority order:
 
+**For `pull_request` and `pull_request_review` events:**
 1. **PR body** — e.g., `Closes WI-000042` or `Linked to WI-42`
 2. **PR title** — e.g., `[WI-42] Fix login`
 3. **Branch name** — e.g., `feature/WI-000042-add-auth`
-4. **Commit messages** *(push events only)*
 
-If no Work Item ID is found, the event is logged and silently skipped.
+**For `push` events:**
+1. **Commit messages** (concatenated) — e.g., `fix(WI-000042): correct logic`
+2. **Branch name** — e.g., `feature/WI-000042-add-auth`
+
+If no Work Item ID is found in a push event, it is **silently ignored** (no error logged — not every push references a WI). For PR events, a missing ID is logged to Error Log.
 
 ---
 
@@ -136,14 +140,18 @@ If no Work Item ID is found, the event is logged and silently skipped.
 
 All errors are recorded in **Frappe Error Log** (desk → `Error Log` DocType):
 
-| Situation | Log title |
-|---|---|
-| Bad / missing HMAC signature | `GitHub Webhook – signature mismatch` |
-| Malformed JSON body | `GitHub Webhook – malformed JSON payload` |
-| Work Item not found | `GitHub Webhook – Work Item not found` |
-| No WI-ID in payload | `GitHub Webhook – no Work Item ID found (...)` |
-| `apply_workflow` permission error | `GitHub Webhook – workflow permission error on WI-XXXXXX` |
-| Any other exception | `GitHub Webhook – unexpected error applying '...' to WI-XXXXXX` |
+| Situation | Logged? | HTTP response |
+|---|---|---|
+| `github_webhook_secret` not in site_config | ✅ logged | 401 thrown |
+| Missing/malformed `X-Hub-Signature-256` header | ❌ not logged | 401 thrown |
+| Signature mismatch (wrong secret) | ✅ logged (prefix only) | 401 thrown |
+| Malformed JSON body | ✅ logged | 400 thrown |
+| WI not found in push ref/commits | ✅ logged | 200 ok |
+| WI not found in PR body/title/branch | ✅ logged (PR events only) | 200 ok |
+| Push with no WI reference | ❌ silently ignored | 200 ok |
+| `workflow_state` is None or missing | ✅ logged | 200 ok |
+| Invalid transition from current state | ✅ logged with current state | 200 ok |
+| Unexpected exception in `_apply` | ✅ logged with traceback | 200 ok |
 
 ---
 
