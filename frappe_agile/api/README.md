@@ -136,6 +136,51 @@ If no Work Item ID is found in a push event, it is **silently ignored** (no erro
 
 ---
 
+## How to Reference a Work Item in a PR
+
+Developers can mention the Work Item **anywhere** — the webhook searches body → title → branch name in priority order. Any of the following formats work:
+
+### ✅ Option 1 — PR Body (recommended)
+
+```
+Closes WI-1532189
+Linked to WI-1532189
+This PR implements WI-1532189
+Related: WI-1532189
+```
+
+GitHub's `Closes WI-XXXXXX` syntax is recommended — it auto-links the issue in GitHub's UI and is picked up first by the webhook.
+
+### ✅ Option 2 — PR Title
+
+```
+[WI-1532189] Fix null check on session login
+WI-1532189: Add leave validation logic
+feat(WI-1532189): refactor approval flow
+```
+
+### ✅ Option 3 — Branch Name (fallback)
+
+```
+feature/WI-1532189-fix-login
+WI-1532189/add-validation
+bugfix/WI-1532189
+```
+
+### Rules
+
+- **Case-insensitive** — `wi-1532189` and `WI-1532189` both work
+- **No leading zeros required** — `WI-42` and `WI-000042` are both valid
+- **First match wins** — body is checked before title, title before branch name
+- **Multiple WIs** — only the first match found is acted upon
+
+### Team Convention
+
+Enforce branch naming like `feature/WI-XXXXXXX-short-description` so the webhook always has a fallback even if the PR body is missing a reference. This also makes it easy to identify which Work Item a branch belongs to directly from GitHub's branch list.
+
+---
+
+
 ## Error Handling
 
 All errors are recorded in **Frappe Error Log** (desk → `Error Log` DocType):
