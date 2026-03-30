@@ -112,3 +112,42 @@ class WorkItem(Document):
 				).format(self.project, sprint_project),
 				title=_("Project Mismatch"),
 			)
+
+
+# ---------------------------------------------------------------------------
+# Module-level helper called via doc_events in hooks.py
+# ---------------------------------------------------------------------------
+
+
+def sync_status_from_workflow(doc, method=None):
+	"""
+	Keep the `status` Select field in sync with `workflow_state`.
+
+	When a Workflow action fires (e.g. "Start Work"), Frappe sets
+	`workflow_state` but does NOT automatically mirror it to the
+	`status` field.  This hook bridges that gap so both fields
+	always reflect the same value.
+
+	Direction: workflow_state  →  status
+	(The `before_save` hook on the controller handles the reverse
+	direction for Kanban drag-and-drop: status → workflow_state.)
+	"""
+	if not doc.workflow_state:
+		return
+
+	# Only sync when workflow_state is a known status option
+	valid_statuses = [
+		"Open",
+		"In Progress",
+		"Pending Action Plan",
+		"Pending Execution",
+		"Pending PR",
+		"Pending Review",
+		"Changes Requested",
+		"In Staging",
+		"Rejected",
+		"Done",
+	]
+
+	if doc.workflow_state in valid_statuses and doc.status != doc.workflow_state:
+		doc.status = doc.workflow_state

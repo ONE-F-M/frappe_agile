@@ -137,21 +137,21 @@ before_uninstall = "frappe_agile.setup.setup.before_uninstall"
 # ---------------
 # Hook on document methods and events
 
-# doc_events = {
-# 	"Work Item": {
-# 		# Re-calculate Sprint.expected_velocity whenever a Work Item is saved or deleted
-# 		"on_update": "frappe_agile.frappe_agile.doctype.sprint.sprint.update_sprint_velocity",
-# 		"on_trash": "frappe_agile.frappe_agile.doctype.sprint.sprint.update_sprint_velocity",
-# 		# Validate that the Work Item's project matches the assigned Sprint's project
-# 		"validate": "frappe_agile.frappe_agile.doctype.sprint.sprint.validate_work_item_sprint",
-# 	}
-# }
-
 doc_events = {
 	"Sprint": {
 		"on_update": "frappe_agile.setup.setup.update_backlog_list_filter",
 		"on_trash": "frappe_agile.setup.setup.update_backlog_list_filter",
-	}
+	},
+	"Work Item": {
+		# Keep the status field in sync with the workflow_state (workflow is authoritative)
+		"validate": [
+			"frappe_agile.frappe_agile.doctype.work_item.work_item.sync_status_from_workflow",
+			"frappe_agile.frappe_agile.doctype.sprint.sprint.validate_work_item_sprint",
+		],
+		# Recalculate Sprint.expected_velocity whenever a Work Item changes sprint or story_points
+		"on_update": "frappe_agile.frappe_agile.doctype.sprint.sprint.update_sprint_velocity",
+		"on_trash": "frappe_agile.frappe_agile.doctype.sprint.sprint.update_sprint_velocity",
+	},
 }
 
 # Scheduled Tasks
