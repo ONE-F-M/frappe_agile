@@ -107,6 +107,8 @@ function setupListViewFilters(listview) {
 			let control = frappe.ui.form.make_control({
 				df: Object.assign({}, df, {
 					onchange: function() {
+						if (control.is_syncing) return;
+
 						let val = control.get_value();
 						
 						if (frappe.route_options && frappe.route_options[df.fieldname]) {
@@ -114,7 +116,8 @@ function setupListViewFilters(listview) {
 						}
 
 						let current_filters = listview.filter_area.get() || [];
-						let updated_filters = current_filters.filter(f => f[1] !== df.fieldname);
+						// Only ever remove '=' filters created by this control, leave complex saved filters like '!=' or 'not in' alone!
+						let updated_filters = current_filters.filter(f => !(f[1] === df.fieldname && f[2] === '='));
 						listview.filter_area.clear();
 						
 						if (val) {
@@ -141,13 +144,21 @@ function setupListViewFilters(listview) {
 	}
 
 	if (listview.custom_list_controls) {
-		let current_filters = listview.filter_area.get() || [];
+		let current_filters = listview.filter_area.get();
 		Object.keys(listview.custom_list_controls).forEach(fieldname => {
-			let active_filter = current_filters.find(f => f[1] === fieldname);
+			// This inline UI can only represent simple '=' queries.
+			let active_filter = current_filters.find(f => f[1] === fieldname && f[2] === '=');
 			let target_val = active_filter ? active_filter[3] : '';
 			let control = listview.custom_list_controls[fieldname];
+			
 			if (control.get_value() !== target_val) {
-				control.set_value(target_val);
+				control.is_syncing = true;
+				let promise = control.set_value(target_val);
+				if (promise && promise.finally) {
+					promise.finally(() => { control.is_syncing = false; });
+				} else {
+					control.is_syncing = false;
+				}
 			}
 		});
 	}
@@ -185,6 +196,8 @@ function setupKanbanFilters(listview) {
 			let control = frappe.ui.form.make_control({
 				df: Object.assign({}, df, {
 					onchange: function() {
+						if (control.is_syncing) return;
+
 						let val = control.get_value();
 						
 						if (frappe.route_options && frappe.route_options[df.fieldname]) {
@@ -192,7 +205,7 @@ function setupKanbanFilters(listview) {
 						}
 
 						let current_filters = listview.filter_area.get() || [];
-						let updated_filters = current_filters.filter(f => f[1] !== df.fieldname);
+						let updated_filters = current_filters.filter(f => !(f[1] === df.fieldname && f[2] === '='));
 						
 						listview.filter_area.clear();
 						
@@ -219,13 +232,20 @@ function setupKanbanFilters(listview) {
 	}
 
 	if (listview.custom_kanban_controls) {
-		let current_filters = listview.filter_area.get() || [];
+		let current_filters = listview.filter_area.get();
 		Object.keys(listview.custom_kanban_controls).forEach(fieldname => {
-			let active_filter = current_filters.find(f => f[1] === fieldname);
+			let active_filter = current_filters.find(f => f[1] === fieldname && f[2] === '=');
 			let target_val = active_filter ? active_filter[3] : '';
 			let control = listview.custom_kanban_controls[fieldname];
+			
 			if (control.get_value() !== target_val) {
-				control.set_value(target_val);
+				control.is_syncing = true;
+				let promise = control.set_value(target_val);
+				if (promise && promise.finally) {
+					promise.finally(() => { control.is_syncing = false; });
+				} else {
+					control.is_syncing = false;
+				}
 			}
 		});
 	}
