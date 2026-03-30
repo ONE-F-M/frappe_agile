@@ -141,7 +141,7 @@ function setupListViewFilters(listview) {
 	}
 
 	if (listview.custom_list_controls) {
-		let current_filters = listview.filter_area.get();
+		let current_filters = listview.filter_area.get() || [];
 		Object.keys(listview.custom_list_controls).forEach(fieldname => {
 			let active_filter = current_filters.find(f => f[1] === fieldname);
 			let target_val = active_filter ? active_filter[3] : '';
@@ -219,7 +219,7 @@ function setupKanbanFilters(listview) {
 	}
 
 	if (listview.custom_kanban_controls) {
-		let current_filters = listview.filter_area.get();
+		let current_filters = listview.filter_area.get() || [];
 		Object.keys(listview.custom_kanban_controls).forEach(fieldname => {
 			let active_filter = current_filters.find(f => f[1] === fieldname);
 			let target_val = active_filter ? active_filter[3] : '';
