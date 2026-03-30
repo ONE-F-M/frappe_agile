@@ -19,8 +19,7 @@
    "fieldtype": "Link",
    "in_list_view": 1,
    "label": "Work Item",
-   "options": "Work Item",
-   "reqd": 1
+   "options": "Work Item"
   },
   {
    "columns": 2,
