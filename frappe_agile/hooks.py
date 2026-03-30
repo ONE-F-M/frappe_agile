@@ -251,15 +251,3 @@ doc_events = {
 # 	"Logging DocType Name": 30  # days to retain logs
 # }
 
-fixtures = [
-	{
-		"dt": "Kanban Board",
-		"filters": [
-			[
-				"name",
-				"=",
-				"Sprint Board"
-			]
-		]
-	}
-]
