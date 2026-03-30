@@ -261,9 +261,7 @@ def _apply(wi_name: str, action: str, pr_url: str = ""):
 		apply_workflow(doc, action)
 		doc.save(ignore_permissions=True)
 
-		frappe.logger().info(
-			f"GitHub Webhook: applied '{action}' to {wi_name} (PR: {pr_url or 'n/a'})"
-		)
+		print(f"GitHub Webhook: applied '{action}' to {wi_name} (PR: {pr_url or 'n/a'})")
 
 	except WorkflowTransitionError as exc:
 		current_state = frappe.db.get_value("Work Item", wi_name, "workflow_state")
