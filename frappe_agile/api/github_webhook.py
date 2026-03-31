@@ -130,6 +130,11 @@ def _handle_pull_request(payload: dict):
 		return
 
 	if action == "opened":
+		# If the WI is still in Pending Execution (push webhook never fired),
+		# auto-advance it to Pending PR first, then assign the reviewer.
+		current_state = frappe.db.get_value("Work Item", wi_name, "workflow_state") if frappe.db.exists("Work Item", wi_name) else None
+		if current_state == "Pending Execution":
+			_apply(wi_name, "Execute Work Item", pr_url=pr_url)
 		_apply(wi_name, "Assign Reviewer", pr_url=pr_url)
 
 	elif action == "closed" and merged:
