@@ -6,7 +6,7 @@ from frappe.utils import flt
 
 class Sprint(Document):
 	def autoname(self):
-		if self.sprint_prefix:
+		if not self.name and self.sprint_prefix:
 			self.sprint_prefix = self.sprint_prefix.strip()
 			from frappe.model.naming import make_autoname
 			self.name = make_autoname(f"{self.sprint_prefix}-.###")
@@ -142,6 +142,57 @@ def validate_work_item_sprint(doc, method=None):
 
 
 @frappe.whitelist()
+def get_or_create_target_sprint(sprint_name: str) -> str:
+	"""
+	Calculates the next sequential sprint.
+	If it exists and is Draft, returns it.
+	If it doesn't exist, creates it in Draft silently and returns it.
+	Falls back to normal creation if the sequence is broken.
+	"""
+	import re
+	doc = frappe.get_doc("Sprint", sprint_name)
+	
+	match = re.search(r'-(\d+)$', sprint_name)
+	if not match:
+		new_sprint = frappe.get_doc({
+			"doctype": "Sprint",
+			"sprint_prefix": doc.sprint_prefix,
+			"project": doc.project,
+			"status": "Draft",
+		})
+		new_sprint.insert(ignore_permissions=True)
+		return new_sprint.name
+
+	num_str = match.group(1)
+	next_num = int(num_str) + 1
+	target_sprint_name = f"{doc.sprint_prefix}-{str(next_num).zfill(len(num_str))}"
+
+	if frappe.db.exists("Sprint", target_sprint_name):
+		status = frappe.db.get_value("Sprint", target_sprint_name, "status")
+		if status == "Draft":
+			return target_sprint_name
+		else:
+			new_sprint = frappe.get_doc({
+				"doctype": "Sprint",
+				"sprint_prefix": doc.sprint_prefix,
+				"project": doc.project,
+				"status": "Draft",
+			})
+			new_sprint.insert(ignore_permissions=True)
+			return new_sprint.name
+	else:
+		new_sprint = frappe.get_doc({
+			"doctype": "Sprint",
+			"name": target_sprint_name,
+			"sprint_prefix": doc.sprint_prefix,
+			"project": doc.project,
+			"status": "Draft",
+		})
+		new_sprint.insert(ignore_permissions=True)
+		return new_sprint.name
+
+
+@frappe.whitelist()
 def handle_incomplete_items(sprint: str, action: str):
 	"""Handle Work Items that are not Done when a sprint is completed."""
 	work_items = frappe.get_all(
@@ -149,25 +200,18 @@ def handle_incomplete_items(sprint: str, action: str):
 		filters={"sprint": sprint, "workflow_state": ["!=", "Done"]},
 		fields=["name"]
 	)
-	if not work_items:
-		return
 
 	new_sprint_name = None
 	if action == "Move to New Sprint":
-		old_sprint = frappe.get_doc("Sprint", sprint)
-		new_sprint = frappe.get_doc({
-			"doctype": "Sprint",
-			"sprint_prefix": old_sprint.sprint_prefix,
-			"project": old_sprint.project,
-			"status": "Draft",
-		})
-		new_sprint.insert(ignore_permissions=True)
-		new_sprint_name = new_sprint.name
+		new_sprint_name = get_or_create_target_sprint(sprint)
+
+	if not work_items:
+		return new_sprint_name
 
 	# Move each incomplete Work Item
 	work_item_names = [wi.name for wi in work_items]
 	for wi_name in work_item_names:
-		frappe.db.set_value("Work Item", wi_name, "sprint", new_sprint_name)
+		frappe.db.set_value("Work Item", wi_name, "sprint", new_sprint_name or "")
 
 	# Also remove these Work Items from the Sprint's child table
 	sprintwork_rows = frappe.get_all(
@@ -190,3 +234,5 @@ def handle_incomplete_items(sprint: str, action: str):
 			}).insert(ignore_permissions=True)
 
 	frappe.db.commit()
+
+	return new_sprint_name

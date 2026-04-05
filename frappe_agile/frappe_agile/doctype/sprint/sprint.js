@@ -46,7 +46,13 @@ frappe.ui.form.on("Sprint", {
 							secondary_action_label: __("Complete & Create New Sprint"),
 							secondary_action: function () {
 								d.hide();
-								_trigger_save(frm, true);
+								frappe.call({
+									method: "frappe_agile.frappe_agile.doctype.sprint.sprint.get_or_create_target_sprint",
+									args: { sprint_name: frm.doc.name },
+									callback: function(r) {
+										_trigger_save(frm, r.message);
+									}
+								});
 							}
 						});
 						d.show();
@@ -76,9 +82,9 @@ frappe.ui.form.on("Sprint", {
 										sprint: frm.doc.name,
 										action: values.move_to
 									},
-									callback: function () {
+									callback: function (r) {
 										d.hide();
-										_trigger_save(frm);
+										_trigger_save(frm, r.message);
 									}
 								});
 							}
@@ -94,19 +100,12 @@ frappe.ui.form.on("Sprint", {
 	}
 });
 
-function _trigger_save(frm, create_next) {
+function _trigger_save(frm, target_sprint) {
 	frm.doc._modal_confirmed = true;
 	frappe.validated = true;
 	frm.save().then(() => {
-		if (create_next) {
-			frappe.db.insert({
-				doctype: "Sprint",
-				sprint_prefix: frm.doc.sprint_prefix,
-				project: frm.doc.project,
-				status: "Draft"
-			}).then((new_doc) => {
-				frappe.set_route("Form", "Sprint", new_doc.name);
-			});
+		if (target_sprint) {
+			frappe.set_route("Form", "Sprint", target_sprint);
 		} else {
 			frm.reload_doc();
 		}
