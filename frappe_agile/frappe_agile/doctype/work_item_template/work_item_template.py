@@ -21,4 +21,7 @@ class WorkItemTemplate(Document):
 
 	def on_trash(self):
 		if frappe.db.exists("Work Item", {"work_item_template": self.name}):
-			frappe.throw("Cannot delete Work Item Template because it is linked to one or more Work Items.")
+			frappe.throw(
+				frappe._("Cannot delete Work Item Template because it is linked to one or more Work Items."),
+				title=frappe._("Cannot Delete")
+			)
