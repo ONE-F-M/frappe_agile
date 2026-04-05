@@ -17,6 +17,7 @@
   "description",
   "planning_and_assignment_section",
   "sprint",
+  "sprint_status",
   "story_points",
   "assignee_user",
   "assignee_name",
@@ -93,6 +94,14 @@
    "fieldtype": "Link",
    "label": "Sprint",
    "options": "Sprint"
+  },
+  {
+   "fieldname": "sprint_status",
+   "fieldtype": "Data",
+   "label": "Sprint Status",
+   "fetch_from": "sprint.status",
+   "read_only": 1,
+   "insert_after": "sprint"
   },
   {
    "fieldname": "story_points",
