@@ -7,6 +7,7 @@ from frappe.utils import flt
 class Sprint(Document):
 	def autoname(self):
 		if self.sprint_prefix:
+			self.sprint_prefix = self.sprint_prefix.strip()
 			from frappe.model.naming import make_autoname
 			self.name = make_autoname(f"{self.sprint_prefix}-.###")
 
