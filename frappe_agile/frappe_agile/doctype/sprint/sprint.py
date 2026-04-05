@@ -5,7 +5,13 @@ from frappe.utils import flt
 
 
 class Sprint(Document):
+	def autoname(self):
+		if self.sprint_prefix:
+			from frappe.model.naming import make_autoname
+			self.name = make_autoname(f"{self.sprint_prefix}-.###")
+
 	def validate(self):
+		self.validate_status_transition()
 		self.validate_active_sprint_uniqueness()
 		self.calculate_expected_velocity()
 
@@ -15,6 +21,16 @@ class Sprint(Document):
 			return
 		self.calculate_expected_velocity()
 		self.db_set("expected_velocity", self.expected_velocity, update_modified=False)
+
+	def validate_status_transition(self):
+		"""Once a Sprint is Completed, it cannot be reverted to Draft or Active."""
+		if not self.is_new():
+			previous = self.get_doc_before_save()
+			if previous and previous.status == "Completed" and self.status != "Completed":
+				frappe.throw(
+					_("A Completed Sprint cannot be reverted back to {0}.").format(self.status),
+					title=_("Sprint Completed")
+				)
 
 	def validate_active_sprint_uniqueness(self):
 		"""Prevent two sprints with the same prefix from being Active simultaneously."""
@@ -122,3 +138,54 @@ def validate_work_item_sprint(doc, method=None):
 			).format(doc.project, doc.sprint, sprint_project),
 			title=_("Project Mismatch"),
 		)
+
+
+@frappe.whitelist()
+def handle_incomplete_items(sprint: str, action: str):
+	"""Handle Work Items that are not Done when a sprint is completed."""
+	work_items = frappe.get_all(
+		"Work Item",
+		filters={"sprint": sprint, "workflow_state": ["!=", "Done"]},
+		fields=["name"]
+	)
+	if not work_items:
+		return
+
+	new_sprint_name = None
+	if action == "Move to New Sprint":
+		old_sprint = frappe.get_doc("Sprint", sprint)
+		new_sprint = frappe.get_doc({
+			"doctype": "Sprint",
+			"sprint_prefix": old_sprint.sprint_prefix,
+			"project": old_sprint.project,
+			"status": "Draft",
+		})
+		new_sprint.insert(ignore_permissions=True)
+		new_sprint_name = new_sprint.name
+
+	# Move each incomplete Work Item
+	work_item_names = [wi.name for wi in work_items]
+	for wi_name in work_item_names:
+		frappe.db.set_value("Work Item", wi_name, "sprint", new_sprint_name)
+
+	# Also remove these Work Items from the Sprint's child table
+	sprintwork_rows = frappe.get_all(
+		"Sprint Work Item",
+		filters={"parent": sprint, "work_item": ["in", work_item_names]},
+		fields=["name"]
+	)
+	for row in sprintwork_rows:
+		frappe.delete_doc("Sprint Work Item", row.name, force=True, ignore_permissions=True)
+
+	# If moving to new sprint, add to new sprint's child table
+	if new_sprint_name:
+		for wi_name in work_item_names:
+			frappe.get_doc({
+				"doctype": "Sprint Work Item",
+				"parent": new_sprint_name,
+				"parentfield": "work_items",
+				"parenttype": "Sprint",
+				"work_item": wi_name,
+			}).insert(ignore_permissions=True)
+
+	frappe.db.commit()
