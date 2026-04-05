@@ -9,9 +9,12 @@ from frappe.model.naming import make_autoname
 
 class WorkItem(Document):
 	def autoname(self):
-		# Use Frappe's built-in naming series to generate the next
-		# atomic WI-###### identifier safely.
-		self.name = make_autoname("WI-.######")
+		# Fetch the count of current documents securely via Frappe ORM
+		current_count = frappe.db.count("Work Item")
+		next_sequence = current_count + 1
+		
+		# Set the name explicitly to the correct 6-digit zero-padded sequence
+		self.name = f"WI-{str(next_sequence).zfill(6)}"
 
 	def validate(self):
 		self._validate_sprint_project()
