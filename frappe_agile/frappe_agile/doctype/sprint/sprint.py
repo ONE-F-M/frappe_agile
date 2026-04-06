@@ -237,15 +237,6 @@ def handle_incomplete_items(sprint: str, action: str):
 	for wi_name in work_item_names:
 		frappe.db.set_value("Work Item", wi_name, "sprint", new_sprint_name or "")
 
-	# Also remove these Work Items from the Sprint's child table
-	sprintwork_rows = frappe.get_all(
-		"Sprint Work Item",
-		filters={"parent": sprint, "work_item": ["in", work_item_names]},
-		fields=["name"]
-	)
-	for row in sprintwork_rows:
-		frappe.delete_doc("Sprint Work Item", row.name, force=True, ignore_permissions=True)
-
 	# If moving to new sprint, add to new sprint's child table
 	if new_sprint_name:
 		for wi_name in work_item_names:
