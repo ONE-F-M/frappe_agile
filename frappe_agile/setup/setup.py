@@ -93,7 +93,10 @@ def create_sprint_board_kanban():
 			})
 			doc.insert(ignore_permissions=True)
 		except Exception:
-			pass
+			frappe.log_error(
+				title="Failed to create Sprint Board Kanban Board",
+				message=frappe.get_traceback(),
+			)
 	else:
 		frappe.db.set_value("Kanban Board", "Sprint Board", "filters", filters_json)
 
