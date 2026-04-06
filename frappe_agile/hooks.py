@@ -138,10 +138,6 @@ before_uninstall = "frappe_agile.setup.setup.before_uninstall"
 # Hook on document methods and events
 
 doc_events = {
-	"Sprint": {
-		"on_update": "frappe_agile.setup.setup.update_backlog_list_filter",
-		"on_trash": "frappe_agile.setup.setup.update_backlog_list_filter",
-	},
 	"Work Item": {
 		# Keep the status field in sync with the workflow_state (workflow is authoritative)
 		"validate": [

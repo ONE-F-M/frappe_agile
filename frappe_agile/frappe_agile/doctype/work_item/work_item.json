@@ -14,9 +14,11 @@
   "status",
   "workflow_state",
   "work_item_details_section",
+  "work_item_template",
   "description",
   "planning_and_assignment_section",
   "sprint",
+  "sprint_status",
   "story_points",
   "assignee_user",
   "assignee_name",
@@ -78,6 +80,12 @@
    "label": "Work Item Details"
   },
   {
+   "fieldname": "work_item_template",
+   "fieldtype": "Link",
+   "label": "Work Item Template",
+   "options": "Work Item Template"
+  },
+  {
    "fieldname": "description",
    "fieldtype": "Text Editor",
    "label": "Description"
@@ -93,6 +101,14 @@
    "fieldtype": "Link",
    "label": "Sprint",
    "options": "Sprint"
+  },
+  {
+   "fieldname": "sprint_status",
+   "fieldtype": "Data",
+   "label": "Sprint Status",
+   "fetch_from": "sprint.status",
+   "read_only": 1,
+   "insert_after": "sprint"
   },
   {
    "fieldname": "story_points",
