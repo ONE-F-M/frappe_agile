@@ -13,6 +13,37 @@ frappe.ui.form.on("Work Item", {
 		};
 	},
 
+	setup: function (frm) {
+		frm.set_query("work_item_template", function () {
+			return {
+				filters: {
+					disabled: 0,
+				},
+			};
+		});
+	},
+
+	onload: function (frm) {
+		if (frm.is_new() && !frm.doc.work_item_template) {
+			frappe.db.get_value("Work Item Template", { default_template: 1, disabled: 0 }, "name").then(r => {
+				if (r && r.message && r.message.name) {
+					// This automatically triggers the work_item_template change handler
+					frm.set_value("work_item_template", r.message.name);
+				}
+			});
+		}
+	},
+
+	work_item_template: function (frm) {
+		if (frm.doc.work_item_template) {
+			frappe.db.get_value("Work Item Template", frm.doc.work_item_template, "description").then(r => {
+				if (r && r.message && r.message.description) {
+					frm.set_value("description", r.message.description);
+				}
+			});
+		}
+	},
+
 	refresh: function (frm) {
 		// Apply epic filter on form load too
 		frm.fields_dict.epic.get_query = function () {
@@ -25,11 +56,11 @@ frappe.ui.form.on("Work Item", {
 
 		// Filter sprint to only sprints matching the selected project
 		frm.fields_dict.sprint.get_query = function () {
-			return {
-				filters: {
-					project: frm.doc.project || undefined,
-				},
-			};
+			let filters = { status: ["!=", "Completed"] };
+			if (frm.doc.project) {
+				filters.project = frm.doc.project;
+			}
+			return { filters: filters };
 		};
 	},
 
@@ -39,11 +70,11 @@ frappe.ui.form.on("Work Item", {
 
 		// Re-apply sprint filter for new project
 		frm.fields_dict.sprint.get_query = function () {
-			return {
-				filters: {
-					project: frm.doc.project || undefined,
-				},
-			};
+			let filters = { status: ["!=", "Completed"] };
+			if (frm.doc.project) {
+				filters.project = frm.doc.project;
+			}
+			return { filters: filters };
 		};
 	},
 

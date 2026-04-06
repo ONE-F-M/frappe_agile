@@ -9,6 +9,7 @@ from frappe.model.document import Document
 class WorkItem(Document):
 	def validate(self):
 		self._validate_sprint_project()
+		self._validate_sprint_status()
 
 	def before_insert(self):
 		"""Add this work item to the Sprint's child table on creation."""
@@ -97,6 +98,20 @@ class WorkItem(Document):
 		)
 		for row in sprint_rows:
 			self._remove_from_sprint(row["parent"])
+
+	def _validate_sprint_status(self):
+		"""Ensure the Work Item cannot be linked to a Completed Sprint, 
+		and cannot be modified if it already belongs to a Completed Sprint."""
+		
+		# 1. Prevent moving to or saving against a currently Completed sprint
+		if self.sprint:
+			sprint_status = frappe.db.get_value("Sprint", self.sprint, "status")
+			if sprint_status == "Completed":
+				frappe.throw(
+					_("Cannot assign or update Work Item against Sprint <b>{0}</b> because it is already Completed.").format(self.sprint),
+					title=_("Sprint Completed")
+				)
+		
 
 	def _validate_sprint_project(self):
 		"""Ensure the Work Item's project matches the Sprint's project."""

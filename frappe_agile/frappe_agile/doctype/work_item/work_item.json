@@ -1,241 +1,248 @@
 {
- "actions": [],
- "allow_rename": 1,
- "autoname": "format:WI-{######}",
- "creation": "2026-03-25 17:00:00",
- "doctype": "DocType",
- "engine": "InnoDB",
- "field_order": [
-  "basic_information_section",
-  "work_item_type",
-  "title",
-  "column_break_bnjh",
-  "project",
-  "status",
-  "workflow_state",
-  "work_item_details_section",
-  "description",
-  "planning_and_assignment_section",
-  "sprint",
-  "story_points",
-  "assignee_user",
-  "assignee_name",
-  "column_break_gxds",
-  "epic",
-  "reporter_user",
-  "reporter_name",
-  "process_owner",
-  "implementation_details_section",
-  "planning_prompt_count",
-  "execution_prompt_count",
-  "pr_link",
-  "pr_reviewer_user",
-  "pr_reviewer_name",
-  "column_break_btot",
-  "ai_tools_feedback"
- ],
- "fields": [
-  {
-   "fieldname": "basic_information_section",
-   "fieldtype": "Section Break",
-   "label": "Basic Information"
-  },
-  {
-   "fieldname": "work_item_type",
-   "fieldtype": "Select",
-   "in_list_view": 1,
-   "label": "Work Item Type",
-   "options": "\nEpic\nUser Story\nTask\nBug",
-   "reqd": 1
-  },
-  {
-   "fieldname": "title",
-   "fieldtype": "Small Text",
-   "in_list_view": 1,
-   "label": "Title",
-   "reqd": 1
-  },
-  {
-   "fieldname": "column_break_bnjh",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "project",
-   "fieldtype": "Link",
-   "label": "Project",
-   "options": "Project"
-  },
-  {
-   "fieldname": "status",
-   "fieldtype": "Select",
-   "hidden": 1,
-   "label": "Status",
-   "options": "Open\nIn Progress\nPending Action Plan\nPending Execution\nPending PR\nPending Review\nChanges Requested\nIn Staging\nRejected\nDone"
-  },
-  {
-   "fieldname": "work_item_details_section",
-   "fieldtype": "Section Break",
-   "label": "Work Item Details"
-  },
-  {
-   "fieldname": "description",
-   "fieldtype": "Text Editor",
-   "label": "Description"
-  },
-  {
-   "fieldname": "planning_and_assignment_section",
-   "fieldtype": "Section Break",
-   "label": "Planning and Assignment"
-  },
-  {
-   "depends_on": "eval:doc.work_item_type != 'Epic'",
-   "fieldname": "sprint",
-   "fieldtype": "Link",
-   "label": "Sprint",
-   "options": "Sprint"
-  },
-  {
-   "fieldname": "story_points",
-   "fieldtype": "Float",
-   "in_list_view": 1,
-   "label": "Story Points"
-  },
-  {
-   "fieldname": "assignee_user",
-   "fieldtype": "Link",
-   "label": "Assignee User",
-   "options": "User"
-  },
-  {
-   "fetch_from": "assignee_user.full_name",
-   "fieldname": "assignee_name",
-   "fieldtype": "Data",
-   "in_list_view": 1,
-   "label": "Assignee Name",
-   "read_only": 1
-  },
-  {
-   "fieldname": "column_break_gxds",
-   "fieldtype": "Column Break"
-  },
-  {
-   "depends_on": "eval:doc.work_item_type != 'Epic'",
-   "fieldname": "epic",
-   "fieldtype": "Link",
-   "label": "Epic",
-   "options": "Work Item"
-  },
-  {
-   "fieldname": "reporter_user",
-   "fieldtype": "Link",
-   "label": "Reporter User",
-   "options": "User"
-  },
-  {
-   "fetch_from": "reporter_user.full_name",
-   "fieldname": "reporter_name",
-   "fieldtype": "Data",
-   "label": "Reporter Name",
-   "read_only": 1
-  },
-  {
-   "fieldname": "process_owner",
-   "fieldtype": "Link",
-   "label": "Process Owner",
-   "options": "User"
-  },
-  {
-   "fieldname": "implementation_details_section",
-   "fieldtype": "Section Break",
-   "label": "Implementation Details"
-  },
-  {
-   "fieldname": "planning_prompt_count",
-   "fieldtype": "Int",
-   "label": "Planning Prompt Count"
-  },
-  {
-   "fieldname": "execution_prompt_count",
-   "fieldtype": "Int",
-   "label": "Execution Prompt Count"
-  },
-  {
-   "fieldname": "pr_link",
-   "fieldtype": "Data",
-   "label": "PR Link"
-  },
-  {
-   "fieldname": "pr_reviewer_user",
-   "fieldtype": "Link",
-   "label": "PR Reviewer User",
-   "options": "User"
-  },
-  {
-   "fetch_from": "pr_reviewer_user.full_name",
-   "fieldname": "pr_reviewer_name",
-   "fieldtype": "Data",
-   "label": "PR Reviewer Name",
-   "read_only": 1
-  },
-  {
-   "fieldname": "column_break_btot",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "ai_tools_feedback",
-   "fieldtype": "Long Text",
-   "label": "AI Tools Feedback"
-  }
- ],
- "index_web_pages_for_search": 1,
- "links": [],
- "modified": "2026-03-27 23:57:37.102964",
- "modified_by": "Administrator",
- "module": "Frappe Agile",
- "name": "Work Item",
- "naming_rule": "Expression",
- "owner": "Administrator",
- "permissions": [
-  {
-   "create": 1,
-   "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "System Manager",
-   "share": 1,
-   "write": 1
-  },
-  {
-   "create": 1,
-   "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "Business Analyst",
-   "select": 1,
-   "share": 1,
-   "write": 1
-  },
-  {
-   "create": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "Process Owner",
-   "share": 1,
-   "write": 1
-  }
- ],
- "row_format": "Dynamic",
- "sort_field": "modified",
- "sort_order": "DESC",
- "states": [],
- "title_field": "title"
+    "actions": [],
+    "allow_rename": 1,
+    "autoname": "format:WI-{######}",
+    "creation": "2026-03-25 17:00:00",
+    "doctype": "DocType",
+    "engine": "InnoDB",
+    "field_order": [
+        "basic_information_section",
+        "work_item_type",
+        "title",
+        "column_break_bnjh",
+        "project",
+        "status",
+        "workflow_state",
+        "work_item_details_section",
+        "work_item_template",
+        "description",
+        "planning_and_assignment_section",
+        "sprint",
+        "story_points",
+        "assignee_user",
+        "assignee_name",
+        "column_break_gxds",
+        "epic",
+        "reporter_user",
+        "reporter_name",
+        "process_owner",
+        "implementation_details_section",
+        "planning_prompt_count",
+        "execution_prompt_count",
+        "pr_link",
+        "pr_reviewer_user",
+        "pr_reviewer_name",
+        "column_break_btot",
+        "ai_tools_feedback"
+    ],
+    "fields": [
+        {
+            "fieldname": "basic_information_section",
+            "fieldtype": "Section Break",
+            "label": "Basic Information"
+        },
+        {
+            "fieldname": "work_item_type",
+            "fieldtype": "Select",
+            "in_list_view": 1,
+            "label": "Work Item Type",
+            "options": "\nEpic\nUser Story\nTask\nBug",
+            "reqd": 1
+        },
+        {
+            "fieldname": "title",
+            "fieldtype": "Small Text",
+            "in_list_view": 1,
+            "label": "Title",
+            "reqd": 1
+        },
+        {
+            "fieldname": "column_break_bnjh",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "project",
+            "fieldtype": "Link",
+            "label": "Project",
+            "options": "Project"
+        },
+        {
+            "fieldname": "status",
+            "fieldtype": "Select",
+            "hidden": 1,
+            "label": "Status",
+            "options": "Open\nIn Progress\nPending Action Plan\nPending Execution\nPending PR\nPending Review\nChanges Requested\nIn Staging\nRejected\nDone"
+        },
+        {
+            "fieldname": "work_item_details_section",
+            "fieldtype": "Section Break",
+            "label": "Work Item Details"
+        },
+        {
+            "fieldname": "work_item_template",
+            "fieldtype": "Link",
+            "label": "Work Item Template",
+            "options": "Work Item Template"
+        },
+        {
+            "fieldname": "description",
+            "fieldtype": "Text Editor",
+            "label": "Description"
+        },
+        {
+            "fieldname": "planning_and_assignment_section",
+            "fieldtype": "Section Break",
+            "label": "Planning and Assignment"
+        },
+        {
+            "depends_on": "eval:doc.work_item_type != 'Epic'",
+            "fieldname": "sprint",
+            "fieldtype": "Link",
+            "label": "Sprint",
+            "options": "Sprint"
+        },
+        {
+            "fieldname": "story_points",
+            "fieldtype": "Float",
+            "in_list_view": 1,
+            "label": "Story Points"
+        },
+        {
+            "fieldname": "assignee_user",
+            "fieldtype": "Link",
+            "label": "Assignee User",
+            "options": "User"
+        },
+        {
+            "fetch_from": "assignee_user.full_name",
+            "fieldname": "assignee_name",
+            "fieldtype": "Data",
+            "in_list_view": 1,
+            "label": "Assignee Name",
+            "read_only": 1
+        },
+        {
+            "fieldname": "column_break_gxds",
+            "fieldtype": "Column Break"
+        },
+        {
+            "depends_on": "eval:doc.work_item_type != 'Epic'",
+            "fieldname": "epic",
+            "fieldtype": "Link",
+            "label": "Epic",
+            "options": "Work Item"
+        },
+        {
+            "fieldname": "reporter_user",
+            "fieldtype": "Link",
+            "label": "Reporter User",
+            "options": "User"
+        },
+        {
+            "fetch_from": "reporter_user.full_name",
+            "fieldname": "reporter_name",
+            "fieldtype": "Data",
+            "label": "Reporter Name",
+            "read_only": 1
+        },
+        {
+            "fieldname": "process_owner",
+            "fieldtype": "Link",
+            "label": "Process Owner",
+            "options": "User"
+        },
+        {
+            "fieldname": "implementation_details_section",
+            "fieldtype": "Section Break",
+            "label": "Implementation Details"
+        },
+        {
+            "fieldname": "planning_prompt_count",
+            "fieldtype": "Int",
+            "label": "Planning Prompt Count"
+        },
+        {
+            "fieldname": "execution_prompt_count",
+            "fieldtype": "Int",
+            "label": "Execution Prompt Count"
+        },
+        {
+            "fieldname": "pr_link",
+            "fieldtype": "Data",
+            "label": "PR Link"
+        },
+        {
+            "fieldname": "pr_reviewer_user",
+            "fieldtype": "Link",
+            "label": "PR Reviewer User",
+            "options": "User"
+        },
+        {
+            "fetch_from": "pr_reviewer_user.full_name",
+            "fieldname": "pr_reviewer_name",
+            "fieldtype": "Data",
+            "label": "PR Reviewer Name",
+            "read_only": 1
+        },
+        {
+            "fieldname": "column_break_btot",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "ai_tools_feedback",
+            "fieldtype": "Long Text",
+            "label": "AI Tools Feedback"
+        }
+    ],
+    "index_web_pages_for_search": 1,
+    "links": [],
+    "modified": "2026-03-27 23:57:37.102964",
+    "modified_by": "Administrator",
+    "module": "Frappe Agile",
+    "name": "Work Item",
+    "naming_rule": "Expression",
+    "owner": "Administrator",
+    "permissions": [
+        {
+            "create": 1,
+            "delete": 1,
+            "email": 1,
+            "export": 1,
+            "print": 1,
+            "read": 1,
+            "report": 1,
+            "role": "System Manager",
+            "share": 1,
+            "write": 1
+        },
+        {
+            "create": 1,
+            "delete": 1,
+            "email": 1,
+            "export": 1,
+            "print": 1,
+            "read": 1,
+            "report": 1,
+            "role": "Business Analyst",
+            "select": 1,
+            "share": 1,
+            "write": 1
+        },
+        {
+            "create": 1,
+            "email": 1,
+            "export": 1,
+            "print": 1,
+            "read": 1,
+            "report": 1,
+            "role": "Process Owner",
+            "share": 1,
+            "write": 1
+        }
+    ],
+    "row_format": "Dynamic",
+    "sort_field": "modified",
+    "sort_order": "DESC",
+    "states": [],
+    "title_field": "title"
 }
