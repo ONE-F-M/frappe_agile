@@ -9,8 +9,8 @@ def execute(filters=None):
 def get_columns():
 	return [
 		{"fieldname": "sprint", "label": "Sprint", "fieldtype": "Link", "options": "Sprint", "width": 150},
-		{"fieldname": "sprint_start_date", "label": "SPRINT START DATE", "fieldtype": "Data", "width": 150},
-		{"fieldname": "sprint_end_date", "label": "SPRINT END DATE", "fieldtype": "Data", "width": 150},
+		{"fieldname": "sprint_start_date", "label": "SPRINT START DATE", "fieldtype": "Date", "width": 150},
+		{"fieldname": "sprint_end_date", "label": "SPRINT END DATE", "fieldtype": "Date", "width": 150},
 		{"fieldname": "spill_over", "label": "SPILL OVER", "fieldtype": "Float", "width": 120},
 		{"fieldname": "scoped", "label": "SCOPED", "fieldtype": "Float", "width": 120},
 		{"fieldname": "bug_points", "label": "Bug/HD Ticket", "fieldtype": "Float", "width": 120},
