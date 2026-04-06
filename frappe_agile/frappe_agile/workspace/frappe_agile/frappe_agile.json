@@ -1,0 +1,102 @@
+{
+    "charts": [],
+    "content": "[{\"id\":\"headerAgile\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">Frappe Agile</span>\",\"col\":12}},{\"id\":\"cardDocs\",\"type\":\"card\",\"data\":{\"card_name\":\"Agile Planning\",\"col\":6}},{\"id\":\"cardReps\",\"type\":\"card\",\"data\":{\"card_name\":\"Reports\",\"col\":6}}]",
+    "creation": "2026-04-05 20:00:00.000000",
+    "custom_blocks": [],
+    "docstatus": 0,
+    "doctype": "Workspace",
+    "for_user": "",
+    "hide_custom": 1,
+    "icon": "clipboard",
+    "idx": 0,
+    "indicator_color": "green",
+    "is_hidden": 0,
+    "label": "Frappe Agile",
+    "links": [
+        {
+            "hidden": 0,
+            "is_query_report": 0,
+            "label": "Agile Planning",
+            "link_count": 3,
+            "link_type": "DocType",
+            "onboard": 0,
+            "type": "Card Break"
+        },
+        {
+            "hidden": 0,
+            "is_query_report": 0,
+            "label": "Sprint",
+            "link_count": 0,
+            "link_to": "Sprint",
+            "link_type": "DocType",
+            "onboard": 0,
+            "type": "Link"
+        },
+        {
+            "hidden": 0,
+            "is_query_report": 0,
+            "label": "Work Item",
+            "link_count": 0,
+            "link_to": "Work Item",
+            "link_type": "DocType",
+            "onboard": 0,
+            "type": "Link"
+        },
+        {
+            "hidden": 0,
+            "is_query_report": 0,
+            "label": "Work Item Template",
+            "link_count": 0,
+            "link_to": "Work Item Template",
+            "link_type": "DocType",
+            "onboard": 0,
+            "type": "Link"
+        },
+        {
+            "hidden": 0,
+            "is_query_report": 0,
+            "label": "Reports",
+            "link_count": 2,
+            "link_type": "Report",
+            "onboard": 0,
+            "type": "Card Break"
+        },
+        {
+            "hidden": 0,
+            "is_query_report": 1,
+            "label": "Sprint Report",
+            "link_count": 0,
+            "link_to": "Sprint Report",
+            "link_type": "Report",
+            "onboard": 0,
+            "type": "Link"
+        },
+        {
+            "hidden": 0,
+            "is_query_report": 1,
+            "label": "Sprint Summary",
+            "link_count": 0,
+            "link_to": "Sprint Summary",
+            "link_type": "Report",
+            "onboard": 0,
+            "type": "Link"
+        }
+    ],
+    "modified": "2026-04-06 00:00:00.000000",
+    "modified_by": "Administrator",
+    "module": "Frappe Agile",
+    "name": "Frappe Agile",
+    "number_cards": [],
+    "owner": "Administrator",
+    "parent_page": "",
+    "public": 1,
+    "quick_lists": [],
+    "roles": [
+        {
+            "role": "System Manager"
+        }
+    ],
+    "sequence_id": 4.0,
+    "shortcuts": [],
+    "title": "Frappe Agile"
+}
