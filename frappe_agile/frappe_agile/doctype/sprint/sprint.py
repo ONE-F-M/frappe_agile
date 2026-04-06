@@ -18,10 +18,34 @@ class Sprint(Document):
 
 	def on_update(self):
 		# Guard: skip velocity DB write during DocType schema migration context
-		if not frappe.db.table_exists("tabWork Item"):
+		if not frappe.db.table_exists("Work Item"):
 			return
 		self.calculate_expected_velocity()
 		self.db_set("expected_velocity", self.expected_velocity, update_modified=False)
+		self.sync_sprint_status_to_work_items()
+
+	def sync_sprint_status_to_work_items(self):
+		"""Push this Sprint's current status into sprint_status on all linked Work Items.
+
+		Called on every Sprint save so that the Fetch From cache stays accurate
+		even for existing Work Items that were saved before the sprint changed state.
+		We only write when the status has actually changed to avoid redundant updates.
+		"""
+		if not frappe.db.has_column("Work Item", "sprint_status"):
+			return
+
+		doc_before = self.get_doc_before_save()
+		if doc_before and doc_before.status == self.status:
+			# Status unchanged — nothing to sync
+			return
+
+		frappe.db.set_value(
+			"Work Item",
+			{"sprint": self.name},
+			"sprint_status",
+			self.status,
+			update_modified=False,
+		)
 
 	def validate_status_transition(self):
 		"""Once a Sprint is Completed, it cannot be reverted to Draft or Active."""
