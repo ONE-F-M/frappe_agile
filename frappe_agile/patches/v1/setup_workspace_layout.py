@@ -35,7 +35,7 @@ def execute():
 	doc.sequence_id = 4.0
 	
 	# Setting content for specific block rendering (header cards)
-	doc.content = '[{"id":"agile_doctypes","type":"header","data":{"text":"<span class=\\"h4\\">Agile Planning</span>","col":12}},{"id":"sprint","type":"shortcut","data":{"shortcut_name":"Sprint","col":3}},{"id":"work_item","type":"shortcut","data":{"shortcut_name":"Work Item","col":3}},{"id":"wi_template","type":"shortcut","data":{"shortcut_name":"Work Item Template","col":3}},{"id":"reports_header","type":"header","data":{"text":"<span class=\\"h4\\">Reports</span>","col":12}},{"id":"sprint_report","type":"shortcut","data":{"shortcut_name":"Sprint Report","col":3}},{"id":"sprint_summary","type":"shortcut","data":{"shortcut_name":"Sprint Summary","col":3}}]'
+	doc.content = '[{"id":"agile_doctypes","type":"header","data":{"text":"<span class=\\"h4\\">Agile Planning</span>","col":12}},{"id":"sprint","type":"shortcut","data":{"shortcut_name":"Sprint","col":3}},{"id":"work_item","type":"shortcut","data":{"shortcut_name":"Work Item","col":3}},{"id":"reports_header","type":"header","data":{"text":"<span class=\\"h4\\">Reports</span>","col":12}},{"id":"sprint_report","type":"shortcut","data":{"shortcut_name":"Sprint Report","col":3}},{"id":"sprint_summary","type":"shortcut","data":{"shortcut_name":"Sprint Summary","col":3}}]'
 
 	# Link layout for the Workspace page and Sidebar
 	doc.links = []
