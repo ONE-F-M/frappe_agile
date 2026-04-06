@@ -3,6 +3,7 @@
 
 import frappe
 from frappe.utils import flt, formatdate
+from frappe.query_builder import functions as fn
 
 def execute(filters=None):
 	columns = get_columns()
@@ -30,29 +31,56 @@ def get_columns():
 
 def get_data(filters):
 	data = []
-	conditions = ""
-	if filters and filters.get("sprint"):
-		conditions = f"WHERE name = '{frappe.db.escape(filters.get('sprint'))}'"
+	Sprint = frappe.qb.DocType("Sprint")
+	
+	query = (
+		frappe.qb.from_(Sprint)
+		.select(Sprint.name, Sprint.start_date, Sprint.end_date, Sprint.target_points, Sprint.sprint_prefix)
+		.orderby(Sprint.start_date, order=frappe.qb.desc)
+	)
 
-	sprints = frappe.db.sql(f"""
-		SELECT name, start_date, end_date, target_points
-		FROM `tabSprint`
-		{conditions}
-		ORDER BY start_date DESC
-	""", as_dict=True)
+	if filters and filters.get("sprint"):
+		query = query.where(Sprint.name == filters.get("sprint"))
+
+	sprints = query.run(as_dict=True)
 
 	# Global backlogs count
 	# "BACKLOGS are work items with no sprint set" -> work items where sprint is NULL or empty
 	backlogs_count = frappe.db.count("Work Item", {"sprint": ["in", ["", None]]})
 
 	for sprint in sprints:
-		# Fetch work items for this sprint
-		work_items = frappe.get_all("Work Item", 
-			filters={"sprint": sprint.name}, 
-			fields=["name", "story_points", "work_item_type", "status"]
-		)
+		# Fetch the previous sprint
+		prev_sprint = (
+			frappe.qb.from_(Sprint)
+			.select(Sprint.name)
+			.where(Sprint.sprint_prefix == sprint.sprint_prefix)
+			.where(Sprint.name < sprint.name)
+			.where(Sprint.status == "Completed")
+			.orderby(Sprint.name, order=frappe.qb.desc)
+			.limit(1)
+		).run(as_dict=True)
+
+		spill_over = 0.0
+		SprintItem = frappe.qb.DocType("Sprint Work Item")
+
+		if prev_sprint:
+			spill_val = (
+				frappe.qb.from_(SprintItem)
+				.select(fn.Sum(SprintItem.story_points).as_("spill"))
+				.where(SprintItem.parent == prev_sprint[0].name)
+				.where(SprintItem.status != "Done")
+			).run(as_dict=True)
+			
+			if spill_val and spill_val[0].spill:
+				spill_over = flt(spill_val[0].spill)
+
+		# Fetch work items for this sprint from the child table
+		work_items = (
+			frappe.qb.from_(SprintItem)
+			.select(SprintItem.story_points, SprintItem.work_item_type, SprintItem.status)
+			.where(SprintItem.parent == sprint.name)
+		).run(as_dict=True)
 		
-		spill_over = 0.0 # pending future logic
 		scoped = 0.0
 		bug_points = 0.0
 		accepted = 0.0
