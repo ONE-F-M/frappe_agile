@@ -7,3 +7,4 @@
 frappe_agile.patches.v1.create_sprint_board #2
 frappe_agile.patches.v1.backfill_sprint_status #3
 frappe_agile.patches.v1.create_sprint_and_list_filters #4
+frappe_agile.patches.v1.exclude_epic_from_filters

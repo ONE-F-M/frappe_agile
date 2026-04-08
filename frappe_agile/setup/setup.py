@@ -22,7 +22,8 @@ def get_backlog_filters_json() -> str:
 	"""Generate the filters JSON for the Backlog saved filter."""
 	filters = [
 		["Work Item", "sprint", "is", "not set", False],
-		["Work Item", "workflow_state", "!=", "Done", False]
+		["Work Item", "workflow_state", "!=", "Done", False],
+		["Work Item", "work_item_type", "!=", "Epic", False]
 	]
 	return json.dumps(filters)
 
@@ -31,7 +32,8 @@ def get_sprint_list_filters_json() -> str:
 	"""Generate the filters JSON for the Sprint Kanban List View saved filter."""
 	filters = [
 		["Work Item", "sprint_status", "in", ["Active", "Draft"], False],
-		["Work Item", "workflow_state", "!=", "Done", False]
+		["Work Item", "workflow_state", "!=", "Done", False],
+		["Work Item", "work_item_type", "!=", "Epic", False]
 	]
 	return json.dumps(filters)
 
@@ -76,7 +78,10 @@ def create_list_filters():
 
 def create_sprint_board_kanban():
 	"""Create standard Sprint Board Kanban Board."""
-	filters_json = json.dumps([["Work Item", "sprint_status", "=", "Active", False]])
+	filters_json = json.dumps([
+		["Work Item", "sprint_status", "=", "Active", False],
+		["Work Item", "work_item_type", "!=", "Epic", False]
+	])
 	
 	if not frappe.db.exists("Kanban Board", "Sprint Board"):
 		# In a Kanban Board, columns are added automatically based on the field if not supplied. 

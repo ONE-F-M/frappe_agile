@@ -93,7 +93,8 @@ function setupListViewFilters(listview) {
 
 		listview.custom_list_controls = {};
 
-		const type_options = frappe.meta.get_docfield("Work Item", "work_item_type") ? frappe.meta.get_docfield("Work Item", "work_item_type").options : "\nEpic\nUser Story\nTask\nBug";
+		// Exclude "Epic" from the Work Item Type filter — only show User Story, Task, Bug
+		const type_options = "\nUser Story\nTask\nBug";
 		const status_options = frappe.meta.get_docfield("Work Item", "status") ? frappe.meta.get_docfield("Work Item", "status").options : "\nOpen\nIn Progress\nDone";
 
 		let filters_to_add = [
