@@ -21,18 +21,15 @@
   "sprint_status",
   "story_points",
   "assignee_user",
-  "assignee_name",
   "column_break_gxds",
   "epic",
   "reporter_user",
-  "reporter_name",
   "process_owner",
   "implementation_details_section",
   "planning_prompt_count",
   "execution_prompt_count",
   "pr_link",
   "pr_reviewer_user",
-  "pr_reviewer_name",
   "column_break_btot",
   "ai_tools_feedback"
  ],
@@ -119,16 +116,9 @@
   {
    "fieldname": "assignee_user",
    "fieldtype": "Link",
+   "in_list_view": 1,
    "label": "Assignee User",
    "options": "User"
-  },
-  {
-   "fetch_from": "assignee_user.full_name",
-   "fieldname": "assignee_name",
-   "fieldtype": "Data",
-   "in_list_view": 1,
-   "label": "Assignee Name",
-   "read_only": 1
   },
   {
    "fieldname": "column_break_gxds",
@@ -146,13 +136,6 @@
    "fieldtype": "Link",
    "label": "Reporter User",
    "options": "User"
-  },
-  {
-   "fetch_from": "reporter_user.full_name",
-   "fieldname": "reporter_name",
-   "fieldtype": "Data",
-   "label": "Reporter Name",
-   "read_only": 1
   },
   {
    "fieldname": "process_owner",
@@ -185,13 +168,6 @@
    "fieldtype": "Link",
    "label": "PR Reviewer User",
    "options": "User"
-  },
-  {
-   "fetch_from": "pr_reviewer_user.full_name",
-   "fieldname": "pr_reviewer_name",
-   "fieldtype": "Data",
-   "label": "PR Reviewer Name",
-   "read_only": 1
   },
   {
    "fieldname": "column_break_btot",
