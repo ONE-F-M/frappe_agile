@@ -101,6 +101,24 @@ def create_sprint_board_kanban():
 		frappe.db.set_value("Kanban Board", "Sprint Board", "filters", filters_json)
 
 
+def create_list_view_settings():
+	"""Create or update List View Settings for Work Item to allow bulk editing."""
+	if frappe.db.exists("List View Settings", "Work Item"):
+		frappe.db.set_value("List View Settings", "Work Item", "allow_edit", 1)
+	else:
+		frappe.get_doc({
+			"doctype": "List View Settings",
+			"name": "Work Item",
+			"allow_edit": 1,
+		}).insert(ignore_permissions=True)
+
+
+def delete_list_view_settings():
+	"""Remove List View Settings for Work Item on uninstall."""
+	if frappe.db.exists("List View Settings", "Work Item"):
+		frappe.delete_doc("List View Settings", "Work Item", ignore_permissions=True, force=True)
+
+
 def delete_backlog_list_filter():
 	"""Remove shared List Filters on uninstall."""
 	filters = frappe.db.get_all(
@@ -121,8 +139,10 @@ def after_install():
 	create_workflows()
 	create_list_filters()
 	create_sprint_board_kanban()
+	create_list_view_settings()
 	frappe.db.commit()
 
 def before_uninstall():
 	delete_backlog_list_filter()
+	delete_list_view_settings()
 	delete_workflows()
