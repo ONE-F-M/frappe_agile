@@ -9,10 +9,15 @@
   "basic_information_section",
   "work_item_type",
   "title",
+  "assignee_user",
+  "assignee_name",
   "column_break_bnjh",
   "project",
   "status",
   "workflow_state",
+  "reporter_user",
+  "reporter_name",
+  "process_owner",
   "work_item_details_section",
   "work_item_template",
   "description",
@@ -20,13 +25,8 @@
   "sprint",
   "sprint_status",
   "story_points",
-  "assignee_user",
-  "assignee_name",
   "column_break_gxds",
   "epic",
-  "reporter_user",
-  "reporter_name",
-  "process_owner",
   "implementation_details_section",
   "planning_prompt_count",
   "execution_prompt_count",
@@ -75,6 +75,39 @@
    "options": "Open\nIn Progress\nPending Action Plan\nPending Execution\nPending PR\nPending Review\nChanges Requested\nIn Staging\nRejected\nDone"
   },
   {
+   "fieldname": "assignee_user",
+   "fieldtype": "Link",
+   "label": "Assignee User",
+   "options": "User"
+  },
+  {
+   "fetch_from": "assignee_user.full_name",
+   "fieldname": "assignee_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Assignee Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reporter_user",
+   "fieldtype": "Link",
+   "label": "Reporter User",
+   "options": "User"
+  },
+  {
+   "fetch_from": "reporter_user.full_name",
+   "fieldname": "reporter_name",
+   "fieldtype": "Data",
+   "label": "Reporter Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "process_owner",
+   "fieldtype": "Link",
+   "label": "Process Owner",
+   "options": "User"
+  },
+  {
    "fieldname": "work_item_details_section",
    "fieldtype": "Section Break",
    "label": "Work Item Details"
@@ -117,20 +150,6 @@
    "label": "Story Points"
   },
   {
-   "fieldname": "assignee_user",
-   "fieldtype": "Link",
-   "label": "Assignee User",
-   "options": "User"
-  },
-  {
-   "fetch_from": "assignee_user.full_name",
-   "fieldname": "assignee_name",
-   "fieldtype": "Data",
-   "in_list_view": 1,
-   "label": "Assignee Name",
-   "read_only": 1
-  },
-  {
    "fieldname": "column_break_gxds",
    "fieldtype": "Column Break"
   },
@@ -140,25 +159,6 @@
    "fieldtype": "Link",
    "label": "Epic",
    "options": "Work Item"
-  },
-  {
-   "fieldname": "reporter_user",
-   "fieldtype": "Link",
-   "label": "Reporter User",
-   "options": "User"
-  },
-  {
-   "fetch_from": "reporter_user.full_name",
-   "fieldname": "reporter_name",
-   "fieldtype": "Data",
-   "label": "Reporter Name",
-   "read_only": 1
-  },
-  {
-   "fieldname": "process_owner",
-   "fieldtype": "Link",
-   "label": "Process Owner",
-   "options": "User"
   },
   {
    "fieldname": "implementation_details_section",
