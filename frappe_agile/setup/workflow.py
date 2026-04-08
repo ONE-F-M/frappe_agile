@@ -1,5 +1,4 @@
-from frappe_agile.frappe_agile.custom.workflow.workflow import get_workflow_json_file
-from one_fm.custom.workflow.workflow import create_workflow, delete_workflow
+from frappe_agile.frappe_agile.custom.workflow.workflow import get_workflow_json_file, create_workflow, delete_workflow
 
 
 def create_workflows():
