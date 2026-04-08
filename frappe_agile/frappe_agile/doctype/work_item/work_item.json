@@ -142,10 +142,12 @@
    "options": "Work Item"
   },
   {
+   "default": "__user",
    "fieldname": "reporter_user",
    "fieldtype": "Link",
    "label": "Reporter User",
-   "options": "User"
+   "options": "User",
+   "read_only": 1
   },
   {
    "fetch_from": "reporter_user.full_name",
