@@ -21,6 +21,15 @@ frappe.ui.form.on("Work Item", {
 				},
 			};
 		});
+
+		// Filter Project to only show SCRUM projects
+		frm.set_query("project", function () {
+			return {
+				filters: {
+					project_type: "SCRUM Project",
+				},
+			};
+		});
 	},
 
 	onload: function (frm) {
