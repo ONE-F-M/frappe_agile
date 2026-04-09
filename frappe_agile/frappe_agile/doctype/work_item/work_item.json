@@ -8,6 +8,7 @@
  "field_order": [
   "basic_information_section",
   "work_item_type",
+  "priority",
   "title",
   "column_break_bnjh",
   "project",
@@ -49,6 +50,14 @@
    "label": "Work Item Type",
    "options": "\nEpic\nUser Story\nTask\nBug",
    "reqd": 1
+  },
+  {
+   "default": "Medium",
+   "fieldname": "priority",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Priority",
+   "options": "Highest\nHigh\nMedium\nLow\nLowest"
   },
   {
    "fieldname": "title",
@@ -205,7 +214,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-03-27 23:57:37.102964",
+ "modified": "2026-04-08 13:35:27.000000",
  "modified_by": "Administrator",
  "module": "Frappe Agile",
  "name": "Work Item",
