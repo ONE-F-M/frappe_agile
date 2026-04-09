@@ -19,6 +19,7 @@
   "reporter_user",
   "reporter_name",
   "process_owner",
+  "is_groomed",
   "work_item_details_section",
   "work_item_template",
   "description",
@@ -115,6 +116,14 @@
    "fieldtype": "Link",
    "label": "Process Owner",
    "options": "User"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_groomed",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Is Groomed"
   },
   {
    "fieldname": "work_item_details_section",
@@ -214,7 +223,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-04-08 13:35:27.000000",
+ "modified": "2026-04-09 16:11:38.000000",
  "modified_by": "Administrator",
  "module": "Frappe Agile",
  "name": "Work Item",
