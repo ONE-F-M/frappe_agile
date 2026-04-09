@@ -65,7 +65,8 @@
         {
             "fieldname": "start_date",
             "fieldtype": "Date",
-            "label": "Start Date"
+            "label": "Start Date",
+            "reqd": 1
         },
         {
             "fieldname": "column_break_cjmv",
@@ -74,7 +75,8 @@
         {
             "fieldname": "end_date",
             "fieldtype": "Date",
-            "label": "End Date"
+            "label": "End Date",
+            "reqd": 1
         },
         {
             "fieldname": "goals_and_metrics_section",
