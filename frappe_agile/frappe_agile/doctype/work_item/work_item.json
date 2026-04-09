@@ -33,7 +33,6 @@
   "execution_prompt_count",
   "pr_link",
   "pr_reviewer_user",
-  "pr_reviewer_name",
   "column_break_btot",
   "ai_tools_feedback"
  ],
@@ -196,13 +195,6 @@
    "fieldtype": "Link",
    "label": "PR Reviewer User",
    "options": "User"
-  },
-  {
-   "fetch_from": "pr_reviewer_user.full_name",
-   "fieldname": "pr_reviewer_name",
-   "fieldtype": "Data",
-   "label": "PR Reviewer Name",
-   "read_only": 1
   },
   {
    "fieldname": "column_break_btot",
