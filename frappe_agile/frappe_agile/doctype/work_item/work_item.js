@@ -26,11 +26,10 @@ frappe.ui.form.on("Work Item", {
 		frappe.call({
 			method:
 				"frappe_agile.frappe_agile.doctype.frappe_agile_settings.frappe_agile_settings.get_development_team_users",
-			async: false,
 			callback: function (r) {
-				if (r.message && r.message.length > 0) {
-					const team_users = r.message;
+				const team_users = r.message || [];
 
+				if (team_users.length > 0) {
 					frm.set_query("assignee_user", function () {
 						return {
 							filters: {
@@ -46,6 +45,24 @@ frappe.ui.form.on("Work Item", {
 							},
 						};
 					});
+				} else {
+					// No Development Team configured — restrict selection and notify
+					const empty_filter = function () {
+						return {
+							filters: {
+								name: ["in", []],
+							},
+						};
+					};
+					frm.set_query("assignee_user", empty_filter);
+					frm.set_query("pr_reviewer_user", empty_filter);
+
+					frappe.show_alert({
+						message: __("Please configure the Development Team in {0} to enable Assignee and PR Reviewer selection.", [
+							'<a href="/app/frappe-agile-settings">Frappe Agile Settings</a>'
+						]),
+						indicator: "orange",
+					}, 10);
 				}
 			},
 		});
