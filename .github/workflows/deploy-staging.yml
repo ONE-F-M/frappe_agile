@@ -12,7 +12,7 @@ jobs:
 
     steps:
       - name: Deploy to Staging
-        uses: appleboy/ssh-action@master
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5
         with:
           host: ${{ secrets.STAGING_HOST }}
           username: ${{ secrets.USERNAME }}
@@ -21,7 +21,9 @@ jobs:
           script_stop: true
           script: |
             cd /home/frappe/frappe-bench/apps/frappe_agile
-            git pull
+            git fetch origin staging
+            git reset --hard origin/staging
+            git clean -fd
             cd /home/frappe
             pip3 install --upgrade frappe-bench
             cd /home/frappe/frappe-bench

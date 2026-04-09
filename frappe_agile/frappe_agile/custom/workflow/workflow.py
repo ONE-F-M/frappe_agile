@@ -15,24 +15,25 @@ def get_json_file(file_name, folder):
 	Returns:
 		dict: Parsed JSON data from the file.
 	"""
-	data = {}
 	if not file_name.endswith(".json"):
 		frappe.log_error("Only JSON files are allowed. Please ensure the file ends with '.json'.")
+		return {}
 
 	file_path = os.path.join(folder, file_name)
 
 	if not os.path.isfile(file_path):
 		frappe.log_error(f"File not found: {file_path}")
+		return {}
 
 	try:
 		with open(file_path, "r") as f:
-			data = json.load(f)
+			return json.load(f)
 	except json.JSONDecodeError as e:
 		frappe.log_error(title=f"Invalid JSON format in file {file_path}", message=str(e))
 	except Exception as e:
 		frappe.log_error(title=f"An error occurred while reading the file {file_path}", message=str(e))
 
-	return data
+	return {}
 
 
 def get_workflow_json_file(file_name):
@@ -64,7 +65,7 @@ def create_workflow(workflow: dict):
 		else:
 			workflow_obj = frappe.get_doc("Workflow", workflow["workflow_name"])
 			workflow_obj.update(workflow)
-			workflow_obj.save()
+			workflow_obj.save(ignore_permissions=True)
 	except Exception as e:
 		frappe.log_error(
 			title="Workflow Creation Error",
@@ -74,7 +75,7 @@ def create_workflow(workflow: dict):
 
 def create_workflow_state(states: list):
 	"""
-	Create Workflow States if they don't already exist.
+	Create or update Workflow States.
 
 	Args:
 		states (list[dict]): A list of state dictionaries with workflow_state_name and optional style.
@@ -83,6 +84,11 @@ def create_workflow_state(states: list):
 		try:
 			if not frappe.db.exists("Workflow State", state["workflow_state_name"]):
 				frappe.get_doc({"doctype": "Workflow State", **state}).insert(ignore_permissions=True)
+			else:
+				existing = frappe.get_doc("Workflow State", state["workflow_state_name"])
+				if state.get("style") and existing.style != state.get("style"):
+					existing.style = state["style"]
+					existing.save(ignore_permissions=True)
 		except Exception as e:
 			frappe.log_error(
 				title="Workflow State Error",
@@ -151,4 +157,3 @@ def delete_workflow(workflow: dict):
 			title="Workflow Deletion Error",
 			message=f"Failed to delete workflow '{name}':\n{frappe.get_traceback()}"
 		)
-
