@@ -114,9 +114,9 @@ def create_list_view_settings():
 
 
 def delete_list_view_settings():
-	"""Remove List View Settings for Work Item on uninstall."""
+	"""Revert List View Settings for Work Item on uninstall."""
 	if frappe.db.exists("List View Settings", "Work Item"):
-		frappe.delete_doc("List View Settings", "Work Item", ignore_permissions=True, force=True)
+		frappe.db.set_value("List View Settings", "Work Item", "allow_edit", 0)
 
 
 def delete_backlog_list_filter():
