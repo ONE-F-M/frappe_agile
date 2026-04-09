@@ -31,7 +31,7 @@ jobs:
           MYSQL_ROOT_PASSWORD: root
         ports:
           - 3306:3306
-        options: --health-cmd="mariadb-admin ping" --health-interval=5s --health-timeout=2s --health-retries=3
+        options: --health-cmd="mariadb-admin ping -proot" --health-interval=5s --health-timeout=2s --health-retries=10
 
     steps:
       - name: Clone
@@ -82,9 +82,11 @@ jobs:
       - name: Install
         working-directory: /home/runner/frappe-bench
         run: |
+          bench get-app erpnext https://github.com/frappe/erpnext --branch version-15
           bench get-app frappe_agile $GITHUB_WORKSPACE
           bench setup requirements --dev
           bench new-site --db-root-password root --admin-password admin test_site
+          bench --site test_site install-app erpnext
           bench --site test_site install-app frappe_agile
           bench build
         env:
