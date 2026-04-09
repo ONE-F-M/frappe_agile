@@ -31,33 +31,6 @@ frappe.ui.form.on("Work Item", {
 			return { filters: filters };
 		});
 
-		// Filter Assignee User and PR Reviewer User to Development Team members
-		frappe.call({
-			method:
-				"frappe_agile.frappe_agile.doctype.frappe_agile_settings.frappe_agile_settings.get_development_team_users",
-			async: false,
-			callback: function (r) {
-				if (r.message && r.message.length > 0) {
-					const team_users = r.message;
-
-					frm.set_query("assignee_user", function () {
-						return {
-							filters: {
-								name: ["in", team_users],
-							},
-						};
-					});
-
-					frm.set_query("pr_reviewer_user", function () {
-						return {
-							filters: {
-								name: ["in", team_users],
-							},
-						};
-					});
-				}
-			},
-		});
 	},
 
 	onload: function (frm) {
