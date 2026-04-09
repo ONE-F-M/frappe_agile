@@ -2,6 +2,7 @@
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
+from frappe.utils import today, add_days
 
 
 class TestSprint(FrappeTestCase):
@@ -16,6 +17,8 @@ class TestSprint(FrappeTestCase):
 			"sprint_prefix": prefix,
 			"status": status,
 			"project": project,
+			"start_date": today(),
+			"end_date": add_days(today(), 14),
 		})
 		sprint.insert(ignore_permissions=True)
 		return sprint
