@@ -8,11 +8,17 @@
  "field_order": [
   "basic_information_section",
   "work_item_type",
+  "priority",
   "title",
+  "assignee_user",
+  "assignee_name",
   "column_break_bnjh",
   "project",
   "status",
   "workflow_state",
+  "reporter_user",
+  "reporter_name",
+  "process_owner",
   "work_item_details_section",
   "work_item_template",
   "description",
@@ -20,13 +26,8 @@
   "sprint",
   "sprint_status",
   "story_points",
-  "assignee_user",
-  "assignee_name",
   "column_break_gxds",
   "epic",
-  "reporter_user",
-  "reporter_name",
-  "process_owner",
   "implementation_details_section",
   "planning_prompt_count",
   "execution_prompt_count",
@@ -51,6 +52,14 @@
    "reqd": 1
   },
   {
+   "default": "Medium",
+   "fieldname": "priority",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Priority",
+   "options": "Highest\nHigh\nMedium\nLow\nLowest"
+  },
+  {
    "fieldname": "title",
    "fieldtype": "Small Text",
    "in_list_view": 1,
@@ -73,6 +82,39 @@
    "hidden": 1,
    "label": "Status",
    "options": "Open\nIn Progress\nPending Action Plan\nPending Execution\nPending PR\nPending Review\nChanges Requested\nIn Staging\nRejected\nDone"
+  },
+  {
+   "fieldname": "assignee_user",
+   "fieldtype": "Link",
+   "label": "Assignee User",
+   "options": "User"
+  },
+  {
+   "fetch_from": "assignee_user.full_name",
+   "fieldname": "assignee_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Assignee Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reporter_user",
+   "fieldtype": "Link",
+   "label": "Reporter User",
+   "options": "User"
+  },
+  {
+   "fetch_from": "reporter_user.full_name",
+   "fieldname": "reporter_name",
+   "fieldtype": "Data",
+   "label": "Reporter Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "process_owner",
+   "fieldtype": "Link",
+   "label": "Process Owner",
+   "options": "User"
   },
   {
    "fieldname": "work_item_details_section",
@@ -117,20 +159,6 @@
    "label": "Story Points"
   },
   {
-   "fieldname": "assignee_user",
-   "fieldtype": "Link",
-   "label": "Assignee User",
-   "options": "User"
-  },
-  {
-   "fetch_from": "assignee_user.full_name",
-   "fieldname": "assignee_name",
-   "fieldtype": "Data",
-   "in_list_view": 1,
-   "label": "Assignee Name",
-   "read_only": 1
-  },
-  {
    "fieldname": "column_break_gxds",
    "fieldtype": "Column Break"
   },
@@ -140,25 +168,6 @@
    "fieldtype": "Link",
    "label": "Epic",
    "options": "Work Item"
-  },
-  {
-   "fieldname": "reporter_user",
-   "fieldtype": "Link",
-   "label": "Reporter User",
-   "options": "User"
-  },
-  {
-   "fetch_from": "reporter_user.full_name",
-   "fieldname": "reporter_name",
-   "fieldtype": "Data",
-   "label": "Reporter Name",
-   "read_only": 1
-  },
-  {
-   "fieldname": "process_owner",
-   "fieldtype": "Link",
-   "label": "Process Owner",
-   "options": "User"
   },
   {
    "fieldname": "implementation_details_section",
@@ -205,7 +214,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-03-27 23:57:37.102964",
+ "modified": "2026-04-08 13:35:27.000000",
  "modified_by": "Administrator",
  "module": "Frappe Agile",
  "name": "Work Item",
