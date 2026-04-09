@@ -1,0 +1,33 @@
+name: Deploy CI/CD to Staging
+
+on:
+  push:
+    branches:
+      - staging
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Deploy to Staging
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.STAGING_KEY }}
+          port: 22
+          script_stop: true
+          script: |
+            cd /home/frappe/frappe-bench/apps/frappe_agile
+            git fetch origin staging
+            git reset --hard origin/staging
+            git clean -fd
+            cd /home/frappe
+            pip3 install --upgrade frappe-bench
+            cd /home/frappe/frappe-bench
+            bench setup requirements frappe_agile
+            bench migrate
+            bench restart
+            bench doctor
