@@ -101,7 +101,9 @@
    "fieldname": "reporter_user",
    "fieldtype": "Link",
    "label": "Reporter User",
-   "options": "User"
+   "options": "User",
+   "default": "__user",
+   "read_only": 1
   },
   {
    "fetch_from": "reporter_user.full_name",
