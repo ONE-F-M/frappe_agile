@@ -25,7 +25,7 @@ frappe.listview_settings["Work Item"] = {
 		"work_item_type",
 		"workflow_state",
 		"story_points",
-		"assignee_name"
+		"assignee_user"
 	],
 
 	on_row_click: function () {
