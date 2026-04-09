@@ -31,6 +31,15 @@ frappe.ui.form.on("Work Item", {
 			};
 		});
 
+		// Filter sprint to only active sprints, scoped to the selected project
+		frm.set_query("sprint", function () {
+			let filters = { status: "Active" };
+			if (frm.doc.project) {
+				filters.project = frm.doc.project;
+			}
+			return { filters: filters };
+		});
+
 		// Filter Assignee User and PR Reviewer User to Development Team members
 		frappe.call({
 			method:
@@ -75,6 +84,7 @@ frappe.ui.form.on("Work Item", {
 				}
 			},
 		});
+
 	},
 
 	onload: function (frm) {
@@ -107,29 +117,11 @@ frappe.ui.form.on("Work Item", {
 				},
 			};
 		};
-
-		// Filter sprint to only sprints matching the selected project
-		frm.fields_dict.sprint.get_query = function () {
-			let filters = { status: ["!=", "Completed"] };
-			if (frm.doc.project) {
-				filters.project = frm.doc.project;
-			}
-			return { filters: filters };
-		};
 	},
 
 	project: function (frm) {
 		// Clear sprint when project changes (avoid mismatched sprint)
 		frm.set_value("sprint", null);
-
-		// Re-apply sprint filter for new project
-		frm.fields_dict.sprint.get_query = function () {
-			let filters = { status: ["!=", "Completed"] };
-			if (frm.doc.project) {
-				filters.project = frm.doc.project;
-			}
-			return { filters: filters };
-		};
 	},
 
 	work_item_type: function (frm) {
