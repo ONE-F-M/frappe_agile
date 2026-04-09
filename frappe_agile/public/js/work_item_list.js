@@ -191,7 +191,9 @@ function setupKanbanFilters(listview) {
 			{ fieldname: 'sprint', fieldtype: 'Link', options: 'Sprint', label: __('Sprint'), placeholder: __('Sprint'),
 				get_query: function() { return { filters: { "status": "Active" } }; }
 			},
-			{ fieldname: 'epic', fieldtype: 'Link', options: 'Work Item', label: __('Epic'), placeholder: __('Epic') },
+			{ fieldname: 'epic', fieldtype: 'Link', options: 'Work Item', label: __('Epic'), placeholder: __('Epic'),
+				get_query: function() { return { filters: { "work_item_type": "Epic" } }; }
+			},
 			{ fieldname: 'assignee_user', fieldtype: 'Link', options: 'User', label: __('Assignee'), placeholder: __('Assignee') }
 		];
 
