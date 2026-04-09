@@ -2,6 +2,7 @@
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
+from frappe.utils import today, add_days
 
 
 class TestSprint(FrappeTestCase):
@@ -16,6 +17,8 @@ class TestSprint(FrappeTestCase):
 			"sprint_prefix": prefix,
 			"status": status,
 			"project": project,
+			"start_date": today(),
+			"end_date": add_days(today(), 14),
 		})
 		sprint.insert(ignore_permissions=True)
 		return sprint
@@ -46,7 +49,7 @@ class TestSprint(FrappeTestCase):
 		# Create two work items linked to this sprint
 		wi1 = frappe.get_doc({
 			"doctype": "Work Item",
-			"work_item_type": "Story",
+			"work_item_type": "User Story",
 			"title": "Test WI 1",
 			"sprint": sprint.name,
 			"story_points": 5,
@@ -55,7 +58,7 @@ class TestSprint(FrappeTestCase):
 
 		wi2 = frappe.get_doc({
 			"doctype": "Work Item",
-			"work_item_type": "Story",
+			"work_item_type": "User Story",
 			"title": "Test WI 2",
 			"sprint": sprint.name,
 			"story_points": 8,
