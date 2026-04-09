@@ -46,7 +46,7 @@ class TestSprint(FrappeTestCase):
 		# Create two work items linked to this sprint
 		wi1 = frappe.get_doc({
 			"doctype": "Work Item",
-			"work_item_type": "Story",
+			"work_item_type": "User Story",
 			"title": "Test WI 1",
 			"sprint": sprint.name,
 			"story_points": 5,
@@ -55,7 +55,7 @@ class TestSprint(FrappeTestCase):
 
 		wi2 = frappe.get_doc({
 			"doctype": "Work Item",
-			"work_item_type": "Story",
+			"work_item_type": "User Story",
 			"title": "Test WI 2",
 			"sprint": sprint.name,
 			"story_points": 8,
