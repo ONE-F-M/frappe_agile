@@ -13,7 +13,7 @@
    "style": "",
    "is_optional_state": 0,
    "avoid_status_override": 0,
-   "allow_edit": "",
+   "allow_edit": "Business Analyst",
    "send_email": 1,
    "doctype": "Workflow Document State"
   },
