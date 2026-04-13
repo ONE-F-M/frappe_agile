@@ -8,14 +8,6 @@ from frappe.model.naming import make_autoname
 
 
 class WorkItem(Document):
-	def autoname(self):
-		# Fetch the count of current documents securely via Frappe ORM
-		current_count = frappe.db.count("Work Item")
-		next_sequence = current_count + 1
-		
-		# Set the name explicitly to the correct 6-digit zero-padded sequence
-		self.name = f"WI-{str(next_sequence).zfill(6)}"
-
 	def validate(self):
 		self._validate_sprint_project()
 
