@@ -1,18 +1,18 @@
 {
  "actions": [],
  "allow_rename": 1,
- "autoname": "format:WI-{######}",
+ "autoname": "naming_series:",
  "creation": "2026-03-25 17:00:00",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
   "basic_information_section",
+  "naming_series",
   "work_item_type",
   "title",
   "column_break_bnjh",
   "project",
   "status",
-  "workflow_state",
   "is_groomed",
   "work_item_details_section",
   "description",
@@ -194,15 +194,21 @@
    "fieldname": "ai_tools_feedback",
    "fieldtype": "Long Text",
    "label": "AI Tools Feedback"
+  },
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "WI-.######"
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-04-12 11:22:29.000000",
+ "modified": "2026-04-13 15:24:01.398864",
  "modified_by": "Administrator",
  "module": "Frappe Agile",
  "name": "Work Item",
- "naming_rule": "Expression",
+ "naming_rule": "By \"Naming Series\" field",
  "owner": "Administrator",
  "permissions": [
   {
