@@ -25,7 +25,7 @@ frappe.listview_settings["Work Item"] = {
 		"work_item_type",
 		"workflow_state",
 		"story_points",
-		"assignee_name"
+		"assignee_user"
 	],
 
 	on_row_click: function () {
@@ -93,7 +93,10 @@ function setupListViewFilters(listview) {
 
 		listview.custom_list_controls = {};
 
-		const type_options = frappe.meta.get_docfield("Work Item", "work_item_type") ? frappe.meta.get_docfield("Work Item", "work_item_type").options : "\nEpic\nUser Story\nTask\nBug";
+		// Derive Work Item Type options from DocType meta, excluding "Epic"
+		const all_type_options = (frappe.meta.get_docfield("Work Item", "work_item_type")?.options || "\nEpic\nUser Story\nTask\nBug");
+		const type_options = all_type_options.split("\n").filter(o => o && o !== "Epic").join("\n");
+
 		const status_options = frappe.meta.get_docfield("Work Item", "status") ? frappe.meta.get_docfield("Work Item", "status").options : "\nOpen\nIn Progress\nDone";
 
 		let filters_to_add = [

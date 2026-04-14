@@ -19,6 +19,7 @@
   "reporter_user",
   "reporter_name",
   "process_owner",
+  "is_groomed",
   "work_item_details_section",
   "work_item_template",
   "description",
@@ -33,7 +34,6 @@
   "execution_prompt_count",
   "pr_link",
   "pr_reviewer_user",
-  "pr_reviewer_name",
   "column_break_btot",
   "ai_tools_feedback"
  ],
@@ -101,7 +101,9 @@
    "fieldname": "reporter_user",
    "fieldtype": "Link",
    "label": "Reporter User",
-   "options": "User"
+   "options": "User",
+   "default": "__user",
+   "read_only": 1
   },
   {
    "fetch_from": "reporter_user.full_name",
@@ -115,6 +117,14 @@
    "fieldtype": "Link",
    "label": "Process Owner",
    "options": "User"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_groomed",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Is Groomed"
   },
   {
    "fieldname": "work_item_details_section",
@@ -196,13 +206,6 @@
    "options": "User"
   },
   {
-   "fetch_from": "pr_reviewer_user.full_name",
-   "fieldname": "pr_reviewer_name",
-   "fieldtype": "Data",
-   "label": "PR Reviewer Name",
-   "read_only": 1
-  },
-  {
    "fieldname": "column_break_btot",
    "fieldtype": "Column Break"
   },
@@ -214,7 +217,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-04-08 13:35:27.000000",
+ "modified": "2026-04-09 16:11:38.000000",
  "modified_by": "Administrator",
  "module": "Frappe Agile",
  "name": "Work Item",

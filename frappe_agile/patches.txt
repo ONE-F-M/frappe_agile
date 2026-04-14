@@ -4,6 +4,9 @@
 
 [post_model_sync]
 # Patches added in this section will be executed after doctypes are migrated
-frappe_agile.patches.v1.create_sprint_board #2
+frappe_agile.patches.v1.create_sprint_board #3
 frappe_agile.patches.v1.backfill_sprint_status #3
 frappe_agile.patches.v1.create_sprint_and_list_filters #4
+frappe_agile.patches.v1.exclude_epic_from_filters
+frappe_agile.patches.v1.enable_work_item_bulk_edit
+frappe_agile.patches.v1.update_sprint_board_fields

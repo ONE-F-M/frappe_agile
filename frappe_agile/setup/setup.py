@@ -22,7 +22,8 @@ def get_backlog_filters_json() -> str:
 	"""Generate the filters JSON for the Backlog saved filter."""
 	filters = [
 		["Work Item", "sprint", "is", "not set", False],
-		["Work Item", "workflow_state", "!=", "Done", False]
+		["Work Item", "workflow_state", "!=", "Done", False],
+		["Work Item", "work_item_type", "!=", "Epic", False]
 	]
 	return json.dumps(filters)
 
@@ -31,7 +32,8 @@ def get_sprint_list_filters_json() -> str:
 	"""Generate the filters JSON for the Sprint Kanban List View saved filter."""
 	filters = [
 		["Work Item", "sprint_status", "in", ["Active", "Draft"], False],
-		["Work Item", "workflow_state", "!=", "Done", False]
+		["Work Item", "workflow_state", "!=", "Done", False],
+		["Work Item", "work_item_type", "!=", "Epic", False]
 	]
 	return json.dumps(filters)
 
@@ -76,7 +78,10 @@ def create_list_filters():
 
 def create_sprint_board_kanban():
 	"""Create standard Sprint Board Kanban Board."""
-	filters_json = json.dumps([["Work Item", "sprint_status", "=", "Active", False]])
+	filters_json = json.dumps([
+		["Work Item", "sprint_status", "=", "Active", False],
+		["Work Item", "work_item_type", "!=", "Epic", False]
+	])
 	
 	if not frappe.db.exists("Kanban Board", "Sprint Board"):
 		# In a Kanban Board, columns are added automatically based on the field if not supplied. 
@@ -101,6 +106,24 @@ def create_sprint_board_kanban():
 		frappe.db.set_value("Kanban Board", "Sprint Board", "filters", filters_json)
 
 
+def create_list_view_settings():
+	"""Create or update List View Settings for Work Item to allow bulk editing."""
+	if frappe.db.exists("List View Settings", "Work Item"):
+		frappe.db.set_value("List View Settings", "Work Item", "allow_edit", 1)
+	else:
+		frappe.get_doc({
+			"doctype": "List View Settings",
+			"name": "Work Item",
+			"allow_edit": 1,
+		}).insert(ignore_permissions=True)
+
+
+def delete_list_view_settings():
+	"""Revert List View Settings for Work Item on uninstall."""
+	if frappe.db.exists("List View Settings", "Work Item"):
+		frappe.db.set_value("List View Settings", "Work Item", "allow_edit", 0)
+
+
 def delete_backlog_list_filter():
 	"""Remove shared List Filters on uninstall."""
 	filters = frappe.db.get_all(
@@ -121,8 +144,10 @@ def after_install():
 	create_workflows()
 	create_list_filters()
 	create_sprint_board_kanban()
+	create_list_view_settings()
 	frappe.db.commit()
 
 def before_uninstall():
 	delete_backlog_list_filter()
+	delete_list_view_settings()
 	delete_workflows()

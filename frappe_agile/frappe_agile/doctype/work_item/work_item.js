@@ -22,6 +22,15 @@ frappe.ui.form.on("Work Item", {
 			};
 		});
 
+		// Filter Project to only show SCRUM projects
+		frm.set_query("project", function () {
+			return {
+				filters: {
+					project_type: "SCRUM Project",
+				},
+			};
+		});
+
 		// Filter sprint to only active sprints, scoped to the selected project
 		frm.set_query("sprint", function () {
 			let filters = { status: "Active" };
