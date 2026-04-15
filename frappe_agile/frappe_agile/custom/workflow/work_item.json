@@ -13,17 +13,7 @@
    "style": "",
    "is_optional_state": 0,
    "avoid_status_override": 0,
-   "allow_edit": "Business Analyst",
-   "send_email": 1,
-   "doctype": "Workflow Document State"
-  },
-  {
-   "state": "Open",
-   "doc_status": "0",
-   "style": "",
-   "is_optional_state": 0,
-   "avoid_status_override": 0,
-   "allow_edit": "Developer",
+   "allow_edit": "Employee",
    "send_email": 1,
    "doctype": "Workflow Document State"
   },
@@ -100,7 +90,7 @@
   {
    "state": "Rejected",
    "doc_status": "0",
-   "style": "Inverse",
+   "style": "Primary",
    "is_optional_state": 0,
    "avoid_status_override": 0,
    "allow_edit": "Process Owner",
@@ -125,6 +115,11 @@
    "next_state": "In Progress",
    "allowed": "Developer",
    "allow_self_approval": 1,
+   "send_email_to_creator": 0,
+   "skip_multiple_action": 0,
+   "skip_creation_of_workflow_action": 0,
+   "custom_confirm_transition": 0,
+   "require_digital_signature": 0,
    "doctype": "Workflow Transition"
   },
   {
@@ -133,6 +128,11 @@
    "next_state": "In Progress",
    "allowed": "Business Analyst",
    "allow_self_approval": 1,
+   "send_email_to_creator": 0,
+   "skip_multiple_action": 0,
+   "skip_creation_of_workflow_action": 0,
+   "custom_confirm_transition": 0,
+   "require_digital_signature": 0,
    "doctype": "Workflow Transition"
   },
   {
@@ -141,6 +141,11 @@
    "next_state": "Pending Action Plan",
    "allowed": "Developer",
    "allow_self_approval": 1,
+   "send_email_to_creator": 0,
+   "skip_multiple_action": 0,
+   "skip_creation_of_workflow_action": 0,
+   "custom_confirm_transition": 0,
+   "require_digital_signature": 0,
    "doctype": "Workflow Transition"
   },
   {
@@ -149,6 +154,11 @@
    "next_state": "Pending Execution",
    "allowed": "Developer",
    "allow_self_approval": 1,
+   "send_email_to_creator": 0,
+   "skip_multiple_action": 0,
+   "skip_creation_of_workflow_action": 0,
+   "custom_confirm_transition": 0,
+   "require_digital_signature": 0,
    "doctype": "Workflow Transition"
   },
   {
@@ -157,6 +167,11 @@
    "next_state": "Pending PR",
    "allowed": "Developer",
    "allow_self_approval": 1,
+   "send_email_to_creator": 0,
+   "skip_multiple_action": 0,
+   "skip_creation_of_workflow_action": 0,
+   "custom_confirm_transition": 0,
+   "require_digital_signature": 0,
    "doctype": "Workflow Transition"
   },
   {
@@ -165,6 +180,11 @@
    "next_state": "Pending Review",
    "allowed": "Developer",
    "allow_self_approval": 1,
+   "send_email_to_creator": 0,
+   "skip_multiple_action": 0,
+   "skip_creation_of_workflow_action": 0,
+   "custom_confirm_transition": 0,
+   "require_digital_signature": 0,
    "doctype": "Workflow Transition"
   },
   {
@@ -173,6 +193,11 @@
    "next_state": "Changes Requested",
    "allowed": "Developer",
    "allow_self_approval": 1,
+   "send_email_to_creator": 0,
+   "skip_multiple_action": 0,
+   "skip_creation_of_workflow_action": 0,
+   "custom_confirm_transition": 0,
+   "require_digital_signature": 0,
    "doctype": "Workflow Transition"
   },
   {
@@ -181,6 +206,11 @@
    "next_state": "In Staging",
    "allowed": "Developer",
    "allow_self_approval": 1,
+   "send_email_to_creator": 0,
+   "skip_multiple_action": 0,
+   "skip_creation_of_workflow_action": 0,
+   "custom_confirm_transition": 0,
+   "require_digital_signature": 0,
    "doctype": "Workflow Transition"
   },
   {
@@ -189,6 +219,11 @@
    "next_state": "Pending Action Plan",
    "allowed": "Developer",
    "allow_self_approval": 1,
+   "send_email_to_creator": 0,
+   "skip_multiple_action": 0,
+   "skip_creation_of_workflow_action": 0,
+   "custom_confirm_transition": 0,
+   "require_digital_signature": 0,
    "doctype": "Workflow Transition"
   },
   {
@@ -197,6 +232,11 @@
    "next_state": "Done",
    "allowed": "Process Owner",
    "allow_self_approval": 1,
+   "send_email_to_creator": 0,
+   "skip_multiple_action": 0,
+   "skip_creation_of_workflow_action": 0,
+   "custom_confirm_transition": 0,
+   "require_digital_signature": 0,
    "doctype": "Workflow Transition"
   },
   {
@@ -205,6 +245,11 @@
    "next_state": "Rejected",
    "allowed": "Process Owner",
    "allow_self_approval": 1,
+   "send_email_to_creator": 0,
+   "skip_multiple_action": 0,
+   "skip_creation_of_workflow_action": 0,
+   "custom_confirm_transition": 0,
+   "require_digital_signature": 0,
    "doctype": "Workflow Transition"
   },
   {
@@ -213,6 +258,11 @@
    "next_state": "In Progress",
    "allowed": "Developer",
    "allow_self_approval": 1,
+   "send_email_to_creator": 0,
+   "skip_multiple_action": 0,
+   "skip_creation_of_workflow_action": 0,
+   "custom_confirm_transition": 0,
+   "require_digital_signature": 0,
    "doctype": "Workflow Transition"
   }
  ]
