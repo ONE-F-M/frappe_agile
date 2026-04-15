@@ -10,6 +10,12 @@ class TestSprint(FrappeTestCase):
 		"""Clean up any test sprints before each test."""
 		frappe.db.delete("Sprint", {"sprint_prefix": ("in", ["TEST", "ALPHA", "BETA"])})
 		frappe.db.commit()
+		# Frappe resets transaction_writes to 0 when a COMMIT or ROLLBACK
+		# SQL query is processed by check_transaction_status(). However,
+		# earlier test classes may have accumulated a large counter.
+		# Explicitly reset it to guarantee Sprint tests start with a clean
+		# write budget and avoid TooManyWritesError.
+		frappe.db.transaction_writes = 0
 
 	def _make_sprint(self, prefix="TEST", status="Draft", project=None):
 		sprint = frappe.get_doc({
