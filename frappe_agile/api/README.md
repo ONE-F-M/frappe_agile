@@ -21,17 +21,20 @@ POST https://<your-site>/api/method/frappe_agile.api.github_webhook.handle_githu
    |---|---|
    | **Payload URL** | `https://<your-site>/api/method/frappe_agile.api.github_webhook.handle_github_webhook` |
    | **Content type** | `application/json` |
-   | **Secret** | Same value as `github_webhook_secret` in `site_config.json` |
+   | **Secret** | Same value as configured in Frappe Agile Settings (see step 2) |
    | **Events** | ☑ Pull requests &nbsp;☑ Pull request reviews &nbsp;☑ Pushes |
 
-2. Add the secret to your Frappe site config:
+2. Configure the webhook secret in Frappe:
 
+   **Preferred (via UI):**
+   Go to **Frappe Agile Settings → GitHub Integration → GitHub Webhook Secret** and enter your secret.
+
+   **Legacy fallback (via site_config.json):**
    ```bash
-   # sites/<your-site>/site_config.json
-   {
-     "github_webhook_secret": "your-strong-secret-here"
-   }
+   bench --site <your-site> set-config github_webhook_secret "your-strong-secret-here"
    ```
+
+   > The webhook handler checks Frappe Agile Settings first. If empty, it falls back to `github_webhook_secret` in `site_config.json`.
 
 3. Restart workers:
    ```bash
