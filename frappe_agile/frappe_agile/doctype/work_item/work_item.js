@@ -119,19 +119,32 @@ frappe.ui.form.on("Work Item", {
 		};
 
 		// Render PR Link as a clickable hyperlink that opens in a new tab
-		if (frm.doc.pr_link) {
-			const pr_field = frm.fields_dict.pr_link;
-			if (pr_field && pr_field.$wrapper) {
-				// Remove any previously injected link to avoid duplicates
-				pr_field.$wrapper.find(".pr-link-open").remove();
+		const pr_field = frm.fields_dict.pr_link;
+		if (pr_field && pr_field.$wrapper) {
+			// Always remove stale button (handles field being cleared)
+			pr_field.$wrapper.find(".pr-link-open").remove();
 
-				const url = frm.doc.pr_link;
-				const $link = $(`<div class="pr-link-open mt-1">
-					<a class="btn btn-xs btn-default" href="${url}" target="_blank" rel="noopener noreferrer">
-						${__("Open PR")} ↗
-					</a>
-				</div>`);
-				pr_field.$wrapper.append($link);
+			if (frm.doc.pr_link) {
+				// Only render for safe URL schemes (http / https)
+				let is_safe = false;
+				try {
+					const parsed = new URL(frm.doc.pr_link);
+					is_safe = ["http:", "https:"].includes(parsed.protocol);
+				} catch (e) {
+					// malformed URL — do not render
+				}
+
+				if (is_safe) {
+					const $wrapper = $("<div>").addClass("pr-link-open mt-1");
+					const $anchor = $("<a>")
+						.addClass("btn btn-xs btn-default")
+						.attr("href", frm.doc.pr_link)
+						.attr("target", "_blank")
+						.attr("rel", "noopener noreferrer")
+						.text(__("Open PR") + " ↗");
+					$wrapper.append($anchor);
+					pr_field.$wrapper.append($wrapper);
+				}
 			}
 		}
 	},
