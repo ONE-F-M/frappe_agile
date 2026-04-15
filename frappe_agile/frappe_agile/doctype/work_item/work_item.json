@@ -166,7 +166,9 @@
    "fieldname": "story_points",
    "fieldtype": "Float",
    "in_list_view": 1,
-   "label": "Story Points"
+   "label": "Story Points",
+   "non_negative": 1,
+   "read_only_depends_on": "eval:doc.work_item_type == 'Epic'"
   },
   {
    "fieldname": "column_break_gxds",
@@ -217,7 +219,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-04-09 16:11:38.000000",
+ "modified": "2026-04-15 15:03:45.000000",
  "modified_by": "Administrator",
  "module": "Frappe Agile",
  "name": "Work Item",
