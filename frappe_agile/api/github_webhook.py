@@ -10,11 +10,14 @@ Payload URL:
 
 GitHub App/Org Settings → Webhooks
 	Content type : application/json
-	Secret       : <value of frappe.conf.github_webhook_secret>
+	Secret       : <value stored in Frappe Agile Settings → GitHub Webhook Secret>
 	Events       : Pull requests, Pull request reviews, Pushes
 
-site_config.json (bench/sites/<site>/site_config.json)
-	"github_webhook_secret": "<your-secret-here>"
+Configuration
+-------------
+Set the secret via:
+  1. (Preferred) Frappe → Frappe Agile Settings → GitHub Integration → GitHub Webhook Secret
+  2. (Legacy fallback) site_config.json: "github_webhook_secret": "<your-secret-here>"
 
 Work Item workflow states being targeted
 -----------------------------------------
@@ -286,24 +289,45 @@ def _apply(wi_name: str, action: str, pr_url: str = ""):
 		frappe.set_user(original_user)
 
 
+def _get_webhook_secret() -> str | None:
+	"""
+	Return the GitHub webhook secret.
+
+	Lookup order:
+	1. Frappe Agile Settings → ``github_webhook_secret`` (preferred – managed via UI).
+	2. ``frappe.conf.github_webhook_secret`` in site_config.json (legacy fallback).
+
+	Returns ``None`` when neither source is configured.
+	"""
+	# get_single_value returns the decrypted value for Password fields automatically.
+	settings_secret = frappe.get_single_value("Frappe Agile Settings", "github_webhook_secret")
+	if settings_secret:
+		return settings_secret
+
+	# Legacy fallback: site_config.json
+	return frappe.conf.get("github_webhook_secret")
+
+
 def _verify_signature():
 	"""
 	Validate the X-Hub-Signature-256 header using HMAC-SHA256.
 
-	The secret is read from ``frappe.conf.github_webhook_secret``.
+	The secret is resolved via :func:`_get_webhook_secret` (settings first,
+	then site_config.json fallback).
 	Raises ``frappe.AuthenticationError`` if verification fails.
 	"""
-	secret = frappe.conf.get("github_webhook_secret")
+	secret = _get_webhook_secret()
 	if not secret:
 		frappe.log_error(
 			title="GitHub Webhook – configuration error",
 			message=(
-				"'github_webhook_secret' is not set in site_config.json. "
-				"Add it to enable webhook signature validation."
+				"GitHub Webhook Secret is not configured. "
+				"Set it in Frappe Agile Settings → GitHub Integration → GitHub Webhook Secret, "
+				"or add 'github_webhook_secret' to site_config.json (legacy)."
 			),
 		)
 		frappe.throw(
-			_("Webhook secret not configured on this site."),
+			_("Webhook secret not configured. Set it in Frappe Agile Settings."),
 			frappe.AuthenticationError,
 		)
 
@@ -329,8 +353,8 @@ def _verify_signature():
 			message=(
 				f"Signature mismatch for incoming webhook request "
 				f"(received prefix: sha256={received_sig[:8]}...). "
-				"Verify that github_webhook_secret in site_config.json matches "
-				"the secret configured in GitHub."
+				"Verify that the GitHub Webhook Secret in Frappe Agile Settings "
+				"matches the secret configured in GitHub."
 			),
 		)
 		frappe.throw(
