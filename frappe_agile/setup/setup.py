@@ -150,6 +150,7 @@ def after_install():
 	frappe.db.commit()
 
 def before_uninstall():
+	delete_assignment_rules()
 	delete_backlog_list_filter()
 	delete_list_view_settings()
 	delete_assignment_rules()
