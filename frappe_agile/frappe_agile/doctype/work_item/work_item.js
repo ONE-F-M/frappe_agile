@@ -117,6 +117,23 @@ frappe.ui.form.on("Work Item", {
 				},
 			};
 		};
+
+		// Render PR Link as a clickable hyperlink that opens in a new tab
+		if (frm.doc.pr_link) {
+			const pr_field = frm.fields_dict.pr_link;
+			if (pr_field && pr_field.$wrapper) {
+				// Remove any previously injected link to avoid duplicates
+				pr_field.$wrapper.find(".pr-link-open").remove();
+
+				const url = frm.doc.pr_link;
+				const $link = $(`<div class="pr-link-open mt-1">
+					<a class="btn btn-xs btn-default" href="${url}" target="_blank" rel="noopener noreferrer">
+						${__("Open PR")} ↗
+					</a>
+				</div>`);
+				pr_field.$wrapper.append($link);
+			}
+		}
 	},
 
 	project: function (frm) {
