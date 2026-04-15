@@ -17,13 +17,13 @@
    "reqd": 1
   }
  ],
- "index_web_pages_for_search": 1,
+ "index_web_pages_for_search": 0,
  "istable": 1,
  "links": [],
- "modified": "2026-04-15 15:15:00.000000",
+ "modified": "2026-04-15 15:35:00.000000",
  "modified_by": "Administrator",
  "module": "Frappe Agile",
- "name": "Labels",
+ "name": "Work Item Label",
  "owner": "Administrator",
  "permissions": [],
  "row_format": "Dynamic",

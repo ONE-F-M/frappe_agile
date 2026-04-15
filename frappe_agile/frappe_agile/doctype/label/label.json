@@ -12,7 +12,9 @@
   {
    "fieldname": "label",
    "fieldtype": "Data",
+   "in_list_view": 1,
    "label": "Label",
+   "reqd": 1,
    "unique": 1
   }
  ],

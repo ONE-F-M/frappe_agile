@@ -5,5 +5,5 @@
 from frappe.model.document import Document
 
 
-class Labels(Document):
+class WorkItemLabel(Document):
 	pass
