@@ -111,6 +111,12 @@ def _handle_pull_request(payload: dict):
 	"""
 	PR opened  → "Assign Reviewer"  → Pending Review
 	PR merged  → "Merge PR"         → In Staging
+
+	When a PR is opened with a requested reviewer, the reviewer's GitHub
+	login is resolved to a Frappe User via the Development Team Member
+	table and set on the Work Item's ``pr_reviewer_user`` field.  This
+	enables the "Work Item - PR Reviewer" Assignment Rule to auto-assign
+	the Work Item when it enters "Pending Review".
 	"""
 	action = payload.get("action", "")
 	pr = payload.get("pull_request", {})
@@ -134,12 +140,28 @@ def _handle_pull_request(payload: dict):
 		return
 
 	if action == "opened":
+		# Resolve the first requested reviewer to a Frappe User
+		reviewers = pr.get("requested_reviewers") or []
+		reviewer_github_login = reviewers[0].get("login", "") if reviewers else ""
+		reviewer_user = _resolve_frappe_user(reviewer_github_login)
+
+		if reviewer_github_login and not reviewer_user:
+			frappe.log_error(
+				title="GitHub Webhook – reviewer not mapped",
+				message=(
+					f"GitHub reviewer '{reviewer_github_login}' on PR '{pr_url}' "
+					f"could not be mapped to a Frappe User. "
+					"Ensure the GitHub Username is configured in "
+					"Frappe Agile Settings → Development Team."
+				),
+			)
+
 		# If the WI is still in Pending Execution (push webhook never fired),
 		# auto-advance it to Pending PR first, then assign the reviewer.
 		current_state = frappe.db.get_value("Work Item", wi_name, "workflow_state") if frappe.db.exists("Work Item", wi_name) else None
 		if current_state == "Pending Execution":
 			_apply(wi_name, "Execute Work Item", pr_url=pr_url)
-		_apply(wi_name, "Assign Reviewer", pr_url=pr_url)
+		_apply(wi_name, "Assign Reviewer", pr_url=pr_url, pr_reviewer_user=reviewer_user or "")
 
 	elif action == "closed" and merged:
 		_apply(wi_name, "Merge PR", pr_url=pr_url)
@@ -243,10 +265,34 @@ def _extract_wi_name(*texts: str) -> str | None:
 	return None
 
 
-def _apply(wi_name: str, action: str, pr_url: str = ""):
+def _resolve_frappe_user(github_login: str) -> str | None:
+	"""
+	Map a GitHub username to a Frappe User email via the Development Team
+	Member table in Frappe Agile Settings.
+
+	Comparison is case-insensitive (GitHub usernames are case-insensitive).
+
+	Returns the Frappe User email string, or ``None`` if the GitHub login
+	is empty or not found in the Development Team.
+	"""
+	if not github_login:
+		return None
+
+	settings = frappe.get_cached_doc("Frappe Agile Settings")
+	for member in settings.development_team:
+		if member.github_username and member.github_username.lower() == github_login.lower():
+			return member.user
+	return None
+
+
+def _apply(wi_name: str, action: str, pr_url: str = "", pr_reviewer_user: str = ""):
 	"""
 	Apply a workflow action to a Work Item, running as Administrator so that
 	role-based guards inside the workflow are bypassed for this service call.
+
+	Optionally sets ``pr_link`` and ``pr_reviewer_user`` on the document
+	**before** the workflow transition so that downstream Assignment Rules
+	can pick up the reviewer when the state changes.
 
 	If the Work Item does not exist, or the transition is not valid from the
 	current state, the error is logged and the function returns gracefully.
@@ -263,9 +309,14 @@ def _apply(wi_name: str, action: str, pr_url: str = ""):
 		frappe.set_user("Administrator")
 		doc = frappe.get_doc("Work Item", wi_name)
 
-		# Optionally capture the PR link when available
+		# Capture the PR link when available
 		if pr_url and hasattr(doc, "pr_link") and not doc.pr_link:
 			doc.pr_link = pr_url
+
+		# Capture the PR reviewer — must be set BEFORE apply_workflow so the
+		# Assignment Rule can pick it up when state becomes "Pending Review"
+		if pr_reviewer_user and hasattr(doc, "pr_reviewer_user") and not doc.pr_reviewer_user:
+			doc.pr_reviewer_user = pr_reviewer_user
 
 		apply_workflow(doc, action)
 		doc.save(ignore_permissions=True)
