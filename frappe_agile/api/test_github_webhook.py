@@ -82,6 +82,46 @@ def _build_push_payload(
 # ---------------------------------------------------------------------------
 
 
+class TestGetWebhookSecret(unittest.TestCase):
+	"""Tests for _get_webhook_secret() lookup priority."""
+
+	def _mod(self):
+		from frappe_agile.api import github_webhook
+		return github_webhook
+
+	@patch("frappe.conf")
+	@patch("frappe.get_single_value", return_value="settings-secret")
+	def test_settings_secret_takes_priority(self, _mock_single, _mock_conf):
+		"""When both Settings and conf have a secret, Settings wins."""
+		_mock_conf.get.return_value = "conf-secret"
+		result = self._mod()._get_webhook_secret()
+		self.assertEqual(result, "settings-secret")
+
+	@patch("frappe.conf")
+	@patch("frappe.get_single_value", return_value="settings-secret")
+	def test_settings_secret_only(self, _mock_single, _mock_conf):
+		"""When only Settings has a secret, it should be returned."""
+		_mock_conf.get.return_value = None
+		result = self._mod()._get_webhook_secret()
+		self.assertEqual(result, "settings-secret")
+
+	@patch("frappe.conf")
+	@patch("frappe.get_single_value", return_value=None)
+	def test_conf_fallback(self, _mock_single, _mock_conf):
+		"""When Settings is empty, should fall back to frappe.conf."""
+		_mock_conf.get.return_value = "conf-secret"
+		result = self._mod()._get_webhook_secret()
+		self.assertEqual(result, "conf-secret")
+
+	@patch("frappe.conf")
+	@patch("frappe.get_single_value", return_value=None)
+	def test_returns_none_when_not_configured(self, _mock_single, _mock_conf):
+		"""When neither source has a secret, return None."""
+		_mock_conf.get.return_value = None
+		result = self._mod()._get_webhook_secret()
+		self.assertIsNone(result)
+
+
 class TestGithubWebhookSignature(unittest.TestCase):
 	"""HMAC signature verification tests."""
 
@@ -100,8 +140,7 @@ class TestGithubWebhookSignature(unittest.TestCase):
 		mock_request.data = payload_bytes
 
 		with patch("frappe.request", mock_request):
-			with patch("frappe.conf") as conf:
-				conf.get.return_value = "test-secret"
+			with patch("frappe_agile.api.github_webhook._get_webhook_secret", return_value="test-secret"):
 				# Should not raise
 				mod._verify_signature()
 
@@ -113,8 +152,7 @@ class TestGithubWebhookSignature(unittest.TestCase):
 		mock_request.data = b"{}"
 
 		with patch("frappe.request", mock_request):
-			with patch("frappe.conf") as conf:
-				conf.get.return_value = "test-secret"
+			with patch("frappe_agile.api.github_webhook._get_webhook_secret", return_value="test-secret"):
 				with self.assertRaises(frappe.exceptions.AuthenticationError):
 					mod._verify_signature()
 
@@ -129,8 +167,19 @@ class TestGithubWebhookSignature(unittest.TestCase):
 		mock_request.data = payload_bytes
 
 		with patch("frappe.request", mock_request):
-			with patch("frappe.conf") as conf:
-				conf.get.return_value = "test-secret"
+			with patch("frappe_agile.api.github_webhook._get_webhook_secret", return_value="test-secret"):
+				with self.assertRaises(frappe.exceptions.AuthenticationError):
+					mod._verify_signature()
+
+	def test_no_secret_configured_raises(self):
+		"""When no secret is configured anywhere, should raise AuthenticationError."""
+		mod = self._mod()
+		mock_request = MagicMock()
+		mock_request.headers = {"X-Hub-Signature-256": "sha256=abc"}
+		mock_request.data = b"{}"
+
+		with patch("frappe.request", mock_request):
+			with patch("frappe_agile.api.github_webhook._get_webhook_secret", return_value=None):
 				with self.assertRaises(frappe.exceptions.AuthenticationError):
 					mod._verify_signature()
 
