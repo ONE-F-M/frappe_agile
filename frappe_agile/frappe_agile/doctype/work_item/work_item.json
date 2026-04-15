@@ -168,7 +168,7 @@
    "in_list_view": 1,
    "label": "Story Points",
    "non_negative": 1,
-   "read_only_depends_on": "eval: doc.work_item_type == \"Epic\""
+   "read_only_depends_on": "eval:doc.work_item_type == 'Epic'"
   },
   {
    "fieldname": "column_break_gxds",

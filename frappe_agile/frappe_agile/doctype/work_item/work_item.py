@@ -3,13 +3,16 @@
 
 import frappe
 from frappe import _
+from frappe.utils import flt
 from frappe.model.document import Document
 
 
 class WorkItem(Document):
 	def validate(self):
+		self._validate_epic_story_points()
 		self._validate_sprint_project()
 		self._validate_sprint_status()
+
 
 	def before_insert(self):
 		"""Add this work item to the Sprint's child table on creation."""
@@ -98,6 +101,14 @@ class WorkItem(Document):
 		)
 		for row in sprint_rows:
 			self._remove_from_sprint(row["parent"])
+
+	def _validate_epic_story_points(self):
+		"""Epics cannot have story points — they are containers, not work items."""
+		if self.work_item_type == "Epic" and flt(self.story_points):
+			frappe.throw(
+				_("Story Points cannot be set for Epics. Story points should only be assigned to actual work items."),
+				title=_("Invalid Story Points"),
+			)
 
 	def _validate_sprint_status(self):
 		"""Ensure the Work Item cannot be linked to a Completed Sprint, 
