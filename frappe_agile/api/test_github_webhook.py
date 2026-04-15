@@ -37,6 +37,7 @@ def _build_pr_payload(
 	title: str = "",
 	branch: str = "feature/some-branch",
 	pr_url: str = "https://github.com/org/repo/pull/1",
+	requested_reviewers: list[dict] | None = None,
 ) -> dict:
 	return {
 		"action": action,
@@ -46,6 +47,7 @@ def _build_pr_payload(
 			"body": body,
 			"title": title,
 			"head": {"ref": branch},
+			"requested_reviewers": requested_reviewers or [],
 		},
 	}
 
@@ -216,6 +218,63 @@ class TestExtractWiName(unittest.TestCase):
 		self.assertEqual(result, "WI-000042")
 
 
+class TestResolveFrappeUser(unittest.TestCase):
+	"""_resolve_frappe_user() GitHub → Frappe user mapping."""
+
+	def _mod(self):
+		from frappe_agile.api import github_webhook
+		return github_webhook
+
+	def _make_member(self, user: str, github_username: str):
+		"""Create a mock Development Team Member row."""
+		m = MagicMock()
+		m.user = user
+		m.github_username = github_username
+		return m
+
+	@patch("frappe.get_cached_doc")
+	def test_resolves_matching_login(self, mock_get_cached):
+		settings = MagicMock()
+		settings.development_team = [
+			self._make_member("alice@one-fm.com", "alice-gh"),
+			self._make_member("bob@one-fm.com", "bob-gh"),
+		]
+		mock_get_cached.return_value = settings
+
+		result = self._mod()._resolve_frappe_user("bob-gh")
+		self.assertEqual(result, "bob@one-fm.com")
+
+	@patch("frappe.get_cached_doc")
+	def test_case_insensitive_match(self, mock_get_cached):
+		settings = MagicMock()
+		settings.development_team = [
+			self._make_member("alice@one-fm.com", "Alice-GH"),
+		]
+		mock_get_cached.return_value = settings
+
+		result = self._mod()._resolve_frappe_user("alice-gh")
+		self.assertEqual(result, "alice@one-fm.com")
+
+	@patch("frappe.get_cached_doc")
+	def test_returns_none_when_no_match(self, mock_get_cached):
+		settings = MagicMock()
+		settings.development_team = [
+			self._make_member("alice@one-fm.com", "alice-gh"),
+		]
+		mock_get_cached.return_value = settings
+
+		result = self._mod()._resolve_frappe_user("unknown-user")
+		self.assertIsNone(result)
+
+	def test_returns_none_for_empty_login(self):
+		result = self._mod()._resolve_frappe_user("")
+		self.assertIsNone(result)
+
+	def test_returns_none_for_none_login(self):
+		result = self._mod()._resolve_frappe_user(None)
+		self.assertIsNone(result)
+
+
 class TestApplyWorkflowHelper(unittest.TestCase):
 	"""_apply() helper behaviour."""
 
@@ -231,6 +290,7 @@ class TestApplyWorkflowHelper(unittest.TestCase):
 		mod = self._mod()
 		doc = MagicMock()
 		doc.pr_link = ""
+		doc.pr_reviewer_user = ""
 		mock_get_doc.return_value = doc
 
 		with patch("frappe.session") as sess:
@@ -239,6 +299,51 @@ class TestApplyWorkflowHelper(unittest.TestCase):
 
 		mock_apply.assert_called_once_with(doc, "Assign Reviewer")
 		doc.save.assert_called_once()
+
+	@patch("frappe_agile.api.github_webhook.apply_workflow")
+	@patch("frappe.get_doc")
+	@patch("frappe.db.exists", return_value=True)
+	@patch("frappe.set_user")
+	def test_apply_sets_pr_reviewer_user(self, mock_set_user, _mock_exists, mock_get_doc, mock_apply):
+		"""pr_reviewer_user should be set on the doc before workflow transition."""
+		mod = self._mod()
+		doc = MagicMock()
+		doc.pr_link = ""
+		doc.pr_reviewer_user = ""
+		mock_get_doc.return_value = doc
+
+		with patch("frappe.session") as sess:
+			sess.user = "test@example.com"
+			mod._apply(
+				"WI-000001", "Assign Reviewer",
+				pr_url="https://github.com/p/1",
+				pr_reviewer_user="reviewer@one-fm.com",
+			)
+
+		self.assertEqual(doc.pr_reviewer_user, "reviewer@one-fm.com")
+		mock_apply.assert_called_once_with(doc, "Assign Reviewer")
+
+	@patch("frappe_agile.api.github_webhook.apply_workflow")
+	@patch("frappe.get_doc")
+	@patch("frappe.db.exists", return_value=True)
+	@patch("frappe.set_user")
+	def test_apply_does_not_overwrite_existing_reviewer(self, mock_set_user, _mock_exists, mock_get_doc, mock_apply):
+		"""If pr_reviewer_user is already set, it should not be overwritten."""
+		mod = self._mod()
+		doc = MagicMock()
+		doc.pr_link = ""
+		doc.pr_reviewer_user = "existing@one-fm.com"
+		mock_get_doc.return_value = doc
+
+		with patch("frappe.session") as sess:
+			sess.user = "test@example.com"
+			mod._apply(
+				"WI-000001", "Assign Reviewer",
+				pr_url="https://github.com/p/1",
+				pr_reviewer_user="new-reviewer@one-fm.com",
+			)
+
+		self.assertEqual(doc.pr_reviewer_user, "existing@one-fm.com")
 
 	@patch("frappe.log_error")
 	@patch("frappe.db.exists", return_value=False)
@@ -256,15 +361,54 @@ class TestHandlePullRequest(unittest.TestCase):
 		from frappe_agile.api import github_webhook
 		return github_webhook
 
+	@patch("frappe_agile.api.github_webhook._resolve_frappe_user", return_value="reviewer@one-fm.com")
 	@patch("frappe_agile.api.github_webhook._apply")
-	def test_pr_opened_assigns_reviewer(self, mock_apply):
+	def test_pr_opened_with_reviewer_passes_user(self, mock_apply, _mock_resolve):
+		"""PR opened with a requested reviewer should pass pr_reviewer_user to _apply."""
+		mod = self._mod()
+		payload = _build_pr_payload(
+			action="opened",
+			body="Closes WI-000042",
+			requested_reviewers=[{"login": "octocat"}],
+		)
+		mod._handle_pull_request(payload)
+		mock_apply.assert_called_once_with(
+			"WI-000042", "Assign Reviewer",
+			pr_url=ANY, pr_reviewer_user="reviewer@one-fm.com",
+		)
+
+	@patch("frappe_agile.api.github_webhook._resolve_frappe_user", return_value=None)
+	@patch("frappe_agile.api.github_webhook._apply")
+	def test_pr_opened_without_reviewer_passes_empty(self, mock_apply, _mock_resolve):
+		"""PR opened with no requested reviewers should pass empty pr_reviewer_user."""
 		mod = self._mod()
 		payload = _build_pr_payload(
 			action="opened",
 			body="Closes WI-000042",
 		)
 		mod._handle_pull_request(payload)
-		mock_apply.assert_called_once_with("WI-000042", "Assign Reviewer", pr_url=ANY)
+		mock_apply.assert_called_once_with(
+			"WI-000042", "Assign Reviewer",
+			pr_url=ANY, pr_reviewer_user="",
+		)
+
+	@patch("frappe.log_error")
+	@patch("frappe_agile.api.github_webhook._resolve_frappe_user", return_value=None)
+	@patch("frappe_agile.api.github_webhook._apply")
+	def test_pr_opened_with_unmapped_reviewer_logs_warning(self, mock_apply, _mock_resolve, mock_log):
+		"""PR opened with a reviewer not in Dev Team should log a warning and still proceed."""
+		mod = self._mod()
+		payload = _build_pr_payload(
+			action="opened",
+			body="Closes WI-000042",
+			requested_reviewers=[{"login": "unknown-dev"}],
+		)
+		mod._handle_pull_request(payload)
+		# Should log that the reviewer could not be mapped
+		mock_log.assert_called_once()
+		self.assertIn("unknown-dev", mock_log.call_args[1].get("message", ""))
+		# Should still proceed with the workflow transition
+		mock_apply.assert_called_once()
 
 	@patch("frappe_agile.api.github_webhook._apply")
 	def test_pr_merged_merges_pr(self, mock_apply):
