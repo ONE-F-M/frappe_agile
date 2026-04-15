@@ -35,7 +35,9 @@
   "pr_link",
   "pr_reviewer_user",
   "column_break_btot",
-  "ai_tools_feedback"
+  "ai_tools_feedback",
+  "labels_section",
+  "labels"
  ],
  "fields": [
   {
@@ -215,11 +217,22 @@
    "fieldname": "ai_tools_feedback",
    "fieldtype": "Long Text",
    "label": "AI Tools Feedback"
+  },
+  {
+   "fieldname": "labels_section",
+   "fieldtype": "Section Break",
+   "label": "Labels"
+  },
+  {
+   "fieldname": "labels",
+   "fieldtype": "Table",
+   "label": "Labels",
+   "options": "Labels"
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-04-15 15:03:45.000000",
+ "modified": "2026-04-15 15:16:00.000000",
  "modified_by": "Administrator",
  "module": "Frappe Agile",
  "name": "Work Item",
