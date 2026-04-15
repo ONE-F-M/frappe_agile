@@ -35,6 +35,7 @@ import re
 import frappe
 from frappe import _
 from frappe.model.workflow import WorkflowTransitionError, apply_workflow
+from frappe.utils.password import get_decrypted_password
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -299,8 +300,15 @@ def _get_webhook_secret() -> str | None:
 
 	Returns ``None`` when neither source is configured.
 	"""
-	# get_single_value returns the decrypted value for Password fields automatically.
-	settings_secret = frappe.get_single_value("Frappe Agile Settings", "github_webhook_secret")
+	# Password fields are stored encrypted in the __Auth table.
+	# get_decrypted_password returns the plaintext secret;
+	# get_single_value would return the masked placeholder ('*').
+	settings_secret = get_decrypted_password(
+		"Frappe Agile Settings",
+		"Frappe Agile Settings",
+		fieldname="github_webhook_secret",
+		raise_exception=False,
+	)
 	if settings_secret:
 		return settings_secret
 
@@ -327,7 +335,11 @@ def _verify_signature():
 			),
 		)
 		frappe.throw(
-			_("Webhook secret not configured. Set it in Frappe Agile Settings."),
+			_(
+				"Webhook secret not configured. "
+				"Set it in Frappe Agile Settings (preferred) "
+				"or in site_config.json as 'github_webhook_secret' (legacy)."
+			),
 			frappe.AuthenticationError,
 		)
 
@@ -353,7 +365,8 @@ def _verify_signature():
 			message=(
 				f"Signature mismatch for incoming webhook request "
 				f"(received prefix: sha256={received_sig[:8]}...). "
-				"Verify that the GitHub Webhook Secret in Frappe Agile Settings "
+				"Verify that the webhook secret in Frappe Agile Settings "
+				"(or 'github_webhook_secret' in site_config.json if using legacy fallback) "
 				"matches the secret configured in GitHub."
 			),
 		)

@@ -90,32 +90,32 @@ class TestGetWebhookSecret(unittest.TestCase):
 		return github_webhook
 
 	@patch("frappe.conf")
-	@patch("frappe.get_single_value", return_value="settings-secret")
-	def test_settings_secret_takes_priority(self, _mock_single, _mock_conf):
+	@patch("frappe_agile.api.github_webhook.get_decrypted_password", return_value="settings-secret")
+	def test_settings_secret_takes_priority(self, _mock_decrypt, _mock_conf):
 		"""When both Settings and conf have a secret, Settings wins."""
 		_mock_conf.get.return_value = "conf-secret"
 		result = self._mod()._get_webhook_secret()
 		self.assertEqual(result, "settings-secret")
 
 	@patch("frappe.conf")
-	@patch("frappe.get_single_value", return_value="settings-secret")
-	def test_settings_secret_only(self, _mock_single, _mock_conf):
+	@patch("frappe_agile.api.github_webhook.get_decrypted_password", return_value="settings-secret")
+	def test_settings_secret_only(self, _mock_decrypt, _mock_conf):
 		"""When only Settings has a secret, it should be returned."""
 		_mock_conf.get.return_value = None
 		result = self._mod()._get_webhook_secret()
 		self.assertEqual(result, "settings-secret")
 
 	@patch("frappe.conf")
-	@patch("frappe.get_single_value", return_value=None)
-	def test_conf_fallback(self, _mock_single, _mock_conf):
+	@patch("frappe_agile.api.github_webhook.get_decrypted_password", return_value=None)
+	def test_conf_fallback(self, _mock_decrypt, _mock_conf):
 		"""When Settings is empty, should fall back to frappe.conf."""
 		_mock_conf.get.return_value = "conf-secret"
 		result = self._mod()._get_webhook_secret()
 		self.assertEqual(result, "conf-secret")
 
 	@patch("frappe.conf")
-	@patch("frappe.get_single_value", return_value=None)
-	def test_returns_none_when_not_configured(self, _mock_single, _mock_conf):
+	@patch("frappe_agile.api.github_webhook.get_decrypted_password", return_value=None)
+	def test_returns_none_when_not_configured(self, _mock_decrypt, _mock_conf):
 		"""When neither source has a secret, return None."""
 		_mock_conf.get.return_value = None
 		result = self._mod()._get_webhook_secret()
