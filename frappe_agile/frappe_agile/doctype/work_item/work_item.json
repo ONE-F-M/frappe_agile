@@ -11,13 +11,11 @@
   "priority",
   "title",
   "assignee_user",
-  "assignee_name",
   "column_break_bnjh",
   "project",
   "status",
   "workflow_state",
   "reporter_user",
-  "reporter_name",
   "process_owner",
   "is_groomed",
   "work_item_details_section",
@@ -92,26 +90,11 @@
    "options": "User"
   },
   {
-   "fetch_from": "assignee_user.full_name",
-   "fieldname": "assignee_name",
-   "fieldtype": "Data",
-   "in_list_view": 1,
-   "label": "Assignee Name",
-   "read_only": 1
-  },
-  {
    "fieldname": "reporter_user",
    "fieldtype": "Link",
    "label": "Reporter User",
    "options": "User",
    "default": "__user",
-   "read_only": 1
-  },
-  {
-   "fetch_from": "reporter_user.full_name",
-   "fieldname": "reporter_name",
-   "fieldtype": "Data",
-   "label": "Reporter Name",
    "read_only": 1
   },
   {
@@ -232,7 +215,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-04-15 15:37:00.000000",
+ "modified": "2026-04-19 17:45:00.000000",
  "modified_by": "Administrator",
  "module": "Frappe Agile",
  "name": "Work Item",
