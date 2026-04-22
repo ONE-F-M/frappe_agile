@@ -15,7 +15,6 @@
   "column_break_bnjh",
   "project",
   "status",
-  "workflow_state",
   "reporter_user",
   "process_owner",
   "is_groomed",
@@ -36,7 +35,9 @@
   "column_break_btot",
   "ai_tools_feedback",
   "labels_section",
-  "labels"
+  "labels",
+  "section_break_dcoy",
+  "rejection_notes"
  ],
  "fields": [
   {
@@ -91,11 +92,11 @@
    "options": "User"
   },
   {
+   "default": "__user",
    "fieldname": "reporter_user",
    "fieldtype": "Link",
    "label": "Reporter User",
    "options": "User",
-   "default": "__user",
    "read_only": 1
   },
   {
@@ -141,12 +142,11 @@
    "options": "Sprint"
   },
   {
+   "fetch_from": "sprint.status",
    "fieldname": "sprint_status",
    "fieldtype": "Data",
    "label": "Sprint Status",
-   "fetch_from": "sprint.status",
-   "read_only": 1,
-   "insert_after": "sprint"
+   "read_only": 1
   },
   {
    "fieldname": "story_points",
@@ -168,16 +168,11 @@
    "options": "Work Item"
   },
   {
+   "default": "__user",
    "fieldname": "reporter_user",
    "fieldtype": "Link",
    "label": "Reporter User",
-   "options": "User"
-  },
-  {
-   "fetch_from": "reporter_user.full_name",
-   "fieldname": "reporter_name",
-   "fieldtype": "Data",
-   "label": "Reporter Name",
+   "options": "User",
    "read_only": 1
   },
   {
@@ -245,11 +240,22 @@
    "fieldtype": "Select",
    "label": "Series",
    "options": "WI-.######"
+  },
+  {
+   "fieldname": "section_break_dcoy",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "rejection_notes",
+   "fieldtype": "Table",
+   "label": "Rejection Notes",
+   "options": "Rejection Details",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-04-19 17:45:00.000000",
+ "modified": "2026-04-22 12:33:26.581781",
  "modified_by": "Administrator",
  "module": "Frappe Agile",
  "name": "Work Item",
