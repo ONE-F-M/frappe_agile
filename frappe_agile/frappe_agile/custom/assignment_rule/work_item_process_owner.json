@@ -1,0 +1,23 @@
+{
+  "name": "Work Item - Process Owner",
+  "document_type": "Work Item",
+  "priority": 0,
+  "disabled": 0,
+  "description": "<p>Here is to inform you that the following {{ doctype }}({{ name }}) requires your attention/action.\n        <br>\n        The details of the request are as follows:\n        <br>\n        </p><table cellpadding=\"0\" cellspacing=\"0\" border=\"1\" style=\"border-collapse: collapse;\">\n            <thead>\n                <tr>\n                    <th style=\"padding: 10px; text-align: left; background-color: #f2f2f2;\">Label</th>\n                    <th style=\"padding: 10px; text-align: left; background-color: #f2f2f2;\">Value</th>\n                </tr>\n            </thead>\n        <tbody>\n        \n            <tr>\n                <td style=\"padding: 10px;\">Work Item Type</td>\n                <td style=\"padding: 10px;\">{{work_item_type}}</td>\n            </tr>\n            </tbody></table><p></p>",
+  "assign_condition": "workflow_state == \"In Staging\"",
+  "unassign_condition": "workflow_state in [\"Done\", \"Rejected\"]",
+  "close_condition": "",
+  "rule": "Based on Field",
+  "field": "process_owner",
+  "doctype": "Assignment Rule",
+  "assignment_days": [
+    { "day": "Monday", "doctype": "Assignment Rule Day" },
+    { "day": "Tuesday", "doctype": "Assignment Rule Day" },
+    { "day": "Wednesday", "doctype": "Assignment Rule Day" },
+    { "day": "Thursday", "doctype": "Assignment Rule Day" },
+    { "day": "Friday", "doctype": "Assignment Rule Day" },
+    { "day": "Saturday", "doctype": "Assignment Rule Day" },
+    { "day": "Sunday", "doctype": "Assignment Rule Day" }
+  ],
+  "users": []
+}

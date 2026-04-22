@@ -7,7 +7,7 @@ def execute():
 		frappe.delete_doc("Kanban Board", "Sprint Board", ignore_permissions=True, force=1)
 		
 	# JSON fields to display natively on the Kanban cards
-	fields = '["title", "work_item_type", "story_points", "assignee_name", "name"]'
+	fields = '["title", "work_item_type", "story_points", "assignee_user", "name"]'
 	
 	board = frappe.new_doc("Kanban Board")
 	board.kanban_board_name = "Sprint Board"

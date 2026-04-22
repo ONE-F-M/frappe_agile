@@ -5,16 +5,57 @@ from frappe.utils import flt
 
 
 class Sprint(Document):
+	def autoname(self):
+		if not self.name and self.sprint_prefix:
+			self.sprint_prefix = self.sprint_prefix.strip()
+			from frappe.model.naming import make_autoname
+			self.name = make_autoname(f"{self.sprint_prefix}-.###")
+
 	def validate(self):
+		self.validate_status_transition()
 		self.validate_active_sprint_uniqueness()
 		self.calculate_expected_velocity()
 
 	def on_update(self):
 		# Guard: skip velocity DB write during DocType schema migration context
-		if not frappe.db.table_exists("tabWork Item"):
+		if not frappe.db.table_exists("Work Item"):
 			return
 		self.calculate_expected_velocity()
 		self.db_set("expected_velocity", self.expected_velocity, update_modified=False)
+		self.sync_sprint_status_to_work_items()
+
+	def sync_sprint_status_to_work_items(self):
+		"""Push this Sprint's current status into sprint_status on all linked Work Items.
+
+		Called on every Sprint save so that the Fetch From cache stays accurate
+		even for existing Work Items that were saved before the sprint changed state.
+		We only write when the status has actually changed to avoid redundant updates.
+		"""
+		if not frappe.db.has_column("Work Item", "sprint_status"):
+			return
+
+		doc_before = self.get_doc_before_save()
+		if doc_before and doc_before.status == self.status:
+			# Status unchanged — nothing to sync
+			return
+
+		frappe.db.set_value(
+			"Work Item",
+			{"sprint": self.name},
+			"sprint_status",
+			self.status,
+			update_modified=False,
+		)
+
+	def validate_status_transition(self):
+		"""Once a Sprint is Completed, it cannot be reverted to Draft or Active."""
+		if not self.is_new():
+			previous = self.get_doc_before_save()
+			if previous and previous.status == "Completed" and self.status != "Completed":
+				frappe.throw(
+					_("A Completed Sprint cannot be reverted back to {0}.").format(self.status),
+					title=_("Sprint Completed")
+				)
 
 	def validate_active_sprint_uniqueness(self):
 		"""Prevent two sprints with the same prefix from being Active simultaneously."""
@@ -122,3 +163,91 @@ def validate_work_item_sprint(doc, method=None):
 			).format(doc.project, doc.sprint, sprint_project),
 			title=_("Project Mismatch"),
 		)
+
+
+@frappe.whitelist()
+def get_or_create_target_sprint(sprint_name: str) -> str:
+	"""
+	Calculates the next sequential sprint.
+	If it exists and is Draft, returns it.
+	If it doesn't exist, creates it in Draft silently and returns it.
+	Falls back to normal creation if the sequence is broken.
+	"""
+	import re
+	doc = frappe.get_doc("Sprint", sprint_name)
+	
+	match = re.search(r'-(\d+)$', sprint_name)
+	if not match:
+		new_sprint = frappe.get_doc({
+			"doctype": "Sprint",
+			"sprint_prefix": doc.sprint_prefix,
+			"project": doc.project,
+			"status": "Draft",
+		})
+		new_sprint.insert(ignore_permissions=True)
+		return new_sprint.name
+
+	num_str = match.group(1)
+	next_num = int(num_str) + 1
+	target_sprint_name = f"{doc.sprint_prefix}-{str(next_num).zfill(len(num_str))}"
+
+	if frappe.db.exists("Sprint", target_sprint_name):
+		status = frappe.db.get_value("Sprint", target_sprint_name, "status")
+		if status == "Draft":
+			return target_sprint_name
+		else:
+			new_sprint = frappe.get_doc({
+				"doctype": "Sprint",
+				"sprint_prefix": doc.sprint_prefix,
+				"project": doc.project,
+				"status": "Draft",
+			})
+			new_sprint.insert(ignore_permissions=True)
+			return new_sprint.name
+	else:
+		new_sprint = frappe.get_doc({
+			"doctype": "Sprint",
+			"name": target_sprint_name,
+			"sprint_prefix": doc.sprint_prefix,
+			"project": doc.project,
+			"status": "Draft",
+		})
+		new_sprint.insert(ignore_permissions=True)
+		return new_sprint.name
+
+
+@frappe.whitelist()
+def handle_incomplete_items(sprint: str, action: str):
+	"""Handle Work Items that are not Done when a sprint is completed."""
+	work_items = frappe.get_all(
+		"Work Item",
+		filters={"sprint": sprint, "workflow_state": ["!=", "Done"]},
+		fields=["name"]
+	)
+
+	new_sprint_name = None
+	if action == "Move to New Sprint":
+		new_sprint_name = get_or_create_target_sprint(sprint)
+
+	if not work_items:
+		return new_sprint_name
+
+	# Move each incomplete Work Item
+	work_item_names = [wi.name for wi in work_items]
+	for wi_name in work_item_names:
+		frappe.db.set_value("Work Item", wi_name, "sprint", new_sprint_name or "")
+
+	# If moving to new sprint, add to new sprint's child table
+	if new_sprint_name:
+		for wi_name in work_item_names:
+			frappe.get_doc({
+				"doctype": "Sprint Work Item",
+				"parent": new_sprint_name,
+				"parentfield": "work_items",
+				"parenttype": "Sprint",
+				"work_item": wi_name,
+			}).insert(ignore_permissions=True)
+
+	frappe.db.commit()
+
+	return new_sprint_name

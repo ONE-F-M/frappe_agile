@@ -25,7 +25,7 @@ frappe.listview_settings["Work Item"] = {
 		"work_item_type",
 		"workflow_state",
 		"story_points",
-		"assignee_name"
+		"assignee_user"
 	],
 
 	on_row_click: function () {
@@ -93,13 +93,19 @@ function setupListViewFilters(listview) {
 
 		listview.custom_list_controls = {};
 
-		const type_options = frappe.meta.get_docfield("Work Item", "work_item_type") ? frappe.meta.get_docfield("Work Item", "work_item_type").options : "\nEpic\nUser Story\nTask\nBug";
+		// Derive Work Item Type options from DocType meta, excluding "Epic"
+		const all_type_options = (frappe.meta.get_docfield("Work Item", "work_item_type")?.options || "\nEpic\nUser Story\nTask\nBug");
+		const type_options = all_type_options.split("\n").filter(o => o && o !== "Epic").join("\n");
+
 		const status_options = frappe.meta.get_docfield("Work Item", "status") ? frappe.meta.get_docfield("Work Item", "status").options : "\nOpen\nIn Progress\nDone";
 
 		let filters_to_add = [
 			{ fieldname: 'work_item_type', fieldtype: 'Select', options: type_options, label: __('Work Item Type'), placeholder: __('Work Item Type') },
 			{ fieldname: 'status', fieldtype: 'Select', options: status_options, label: __('Status'), placeholder: __('Status') },
 			{ fieldname: 'sprint', fieldtype: 'Link', options: 'Sprint', label: __('Sprint'), placeholder: __('Sprint') },
+			{ fieldname: 'epic', fieldtype: 'Link', options: 'Work Item', label: __('Epic'), placeholder: __('Epic'),
+				get_query: function() { return { filters: { "work_item_type": "Epic" } }; }
+			},
 			{ fieldname: 'assignee_user', fieldtype: 'Link', options: 'User', label: __('Assignee User'), placeholder: __('Assignee User') }
 		];
 
@@ -188,7 +194,9 @@ function setupKanbanFilters(listview) {
 			{ fieldname: 'sprint', fieldtype: 'Link', options: 'Sprint', label: __('Sprint'), placeholder: __('Sprint'),
 				get_query: function() { return { filters: { "status": "Active" } }; }
 			},
-			{ fieldname: 'epic', fieldtype: 'Link', options: 'Work Item', label: __('Epic'), placeholder: __('Epic') },
+			{ fieldname: 'epic', fieldtype: 'Link', options: 'Work Item', label: __('Epic'), placeholder: __('Epic'),
+				get_query: function() { return { filters: { "work_item_type": "Epic" } }; }
+			},
 			{ fieldname: 'assignee_user', fieldtype: 'Link', options: 'User', label: __('Assignee'), placeholder: __('Assignee') }
 		];
 

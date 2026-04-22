@@ -1,149 +1,151 @@
 {
- "actions": [],
- "allow_rename": 1,
- "autoname": "format:{sprint_prefix}-{##}",
- "creation": "2026-03-24 21:56:37.782360",
- "doctype": "DocType",
- "engine": "InnoDB",
- "field_order": [
-  "naming_section",
-  "sprint_prefix",
-  "column_break_dbdi",
-  "project",
-  "sprint_schedule_section",
-  "status",
-  "column_break_npfs",
-  "start_date",
-  "column_break_cjmv",
-  "end_date",
-  "goals_and_metrics_section",
-  "sprint_goal",
-  "column_break_utgf",
-  "expected_velocity",
-  "target_points",
-  "work_items_section",
-  "work_items"
- ],
- "fields": [
-  {
-   "fieldname": "naming_section",
-   "fieldtype": "Section Break",
-   "label": "Naming"
-  },
-  {
-   "fieldname": "sprint_prefix",
-   "fieldtype": "Data",
-   "in_list_view": 1,
-   "label": "Sprint Prefix",
-   "reqd": 1
-  },
-  {
-   "fieldname": "column_break_dbdi",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "project",
-   "fieldtype": "Link",
-   "label": "Project",
-   "options": "Project"
-  },
-  {
-   "fieldname": "sprint_schedule_section",
-   "fieldtype": "Section Break",
-   "label": "Sprint Schedule"
-  },
-  {
-   "fieldname": "status",
-   "fieldtype": "Select",
-   "label": "Status",
-   "options": "\nDraft\nActive\nCompleted"
-  },
-  {
-   "fieldname": "column_break_npfs",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "start_date",
-   "fieldtype": "Date",
-   "label": "Start Date"
-  },
-  {
-   "fieldname": "column_break_cjmv",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "end_date",
-   "fieldtype": "Date",
-   "label": "End Date"
-  },
-  {
-   "fieldname": "goals_and_metrics_section",
-   "fieldtype": "Section Break",
-   "label": "Goals and Metrics"
-  },
-  {
-   "fieldname": "sprint_goal",
-   "fieldtype": "Small Text",
-   "label": "Sprint Goal"
-  },
-  {
-   "fieldname": "column_break_utgf",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "expected_velocity",
-   "fieldtype": "Float",
-   "label": "Expected Velocity",
-   "precision": "2",
-   "read_only": 1
-  },
-  {
-   "fieldname": "target_points",
-   "fieldtype": "Float",
-   "label": "Target Points"
-  },
-  {
-   "fieldname": "work_items_section",
-   "fieldtype": "Section Break",
-   "label": "Work Items"
-  },
-  {
-   "fieldname": "work_items",
-   "fieldtype": "Table",
-   "label": "Work Items",
-   "options": "Sprint Work Item",
-   "read_only": 1
-  }
- ],
- "index_web_pages_for_search": 1,
- "is_submittable": 0,
- "is_tree": 0,
- "is_virtual": 0,
- "issingle": 0,
- "istable": 0,
- "links": [],
- "modified": "2026-03-25 09:52:54.516822",
- "modified_by": "Administrator",
- "module": "Frappe Agile",
- "name": "Sprint",
- "naming_rule": "Expression",
- "owner": "Administrator",
- "permissions": [
-  {
-   "create": 1,
-   "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "System Manager",
-   "share": 1,
-   "write": 1
-  }
- ],
- "sort_field": "modified",
- "sort_order": "DESC",
- "states": [],
- "track_changes": 0
+    "actions": [],
+    "allow_rename": 1,
+    "autoname": "",
+    "creation": "2026-03-24 21:56:37.782360",
+    "doctype": "DocType",
+    "engine": "InnoDB",
+    "field_order": [
+        "naming_section",
+        "sprint_prefix",
+        "column_break_dbdi",
+        "project",
+        "sprint_schedule_section",
+        "status",
+        "column_break_npfs",
+        "start_date",
+        "column_break_cjmv",
+        "end_date",
+        "goals_and_metrics_section",
+        "sprint_goal",
+        "column_break_utgf",
+        "expected_velocity",
+        "target_points",
+        "work_items_section",
+        "work_items"
+    ],
+    "fields": [
+        {
+            "fieldname": "naming_section",
+            "fieldtype": "Section Break",
+            "label": "Naming"
+        },
+        {
+            "fieldname": "sprint_prefix",
+            "fieldtype": "Data",
+            "in_list_view": 1,
+            "label": "Sprint Prefix",
+            "reqd": 1
+        },
+        {
+            "fieldname": "column_break_dbdi",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "project",
+            "fieldtype": "Link",
+            "label": "Project",
+            "options": "Project"
+        },
+        {
+            "fieldname": "sprint_schedule_section",
+            "fieldtype": "Section Break",
+            "label": "Sprint Schedule"
+        },
+        {
+            "fieldname": "status",
+            "fieldtype": "Select",
+            "label": "Status",
+            "options": "\nDraft\nActive\nCompleted"
+        },
+        {
+            "fieldname": "column_break_npfs",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "start_date",
+            "fieldtype": "Date",
+            "label": "Start Date",
+            "reqd": 1
+        },
+        {
+            "fieldname": "column_break_cjmv",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "end_date",
+            "fieldtype": "Date",
+            "label": "End Date",
+            "reqd": 1
+        },
+        {
+            "fieldname": "goals_and_metrics_section",
+            "fieldtype": "Section Break",
+            "label": "Goals and Metrics"
+        },
+        {
+            "fieldname": "sprint_goal",
+            "fieldtype": "Small Text",
+            "label": "Sprint Goal"
+        },
+        {
+            "fieldname": "column_break_utgf",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "expected_velocity",
+            "fieldtype": "Float",
+            "label": "Expected Velocity",
+            "precision": "2",
+            "read_only": 1
+        },
+        {
+            "fieldname": "target_points",
+            "fieldtype": "Float",
+            "label": "Target Points"
+        },
+        {
+            "fieldname": "work_items_section",
+            "fieldtype": "Section Break",
+            "label": "Work Items"
+        },
+        {
+            "fieldname": "work_items",
+            "fieldtype": "Table",
+            "label": "Work Items",
+            "options": "Sprint Work Item",
+            "read_only": 1
+        }
+    ],
+    "index_web_pages_for_search": 1,
+    "is_submittable": 0,
+    "is_tree": 0,
+    "is_virtual": 0,
+    "issingle": 0,
+    "istable": 0,
+    "links": [],
+    "modified": "2026-03-25 09:52:54.516822",
+    "modified_by": "Administrator",
+    "module": "Frappe Agile",
+    "name": "Sprint",
+    "naming_rule": "By script",
+    "owner": "Administrator",
+    "permissions": [
+        {
+            "create": 1,
+            "delete": 1,
+            "email": 1,
+            "export": 1,
+            "print": 1,
+            "read": 1,
+            "report": 1,
+            "role": "System Manager",
+            "share": 1,
+            "write": 1
+        }
+    ],
+    "sort_field": "modified",
+    "sort_order": "DESC",
+    "states": [],
+    "track_changes": 0
 }

@@ -84,6 +84,10 @@ doctype_list_js = {"Work Item": "public/js/work_item_list.js"}
 
 # before_install = "frappe_agile.install.before_install"
 after_install = "frappe_agile.setup.setup.after_install"
+after_migrate = [
+	"frappe_agile.setup.workflow.create_workflows",
+	"frappe_agile.setup.assignment_rule.create_assignment_rules",
+]
 
 # Uninstallation
 # ------------
@@ -138,10 +142,6 @@ before_uninstall = "frappe_agile.setup.setup.before_uninstall"
 # Hook on document methods and events
 
 doc_events = {
-	"Sprint": {
-		"on_update": "frappe_agile.setup.setup.update_backlog_list_filter",
-		"on_trash": "frappe_agile.setup.setup.update_backlog_list_filter",
-	},
 	"Work Item": {
 		# Keep the status field in sync with the workflow_state (workflow is authoritative)
 		"validate": [
