@@ -84,7 +84,10 @@ doctype_list_js = {"Work Item": "public/js/work_item_list.js"}
 
 # before_install = "frappe_agile.install.before_install"
 after_install = "frappe_agile.setup.setup.after_install"
-after_migrate = ["frappe_agile.setup.workflow.create_workflows"]
+after_migrate = [
+	"frappe_agile.setup.workflow.create_workflows",
+	"frappe_agile.setup.assignment_rule.create_assignment_rules",
+]
 
 # Uninstallation
 # ------------

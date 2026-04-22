@@ -5,5 +5,5 @@
 from frappe.model.document import Document
 
 
-class WorkItemLabel(Document):
+class RejectionDetails(Document):
 	pass

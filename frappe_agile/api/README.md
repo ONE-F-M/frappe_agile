@@ -21,17 +21,20 @@ POST https://<your-site>/api/method/frappe_agile.api.github_webhook.handle_githu
    |---|---|
    | **Payload URL** | `https://<your-site>/api/method/frappe_agile.api.github_webhook.handle_github_webhook` |
    | **Content type** | `application/json` |
-   | **Secret** | Same value as `github_webhook_secret` in `site_config.json` |
+   | **Secret** | Same value as configured in Frappe Agile Settings (see step 2) |
    | **Events** | ☑ Pull requests &nbsp;☑ Pull request reviews &nbsp;☑ Pushes |
 
-2. Add the secret to your Frappe site config:
+2. Configure the webhook secret in Frappe:
 
+   **Preferred (via UI):**
+   Go to **Frappe Agile Settings → GitHub Integration → GitHub Webhook Secret** and enter your secret.
+
+   **Legacy fallback (via site_config.json):**
    ```bash
-   # sites/<your-site>/site_config.json
-   {
-     "github_webhook_secret": "your-strong-secret-here"
-   }
+   bench --site <your-site> set-config github_webhook_secret "your-strong-secret-here"
    ```
+
+   > The webhook handler checks Frappe Agile Settings first. If empty, it falls back to `github_webhook_secret` in `site_config.json`.
 
 3. Restart workers:
    ```bash
@@ -52,13 +55,22 @@ are rejected with HTTP 401 and logged via `frappe.log_error`.
 
 ### `pull_request`
 
-| `action` | `merged` | Workflow Action | Work Item State |
-|---|---|---|---|
-| `opened` | — | Assign Reviewer | **Pending Review** |
-| `closed` | `true` | Merge PR | **In Staging** |
-| `closed` | `false` | *(ignored)* | — |
+| `action` | `merged` | Workflow Action | Work Item State | Side Effects |
+|---|---|---|---|---|
+| `opened` | — | Assign Reviewer | **Pending Review** | Sets `pr_link`, resolves `pr_reviewer_user` from `requested_reviewers` |
+| `closed` | `true` | Merge PR | **In Staging** | Sets `pr_link` |
+| `closed` | `false` | *(ignored)* | — | — |
 
-**Example payload (PR opened):**
+When a PR is **opened**, the webhook also:
+1. Sets `pr_link` to the PR URL (if not already set).
+2. Extracts the first `requested_reviewers[].login` from the payload.
+3. Resolves the GitHub username to a Frappe User via **Frappe Agile Settings → Development Team** (matched by `github_username`).
+4. Sets `pr_reviewer_user` on the Work Item (if not already set).
+5. The **"Work Item - PR Reviewer" Assignment Rule** then auto-assigns the Work Item to the reviewer when it enters "Pending Review".
+
+> **Note:** If the GitHub reviewer cannot be mapped to a Frappe User, a warning is logged to Error Log but the workflow transition still proceeds.
+
+**Example payload (PR opened with reviewer):**
 ```json
 {
   "action": "opened",
@@ -67,10 +79,28 @@ are rejected with HTTP 401 and logged via `frappe.log_error`.
     "merged": false,
     "title": "Fix login bug",
     "body": "Closes WI-000007. Added null check on session.",
-    "head": { "ref": "feature/WI-000007-fix-login" }
+    "head": { "ref": "feature/WI-000007-fix-login" },
+    "requested_reviewers": [
+      { "login": "octocat" }
+    ]
   }
 }
 ```
+
+---
+
+### GitHub Username Mapping (Required for PR Reviewer)
+
+To enable automatic `pr_reviewer_user` population, each developer's GitHub username must
+be configured in **Frappe Agile Settings → Development Team**:
+
+| User | GitHub Username |
+|---|---|
+| `alice@one-fm.com` | `alice-gh` |
+| `bob@one-fm.com` | `bob-dev` |
+
+The webhook performs a **case-insensitive** lookup of the GitHub login against this table.
+If no match is found, `pr_reviewer_user` is left empty and a warning is logged.
 
 ---
 

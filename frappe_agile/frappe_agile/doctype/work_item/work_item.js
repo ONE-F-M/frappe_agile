@@ -117,6 +117,31 @@ frappe.ui.form.on("Work Item", {
 				},
 			};
 		};
+
+		// Add "Add Rejection Note" button when in Rejected state
+		if (frm.doc.workflow_state === "Rejected") {
+			frm.add_custom_button(__("Add Rejection Note"), function () {
+				frappe.prompt(
+					[
+						{
+							label: __("Reason for Rejection"),
+							fieldname: "reason",
+							fieldtype: "Small Text",
+							reqd: 1,
+						},
+					],
+					(values) => {
+						const row = frm.add_child("rejection_notes");
+						row.date = frappe.datetime.get_today();
+						row.reason_for_rejection = values.reason;
+						frm.refresh_field("rejection_notes");
+						frm.save();
+					},
+					__("Add Rejection Note"),
+					__("Add")
+				);
+			});
+		}
 	},
 
 	project: function (frm) {
