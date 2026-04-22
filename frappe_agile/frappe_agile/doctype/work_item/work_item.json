@@ -168,28 +168,6 @@
    "options": "Work Item"
   },
   {
-   "default": "__user",
-   "fieldname": "reporter_user",
-   "fieldtype": "Link",
-   "label": "Reporter User",
-   "options": "User",
-   "read_only": 1
-  },
-  {
-   "fieldname": "process_owner",
-   "fieldtype": "Link",
-   "label": "Process Owner",
-   "options": "User"
-  },
-  {
-   "default": "0",
-   "fieldname": "is_groomed",
-   "fieldtype": "Check",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Is Groomed"
-  },
-  {
    "fieldname": "implementation_details_section",
    "fieldtype": "Section Break",
    "label": "Implementation Details"
