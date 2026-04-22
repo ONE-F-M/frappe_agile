@@ -168,33 +168,6 @@
    "options": "Work Item"
   },
   {
-   "fieldname": "reporter_user",
-   "fieldtype": "Link",
-   "label": "Reporter User",
-   "options": "User"
-  },
-  {
-   "fetch_from": "reporter_user.full_name",
-   "fieldname": "reporter_name",
-   "fieldtype": "Data",
-   "label": "Reporter Name",
-   "read_only": 1
-  },
-  {
-   "fieldname": "process_owner",
-   "fieldtype": "Link",
-   "label": "Process Owner",
-   "options": "User"
-  },
-  {
-   "default": "0",
-   "fieldname": "is_groomed",
-   "fieldtype": "Check",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Is Groomed"
-  },
-  {
    "fieldname": "implementation_details_section",
    "fieldtype": "Section Break",
    "label": "Implementation Details"
@@ -212,7 +185,8 @@
   {
    "fieldname": "pr_link",
    "fieldtype": "Data",
-   "label": "PR Link"
+   "label": "PR Link",
+   "options": "URL"
   },
   {
    "fieldname": "pr_reviewer_user",
@@ -236,7 +210,7 @@
   },
   {
    "fieldname": "labels",
-   "fieldtype": "Table",
+   "fieldtype": "Table MultiSelect",
    "label": "Labels",
    "options": "Work Item Label"
   },
