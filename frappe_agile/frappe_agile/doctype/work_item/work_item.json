@@ -35,7 +35,9 @@
   "pr_link",
   "pr_reviewer_user",
   "column_break_btot",
-  "ai_tools_feedback"
+  "ai_tools_feedback",
+  "labels_section",
+  "labels"
  ],
  "fields": [
   {
@@ -197,7 +199,8 @@
   {
    "fieldname": "pr_link",
    "fieldtype": "Data",
-   "label": "PR Link"
+   "label": "PR Link",
+   "options": "URL"
   },
   {
    "fieldname": "pr_reviewer_user",
@@ -213,6 +216,17 @@
    "fieldname": "ai_tools_feedback",
    "fieldtype": "Long Text",
    "label": "AI Tools Feedback"
+  },
+  {
+   "fieldname": "labels_section",
+   "fieldtype": "Section Break",
+   "label": "Labels"
+  },
+  {
+   "fieldname": "labels",
+   "fieldtype": "Table MultiSelect",
+   "label": "Labels",
+   "options": "Work Item Label"
   }
  ],
  "index_web_pages_for_search": 1,
