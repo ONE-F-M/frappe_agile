@@ -148,12 +148,19 @@ class PriorityBoardPage {
 		`);
 
 		// Sprint link field (frappe-style)
+		// df.change is used instead of $input.on("change") because Frappe's
+		// Link control fires df.change (not the native DOM change event) when
+		// the user picks a value from the autocomplete dropdown.
 		this._sprint_field = frappe.ui.form.make_control({
 			df: {
 				fieldtype: "Link",
 				fieldname: "sprint",
 				options: "Sprint",
 				placeholder: __("All Active Sprints"),
+				change: () => {
+					this.filters.sprint = this._sprint_field.get_value() || "";
+					this.refresh();
+				},
 			},
 			parent: this.$filters.find("#wi-filter-sprint"),
 			render_input: true,
@@ -168,22 +175,16 @@ class PriorityBoardPage {
 				fieldname: "assignee",
 				options: "User",
 				placeholder: __("All Assignees"),
+				change: () => {
+					this.filters.assignee = this._assignee_field.get_value() || "";
+					this.refresh();
+				},
 			},
 			parent: this.$filters.find("#wi-filter-assignee"),
 			render_input: true,
 		});
 		this._assignee_field.$input.addClass("input-xs");
 		this._assignee_field.$input.css("height", "32px");
-
-		// Bind events
-		this._sprint_field.$input.on("change", () => {
-			this.filters.sprint = this._sprint_field.get_value() || "";
-			this.refresh();
-		});
-		this._assignee_field.$input.on("change", () => {
-			this.filters.assignee = this._assignee_field.get_value() || "";
-			this.refresh();
-		});
 		this.$filters.find("#wi-sel-status").on("change", (e) => {
 			this.filters.status = e.target.value;
 			this.refresh();
@@ -225,7 +226,7 @@ class PriorityBoardPage {
 	// Main refresh — fetch data from server
 	// ----------------------------------------------------------
 	refresh() {
-		if (this._loading) return;
+		if (!this.$list || this._loading) return;
 		this._loading = true;
 		this.$list.html(this._skeleton_html(6));
 
@@ -379,7 +380,6 @@ class PriorityBoardPage {
 		this.displayed_count += next_batch.length;
 
 		// Update header
-		const total = this.ordered_items.length;
 		this.$header.find("strong").last().text(this.displayed_count);
 
 		// Update or hide load-more button
