@@ -2,9 +2,9 @@
 	"creation": "2026-04-22 09:05:00.000000",
 	"doctype": "Page",
 	"module": "Frappe Agile",
-	"name": "work-items",
-	"page_name": "work-items",
+	"name": "priority-board",
+	"page_name": "priority-board",
 	"roles": [],
 	"standard": "Yes",
-	"title": "Work Items"
+	"title": "Priority Board"
 }

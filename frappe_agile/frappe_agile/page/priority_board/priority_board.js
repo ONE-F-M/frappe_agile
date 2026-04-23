@@ -10,28 +10,28 @@ const PAGE_SIZE = 50;
 const STORAGE_KEY_PREFIX = "wi_priority_order_";
 const SORTABLE_ASSET = "/assets/frappe_agile/js/vendor/sortable.min.js";
 
-frappe.pages["work-items"].on_page_load = function (wrapper) {
+frappe.pages["priority-board"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({
 		parent: wrapper,
-		title: __("Work Items"),
+		title: __("Priority Board"),
 		single_column: true,
 	});
 
 	// Attach the controller
-	wrapper.work_items_page = new WorkItemsPage(page, wrapper);
+	wrapper.priority_board_page = new PriorityBoardPage(page, wrapper);
 };
 
-frappe.pages["work-items"].on_page_show = function (wrapper) {
+frappe.pages["priority-board"].on_page_show = function (wrapper) {
 	// Refresh data when navigating back to the page
-	if (wrapper.work_items_page) {
-		wrapper.work_items_page.refresh();
+	if (wrapper.priority_board_page) {
+		wrapper.priority_board_page.refresh();
 	}
 };
 
 // =========================================================
-// WorkItemsPage Controller
+// PriorityBoardPage Controller
 // =========================================================
-class WorkItemsPage {
+class PriorityBoardPage {
 	constructor(page, wrapper) {
 		this.page = page;
 		this.wrapper = wrapper;
@@ -64,15 +64,8 @@ class WorkItemsPage {
 	// ----------------------------------------------------------
 	_check_permission() {
 		return new Promise((resolve) => {
-			frappe.call({
-				method: "frappe.client.has_permission",
-				args: { doctype: "Work Item", ptype: "write" },
-				callback: (r) => {
-					this.can_write = !!(r && r.message && r.message.has_permission);
-					resolve();
-				},
-				error: () => resolve(),
-			});
+			this.can_write = frappe.model.can_write("Work Item");
+			resolve();
 		});
 	}
 
@@ -185,19 +178,19 @@ class WorkItemsPage {
 		// Bind events
 		this._sprint_field.$input.on("change", () => {
 			this.filters.sprint = this._sprint_field.get_value() || "";
-			this._apply_filters_and_render();
+			this.refresh();
 		});
 		this._assignee_field.$input.on("change", () => {
 			this.filters.assignee = this._assignee_field.get_value() || "";
-			this._apply_filters_and_render();
+			this.refresh();
 		});
 		this.$filters.find("#wi-sel-status").on("change", (e) => {
 			this.filters.status = e.target.value;
-			this._apply_filters_and_render();
+			this.refresh();
 		});
 		this.$filters.find("#wi-sel-priority").on("change", (e) => {
 			this.filters.priority = e.target.value;
-			this._apply_filters_and_render();
+			this.refresh();
 		});
 		this.$filters.find("#wi-btn-refresh").on("click", () => this.refresh());
 		this.$filters.find("#wi-btn-reset-order").on("click", () => this._reset_local_order());
@@ -216,8 +209,14 @@ class WorkItemsPage {
 					fields: ["name"],
 					limit_page_length: 200,
 				},
-				callback: () => resolve(),
-				error: () => resolve(),
+				callback: (r) => {
+					this.active_sprints = r.message ? r.message.map(s => s.name) : [];
+					resolve();
+				},
+				error: () => {
+					this.active_sprints = [];
+					resolve();
+				},
 			});
 		});
 	}
@@ -276,9 +275,11 @@ class WorkItemsPage {
 		// We always limit to items that have a sprint assigned
 		if (this.filters.sprint) {
 			filters["sprint"] = this.filters.sprint;
-		} else {
+		} else if (this.active_sprints && this.active_sprints.length > 0) {
 			// Fetch only items in active sprints
-			filters["sprint_status"] = "Active";
+			filters["sprint"] = ["in", this.active_sprints];
+		} else {
+			filters["sprint"] = "___NONE___"; // no active sprints
 		}
 
 		if (this.filters.status)   filters["status"]        = this.filters.status;
