@@ -102,7 +102,11 @@ class WorkItem(Document):
 		sprint_doc.save(ignore_permissions=True)
 
 	def _remove_from_sprint(self, sprint_name):
-		"""Remove the row for this work item from Sprint.work_items."""
+		"""Remove the row for this work item from Sprint.work_items.
+		Completed sprints are frozen — their child table is never modified."""
+		sprint_status = frappe.db.get_value("Sprint", sprint_name, "status")
+		if sprint_status == "Completed":
+			return
 		frappe.db.delete("Sprint Work Item", {"parent": sprint_name, "work_item": self.name})
 
 	def _remove_from_all_sprints(self):
