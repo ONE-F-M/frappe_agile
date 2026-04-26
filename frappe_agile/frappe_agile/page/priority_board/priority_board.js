@@ -400,28 +400,40 @@ class PriorityBoardPage {
 	// Card HTML
 	// ----------------------------------------------------------
 	_card_html(item, position) {
-		const priority_class = (item.priority || "medium").toLowerCase();
+		const priority_color = this._priority_color((item.priority || "medium").toLowerCase());
 		const status_label   = item.status || "—";
+		const status_class   = this._status_class(item.status);
 		const points_html    = item.story_points
 			? `<span class="wi-badge wi-badge-points">${flt(item.story_points, 1)} pts</span>`
 			: "";
 		const assignee_html  = item.assignee_user
 			? `<span class="wi-assignee">
 				<span class="wi-assignee-avatar">${this._initials(item.assignee_user)}</span>
-				${frappe.format(item.assignee_user, { fieldtype: "Link", options: "User" })}
+				<span class="wi-assignee-name">${frappe.utils.escape_html(item.assignee_user.split("@")[0].replace(".", " ").replace(/\b\w/g, c => c.toUpperCase()))}</span>
 			   </span>`
-			: `<span class="wi-assignee" style="opacity:0.5">${__("Unassigned")}</span>`;
+			: `<span class="wi-assignee wi-assignee-none">${__("Unassigned")}</span>`;
 
 		const drag_handle = this.can_write
-			? `<div class="wi-drag-handle wi-drag-handle-icon" title="${__("Drag to reorder")}">⠿</div>`
-			: `<div class="wi-drag-handle" style="opacity:0.2;cursor:not-allowed">⠿</div>`;
+			? `<div class="wi-drag-handle wi-drag-handle-icon" title="${__("Drag to reorder")}">
+				<svg xmlns="http://www.w3.org/2000/svg" height="20" viewBox="0 0 24 24" width="20" fill="currentColor">
+					<path d="M0 0h24v24H0z" fill="none"/>
+					<path d="M11 18c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2zm-2-8c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0-6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm6 4c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
+				</svg>
+			   </div>`
+			: `<div class="wi-drag-handle wi-drag-handle-disabled">
+				<svg xmlns="http://www.w3.org/2000/svg" height="20" viewBox="0 0 24 24" width="20" fill="currentColor">
+					<path d="M0 0h24v24H0z" fill="none"/>
+					<path d="M11 18c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2zm-2-8c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0-6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm6 4c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
+				</svg>
+			   </div>`;
 
 		const no_drag_class = this.can_write ? "" : "no-drag";
 
 		return `
 		<div class="wi-card ${no_drag_class}" data-name="${frappe.utils.escape_html(item.name)}">
-			<div class="wi-priority-bar ${priority_class}"></div>
-			${drag_handle}
+			<div class="wi-card-pos">
+				<span class="wi-position-badge" style="color:${priority_color}">#${position}</span>
+			</div>
 			<div class="wi-card-body">
 				<div class="wi-card-top">
 					<span class="wi-card-id">${frappe.utils.escape_html(item.name)}</span>
@@ -432,17 +444,12 @@ class PriorityBoardPage {
 					</span>
 				</div>
 				<div class="wi-card-meta">
-					<span class="wi-badge wi-badge-status">${frappe.utils.escape_html(status_label)}</span>
-					<span class="wi-badge wi-badge-priority">
-						${frappe.utils.escape_html(item.priority || "Medium")}
-					</span>
+					<span class="wi-badge wi-badge-status ${status_class}">${frappe.utils.escape_html(status_label)}</span>
 					${points_html}
 					${assignee_html}
 				</div>
 			</div>
-			<div class="wi-card-right">
-				<span class="wi-position-badge">#${position}</span>
-			</div>
+			${drag_handle}
 		</div>`;
 	}
 
@@ -491,7 +498,7 @@ class PriorityBoardPage {
 
 		// Update position badges
 		$(el).find(".wi-card").each((i, card) => {
-			$(card).find(".wi-position-badge").text(`#${i + 1}`);
+			$(card).find(".wi-card-pos .wi-position-badge").text(`#${i + 1}`);
 		});
 
 		// Persist to localStorage
@@ -563,5 +570,32 @@ class PriorityBoardPage {
 		if (!user) return "?";
 		const parts = user.split("@")[0].split(".");
 		return parts.map((p) => p[0] || "").join("").toUpperCase().slice(0, 2);
+	}
+
+	_priority_color(priority) {
+		const map = {
+			highest: "#ef4444",
+			high:    "#f97316",
+			medium:  "#eab308",
+			low:     "#3b82f6",
+			lowest:  "#94a3b8",
+		};
+		return map[priority] || "#94a3b8";
+	}
+
+	_status_class(status) {
+		const map = {
+			"Open":                 "wi-status-open",
+			"In Progress":          "wi-status-in-progress",
+			"Pending Action Plan":  "wi-status-pending-action",
+			"Pending Execution":    "wi-status-pending-exec",
+			"Pending PR":           "wi-status-pending-pr",
+			"Pending Review":       "wi-status-pending-review",
+			"Changes Requested":    "wi-status-changes",
+			"In Staging":           "wi-status-staging",
+			"Rejected":             "wi-status-rejected",
+			"Done":                 "wi-status-done",
+		};
+		return map[status] || "";
 	}
 }
