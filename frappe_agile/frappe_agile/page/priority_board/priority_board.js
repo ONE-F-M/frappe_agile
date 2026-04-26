@@ -445,9 +445,15 @@ class PriorityBoardPage {
 					</span>
 				</div>
 				<div class="wi-card-meta">
-					<span class="wi-badge wi-badge-status ${status_class}">${frappe.utils.escape_html(status_label)}</span>
-					${points_html}
-					${assignee_html}
+					<div class="wi-meta-col wi-meta-status">
+						<span class="wi-badge wi-badge-status ${status_class}">${frappe.utils.escape_html(status_label)}</span>
+					</div>
+					<div class="wi-meta-col wi-meta-points">
+						${points_html}
+					</div>
+					<div class="wi-meta-col wi-meta-assignee">
+						${assignee_html}
+					</div>
 				</div>
 			</div>
 			${drag_handle}
