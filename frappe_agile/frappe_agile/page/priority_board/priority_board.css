@@ -232,7 +232,6 @@
 	width: 22px;
 	height: 22px;
 	border-radius: 50%;
-	background-color: #6366f1;
 	color: #fff;
 	display: flex;
 	align-items: center;
@@ -245,7 +244,6 @@
 .wi-assignee-name {
 	font-weight: 500;
 	font-size: 12px;
-	color: #6366f1;
 }
 
 .wi-assignee-none {

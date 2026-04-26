@@ -406,10 +406,11 @@ class PriorityBoardPage {
 		const points_html    = item.story_points
 			? `<span class="wi-badge wi-badge-points">${flt(item.story_points, 1)} pts</span>`
 			: "";
+		const user_color     = item.assignee_user ? this._user_color(item.assignee_user) : null;
 		const assignee_html  = item.assignee_user
 			? `<span class="wi-assignee">
-				<span class="wi-assignee-avatar">${this._initials(item.assignee_user)}</span>
-				<span class="wi-assignee-name">${frappe.utils.escape_html(item.assignee_user.split("@")[0].replace(".", " ").replace(/\b\w/g, c => c.toUpperCase()))}</span>
+				<span class="wi-assignee-avatar" style="background-color:${user_color}">${this._initials(item.assignee_user)}</span>
+				<span class="wi-assignee-name" style="color:${user_color}">${frappe.utils.escape_html(item.assignee_user.split("@")[0].replace(".", " ").replace(/\b\w/g, c => c.toUpperCase()))}</span>
 			   </span>`
 			: `<span class="wi-assignee wi-assignee-none">${__("Unassigned")}</span>`;
 
@@ -432,7 +433,7 @@ class PriorityBoardPage {
 		return `
 		<div class="wi-card ${no_drag_class}" data-name="${frappe.utils.escape_html(item.name)}">
 			<div class="wi-card-pos">
-				<span class="wi-position-badge" style="color:${priority_color}">#${position}</span>
+				<span class="wi-position-badge">#${position}</span>
 			</div>
 			<div class="wi-card-body">
 				<div class="wi-card-top">
@@ -570,6 +571,20 @@ class PriorityBoardPage {
 		if (!user) return "?";
 		const parts = user.split("@")[0].split(".");
 		return parts.map((p) => p[0] || "").join("").toUpperCase().slice(0, 2);
+	}
+
+	_user_color(user) {
+		// ERPNext-style deterministic avatar palette
+		const palette = [
+			"#F06B54", "#F28B2E", "#EFCA4D", "#5AB55E",
+			"#3D9BE9", "#6C5CE7", "#E84393", "#00BCD4",
+			"#FF7043", "#26A69A",
+		];
+		let hash = 0;
+		for (let i = 0; i < user.length; i++) {
+			hash = user.charCodeAt(i) + ((hash << 5) - hash);
+		}
+		return palette[Math.abs(hash) % palette.length];
 	}
 
 	_priority_color(priority) {
