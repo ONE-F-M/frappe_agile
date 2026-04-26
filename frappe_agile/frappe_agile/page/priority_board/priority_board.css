@@ -1,0 +1,377 @@
+/* Work Items Priority Board Styles */
+.wi-page-wrapper {
+	padding: 15px;
+	max-width: 1200px;
+	margin: 0 auto;
+	font-family: var(--font-stack);
+}
+
+/* Filters Bar */
+.wi-filters-bar {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 15px;
+	align-items: flex-start;
+	background-color: var(--card-bg, #ffffff);
+	padding: 12px 16px;
+	border-radius: 8px;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+	margin-bottom: 20px;
+	border: 1px solid var(--border-color, #e2e8f0);
+}
+
+.wi-filter-group {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 4px;
+}
+
+/* suppress frappe control's own internal label and help text */
+.wi-filter-group .frappe-control label,
+.wi-filter-group .frappe-control .control-label,
+.wi-filter-group .frappe-control .help-box {
+	display: none !important;
+}
+
+.wi-filter-group .frappe-control .form-group {
+	margin-bottom: 0 !important;
+}
+
+.wi-filter-label {
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--text-muted, #64748b);
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+}
+
+.wi-filter-group select,
+.wi-filter-group .frappe-control {
+	min-width: 150px;
+	margin-bottom: 0 !important;
+}
+
+.wi-filters-actions {
+	margin-left: auto;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+
+.wi-read-only-notice {
+	font-size: 12px;
+	color: var(--text-muted, #64748b);
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+
+/* Header Strip */
+.wi-header-strip {
+	font-size: 14px;
+	color: var(--text-color, #1f2937);
+	margin-bottom: 12px;
+	display: flex;
+	align-items: center;
+	padding: 0 4px;
+}
+
+.wi-local-badge {
+	margin-left: 12px;
+	font-size: 11px;
+	background-color: #e0f2fe;
+	color: #0369a1;
+	padding: 2px 8px;
+	border-radius: 12px;
+	font-weight: 500;
+}
+
+/* List Container */
+.wi-list-container {
+	position: relative;
+	min-height: 200px;
+}
+
+.wi-sortable-list {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+/* ── Card ─────────────────────────────────────────────────── */
+.wi-card {
+	display: flex;
+	align-items: stretch;
+	background-color: var(--card-bg, #ffffff);
+	border: 1px solid var(--border-color, #e2e8f0);
+	border-radius: 8px;
+	transition: box-shadow 0.2s ease, border-color 0.2s ease;
+	position: relative;
+	overflow: hidden;
+}
+
+.wi-card:hover {
+	box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+	border-color: #cbd5e1;
+}
+
+.wi-card.no-drag:hover {
+	box-shadow: none;
+	border-color: var(--border-color, #e2e8f0);
+}
+
+/* Position badge — left column */
+.wi-card-pos {
+	width: 44px;
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-right: 1px solid var(--border-color, #e2e8f0);
+	background: #f8fafc;
+}
+
+.wi-position-badge {
+	font-size: 13px;
+	font-weight: 700;
+	color: #94a3b8;
+	letter-spacing: 0.3px;
+}
+
+/* Card body */
+.wi-card-body {
+	flex-grow: 1;
+	padding: 12px 16px;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	min-width: 0;
+}
+
+.wi-card-top {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.wi-card-id {
+	font-size: 12px;
+	font-weight: 600;
+	color: #64748b;
+	white-space: nowrap;
+}
+
+.wi-card-title {
+	font-size: 14px;
+	font-weight: 500;
+	color: var(--text-color, #1f2937);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.wi-card-title a {
+	color: inherit;
+	text-decoration: none;
+}
+.wi-card-title a:hover {
+	color: var(--primary, #2563eb);
+	text-decoration: underline;
+}
+
+.wi-card-meta {
+	display: flex;
+	align-items: center;
+	gap: 0;
+}
+
+.wi-meta-col {
+	display: flex;
+	align-items: center;
+	padding-right: 20px;
+	flex-shrink: 0;
+}
+
+.wi-meta-status  { width: 90px; }
+.wi-meta-points  { width: 80px; }
+.wi-meta-assignee { width: 180px; padding-right: 0; }
+
+/* ── Badges ─────────────────────────────────────────────── */
+.wi-badge {
+	font-size: 11px;
+	padding: 2px 9px;
+	border-radius: 12px;
+	font-weight: 500;
+	white-space: nowrap;
+}
+
+/* Status badge — default (fallback) */
+.wi-badge-status {
+	background-color: #f1f5f9;
+	color: #475569;
+	border: 1px solid #e2e8f0;
+}
+
+/* Status-specific colours */
+.wi-status-open            { background-color: #dbeafe; color: #1e40af; border-color: #93c5fd; }
+.wi-status-in-progress     { background-color: #ede9fe; color: #5b21b6; border-color: #c4b5fd; }
+.wi-status-pending-action  { background-color: #fef3c7; color: #92400e; border-color: #fcd34d; }
+.wi-status-pending-exec    { background-color: #ffedd5; color: #9a3412; border-color: #fdba74; }
+.wi-status-pending-pr      { background-color: #fce7f3; color: #9d174d; border-color: #f9a8d4; }
+.wi-status-pending-review  { background-color: #e0e7ff; color: #3730a3; border-color: #a5b4fc; }
+.wi-status-changes         { background-color: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+.wi-status-staging         { background-color: #cffafe; color: #0e7490; border-color: #67e8f9; }
+.wi-status-rejected        { background-color: #ffe4e6; color: #9f1239; border-color: #fda4af; }
+.wi-status-done            { background-color: #15803d; color: #ffffff; border-color: #15803d; }
+
+.wi-badge-points {
+	background-color: #ede9fe;
+	color: #6d28d9;
+	border: 1px solid #ddd6fe;
+}
+
+/* ── Assignee ────────────────────────────────────────────── */
+.wi-assignee {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 12px;
+}
+
+.wi-assignee-avatar {
+	width: 22px;
+	height: 22px;
+	border-radius: 50%;
+	color: #fff;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 10px;
+	font-weight: 700;
+	flex-shrink: 0;
+}
+
+.wi-assignee-name {
+	font-weight: 500;
+	font-size: 12px;
+}
+
+.wi-assignee-none {
+	color: #94a3b8;
+	font-size: 12px;
+}
+
+/* ── Drag handle — right (MD3 drag_indicator) ─────────── */
+.wi-drag-handle {
+	width: 44px;
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: #cbd5e1;
+	border-left: 1px solid var(--border-color, #e2e8f0);
+	background: #f8fafc;
+	border-radius: 0 8px 8px 0;
+	transition: color 0.15s ease, background 0.15s ease;
+}
+
+.wi-drag-handle-icon {
+	cursor: grab;
+}
+.wi-drag-handle-icon:hover {
+	color: #475569;
+	background: #f1f5f9;
+}
+.wi-drag-handle-icon:active {
+	cursor: grabbing;
+	background: #e2e8f0;
+}
+
+.wi-drag-handle-disabled {
+	opacity: 0.25;
+	cursor: not-allowed;
+}
+
+/* ── SortableJS ─────────────────────────────────────────── */
+.sortable-ghost {
+	opacity: 0.4;
+	background-color: #f8fafc;
+	border: 2px dashed #94a3b8;
+}
+
+.sortable-chosen {
+	background-color: #ffffff;
+	box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+	z-index: 10;
+}
+
+.sortable-drag {
+	cursor: grabbing !important;
+}
+
+/* ── Skeleton Loading ────────────────────────────────────── */
+.wi-skeleton-card {
+	height: 70px;
+	background: #f1f5f9;
+	border-radius: 8px;
+	margin-bottom: 8px;
+	animation: wi-pulse 1.5s infinite;
+}
+
+@keyframes wi-pulse {
+	0%   { opacity: 0.6; }
+	50%  { opacity: 1; }
+	100% { opacity: 0.6; }
+}
+
+/* ── Load More ───────────────────────────────────────────── */
+.wi-load-more-wrap {
+	display: flex;
+	justify-content: center;
+	padding: 20px 0;
+}
+
+/* ── Empty State ─────────────────────────────────────────── */
+.wi-empty-state {
+	text-align: center;
+	padding: 60px 20px;
+	color: #64748b;
+}
+
+.wi-empty-icon {
+	font-size: 48px;
+	margin-bottom: 16px;
+	opacity: 0.5;
+}
+
+/* ── Responsive ──────────────────────────────────────────── */
+@media (max-width: 768px) {
+	.wi-filters-bar {
+		flex-direction: column;
+		align-items: stretch;
+	}
+	.wi-filter-group {
+		flex-direction: column;
+		align-items: flex-start;
+	}
+	.wi-filter-group select,
+	.wi-filter-group .frappe-control {
+		width: 100%;
+	}
+	.wi-filters-actions {
+		margin-left: 0;
+		justify-content: space-between;
+		margin-top: 10px;
+	}
+	.wi-card-top {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 4px;
+	}
+	.wi-card-pos {
+		width: 36px;
+	}
+	.wi-drag-handle {
+		width: 36px;
+	}
+}
