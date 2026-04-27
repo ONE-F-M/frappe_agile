@@ -2,7 +2,7 @@
 # For license information, please see license.txt
 
 import frappe
-from frappe.utils import formatdate, flt
+from frappe.utils import flt
 
 def execute(filters=None):
 	if not filters:
