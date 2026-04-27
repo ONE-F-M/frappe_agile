@@ -16,9 +16,13 @@
  "name": "Sprint Summary (Party)",
  "owner": "Administrator",
  "prepared_report": 0,
- "ref_doctype": "Work Item",
+ "ref_doctype": "Sprint",
  "report_name": "Sprint Summary (Party)",
  "report_type": "Script Report",
- "roles": [],
+ "roles": [
+  {
+   "role": "System Manager"
+  }
+ ],
  "timeout": 0
 }
