@@ -26,7 +26,7 @@ jobs:
             git pull upstream staging
             cd /home/frappe/frappe-bench
             bench setup requirements frappe_agile
-            bench migrate --skip-failing
+            bench migrate
             bench build --app frappe_agile
             bench clear-cache
             bench restart
