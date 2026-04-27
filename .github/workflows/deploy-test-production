@@ -26,7 +26,7 @@ jobs:
             git pull upstream test-production
             cd /home/frappe/test-production
             bench setup requirements frappe_agile
-            bench migrate --skip-failing
+            bench migrate
             bench build --app frappe_agile
             bench clear-cache
             bench restart
