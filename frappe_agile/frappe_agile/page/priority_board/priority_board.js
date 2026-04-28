@@ -272,15 +272,8 @@ class PriorityBoardPage {
 	_build_server_filters() {
 		const filters = {};
 
-		// Only items in sprints (exclude Epics without sprints)
-		// We always limit to items that have a sprint assigned
 		if (this.filters.sprint) {
 			filters["sprint"] = this.filters.sprint;
-		} else if (this.active_sprints && this.active_sprints.length > 0) {
-			// Fetch only items in active sprints
-			filters["sprint"] = ["in", this.active_sprints];
-		} else {
-			filters["sprint"] = "___NONE___"; // no active sprints
 		}
 
 		if (this.filters.status)   filters["status"]        = this.filters.status;
@@ -400,7 +393,6 @@ class PriorityBoardPage {
 	// Card HTML
 	// ----------------------------------------------------------
 	_card_html(item, position) {
-		const priority_color = this._priority_color((item.priority || "medium").toLowerCase());
 		const status_label   = item.status || "—";
 		const status_class   = this._status_class(item.status);
 		const points_html    = item.story_points
