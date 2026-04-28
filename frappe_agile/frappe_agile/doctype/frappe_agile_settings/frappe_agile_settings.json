@@ -35,13 +35,13 @@
    "options": "Development Team Member"
   },
   {
-   "description": "This value will be set as the Total Planned Points for Business Analysts in Sprint Summary (Party) report\n",
+   "description": "This value will be set as the Total Planned Points for Business Analysts in Sprint Summary (Party) report",
    "fieldname": "ba_velocity",
    "fieldtype": "Float",
    "label": "BA Velocity"
   },
   {
-   "description": "This value will be set as the Total Planned Points for Developers in Sprint Summary (Party) report\n",
+   "description": "This value will be set as the Total Planned Points for Developers in Sprint Summary (Party) report",
    "fieldname": "developer_velocity",
    "fieldtype": "Float",
    "label": "Developer Velocity"
