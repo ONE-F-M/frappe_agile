@@ -130,11 +130,14 @@ def get_data(filters):
 			
 	data = []
 	
-	if party == "Business Analyst":
-		total_planned_points = flt(frappe.db.get_single_value("Frappe Agile Settings", "ba_velocity"))
-	else:
-		total_planned_points = flt(frappe.db.get_single_value("Frappe Agile Settings", "developer_velocity"))
+	default_planned_points = 80.0
 
+	if party == "Business Analyst":
+		configured_planned_points = flt(frappe.db.get_single_value("Frappe Agile Settings", "ba_velocity"))
+	else:
+		configured_planned_points = flt(frappe.db.get_single_value("Frappe Agile Settings", "developer_velocity"))
+
+	total_planned_points = configured_planned_points if configured_planned_points > 0 else default_planned_points
 	for (sprint_name, user), metrics in grouped_data.items():
 		sprint_doc = sprint_map.get(sprint_name)
 		
