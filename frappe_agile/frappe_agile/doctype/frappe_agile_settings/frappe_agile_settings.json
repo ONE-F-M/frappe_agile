@@ -1,13 +1,15 @@
 {
  "actions": [],
- "creation": "2026-04-08 16:00:00.000000",
+ "creation": "2026-04-08 16:00:00",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
   "github_integration_section",
   "github_webhook_secret",
   "development_team_section",
-  "development_team"
+  "development_team",
+  "ba_velocity",
+  "developer_velocity"
  ],
  "fields": [
   {
@@ -16,7 +18,7 @@
    "label": "GitHub Integration"
   },
   {
-   "description": "HMAC-SHA256 secret used to verify incoming GitHub webhook payloads. Must match the secret configured in GitHub Organisation / Repository → Settings → Webhooks.",
+   "description": "HMAC-SHA256 secret used to verify incoming GitHub webhook payloads. Must match the secret configured in GitHub Organisation / Repository \u2192 Settings \u2192 Webhooks.",
    "fieldname": "github_webhook_secret",
    "fieldtype": "Password",
    "label": "GitHub Webhook Secret"
@@ -30,14 +32,24 @@
    "fieldname": "development_team",
    "fieldtype": "Table",
    "label": "Development Team",
-   "options": "Development Team Member",
-   "reqd": 0
+   "options": "Development Team Member"
+  },
+  {
+   "description": "This value will be set as the Total Planned Points for Business Analysts in Sprint Summary (Party) report\n",
+   "fieldname": "ba_velocity",
+   "fieldtype": "Float",
+   "label": "BA Velocity"
+  },
+  {
+   "description": "This value will be set as the Total Planned Points for Developers in Sprint Summary (Party) report\n",
+   "fieldname": "developer_velocity",
+   "fieldtype": "Float",
+   "label": "Developer Velocity"
   }
  ],
- "index_web_pages_for_search": 0,
  "issingle": 1,
  "links": [],
- "modified": "2026-04-15 13:00:00.000000",
+ "modified": "2026-04-27 20:19:22.192097",
  "modified_by": "Administrator",
  "module": "Frappe Agile",
  "name": "Frappe Agile Settings",
@@ -54,6 +66,7 @@
    "write": 1
   }
  ],
+ "row_format": "Dynamic",
  "sort_field": "creation",
  "sort_order": "DESC",
  "states": [],
