@@ -158,33 +158,25 @@ class WorkItem(Document):
 
 def sync_status_from_workflow(doc, method=None):
 	"""
-	Keep the `status` Select field in sync with `workflow_state`.
+	Keep the ``status`` Select field in sync with ``workflow_state``.
 
-	When a Workflow action fires (e.g. "Start Work"), Frappe sets
-	`workflow_state` but does NOT automatically mirror it to the
-	`status` field.  This hook bridges that gap so both fields
-	always reflect the same value.
+	When a state transition fires (via Frappe Workflow or the BPMN
+	engine), ``workflow_state`` is updated but ``status`` is not
+	automatically mirrored.  This hook bridges that gap so both
+	fields always reflect the same value.
 
 	Direction: workflow_state  →  status
-	(The `before_save` hook on the controller handles the reverse
+	(The ``before_save`` hook on the controller handles the reverse
 	direction for Kanban drag-and-drop: status → workflow_state.)
 	"""
 	if not doc.workflow_state:
 		return
 
-	# Only sync when workflow_state is a known status option
-	valid_statuses = [
-		"Open",
-		"In Progress",
-		"Pending Action Plan",
-		"Pending Execution",
-		"Pending PR",
-		"Pending Review",
-		"Changes Requested",
-		"In Staging",
-		"Rejected",
-		"Done",
-	]
+	# Read valid options from the DocType meta so we never drift
+	# out of sync with the actual field definition.
+	meta = frappe.get_meta("Work Item")
+	status_field = meta.get_field("status")
+	valid_statuses = {s.strip() for s in (status_field.options or "").split("\n") if s.strip()}
 
 	if doc.workflow_state in valid_statuses and doc.status != doc.workflow_state:
 		doc.status = doc.workflow_state
