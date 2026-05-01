@@ -13,3 +13,4 @@ frappe_agile.patches.v1.update_sprint_board_fields
 frappe_agile.patches.v1.create_work_item_assignment_rules
 frappe_agile.patches.v1.create_sprint_board #4
 frappe_agile.patches.v1.update_work_item_naming_series_counter
+frappe_agile.patches.v1.create_server_scripts

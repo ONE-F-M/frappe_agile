@@ -1,0 +1,10 @@
+{
+	"doctype": "Server Script",
+	"name": "Validate Assignee User",
+	"script_type": "API",
+	"api_method": "validate_assignee_user",
+	"module": "Frappe Agile",
+	"disabled": 0,
+	"allow_guest": 0,
+	"script": "frappe.msgprint(\"Please set Assignee User before proceeding.\")"
+}
