@@ -3,6 +3,17 @@
 """
 GitHub Organisation Webhook handler for frappe_agile.
 
+Architecture
+------------
+This is a **thin, generic router** with zero business logic.  It receives
+GitHub webhook events, verifies the HMAC signature, extracts the linked
+Work Item, derives a convention-based BPMN message name from the event
+data, and delivers it to the active BPMN process instance via
+``one_bpmn.api.send_message``.
+
+All business logic (state transitions, assignments, notifications) lives
+in the BPMN process diagram — not here.
+
 Entry point
 -----------
 Payload URL:
@@ -13,18 +24,27 @@ GitHub App/Org Settings → Webhooks
 	Secret       : <value stored in Frappe Agile Settings → GitHub Webhook Secret>
 	Events       : Pull requests, Pull request reviews, Pushes
 
+Message name convention
+-----------------------
+Message names are derived deterministically from the GitHub event::
+
+	github:<event_type>:<action>
+
+Examples:
+	github:pull_request:opened
+	github:pull_request:merged
+	github:pull_request_review:changes_requested
+	github:push
+
+The BA uses these exact names as ``<bpmn:message name="...">`` in the
+process diagram.  No backend changes are needed when new events are added
+— just update the diagram.
+
 Configuration
 -------------
-Set the secret via:
+Set the webhook secret via:
   1. (Preferred) Frappe → Frappe Agile Settings → GitHub Integration → GitHub Webhook Secret
   2. (Legacy fallback) site_config.json: "github_webhook_secret": "<your-secret-here>"
-
-Work Item workflow states being targeted
------------------------------------------
-	Pending PR       ← push (Execute Work Item transition, only from Pending Execution)
-	Pending Review   ← PR opened (Assign Reviewer transition)
-	Changes Requested← review changes_requested (Request Changes transition)
-	In Staging       ← PR merged (Merge PR transition)
 """
 
 import hashlib
@@ -34,7 +54,6 @@ import re
 
 import frappe
 from frappe import _
-from frappe.model.workflow import WorkflowTransitionError, apply_workflow
 from frappe.utils.password import get_decrypted_password
 
 # ---------------------------------------------------------------------------
@@ -45,15 +64,6 @@ from frappe.utils.password import get_decrypted_password
 # Matches patterns like WI-000001, WI-1, WI-123456 etc.
 _WI_PATTERN = re.compile(r"\bWI-\d+\b", re.IGNORECASE)
 
-# States that are considered "later" than Pending PR in the pipeline.
-# A push event will NOT roll back a Work Item already past this point.
-_LATER_THAN_PENDING_PR = {
-	"Pending Review",
-	"Changes Requested",
-	"In Staging",
-	"Done",
-	"Rejected",
-}
 
 # ---------------------------------------------------------------------------
 # Public endpoint
@@ -63,19 +73,24 @@ _LATER_THAN_PENDING_PR = {
 @frappe.whitelist(allow_guest=True)
 def handle_github_webhook():
 	"""
-	Receive and process a GitHub organisation webhook event.
+	Receive and route a GitHub organisation webhook event to BPMN.
 
 	Security
 	--------
 	Validates the HMAC-SHA256 signature sent in the ``X-Hub-Signature-256``
-	header against ``frappe.conf.github_webhook_secret``.  If absent or
-	invalid the request is rejected with a 401.
+	header.  If absent or invalid the request is rejected with a 401.
 
-	Event routing
-	-------------
-	X-GitHub-Event: pull_request        → _handle_pull_request()
-	X-GitHub-Event: pull_request_review → _handle_pull_request_review()
-	X-GitHub-Event: push                → _handle_push()
+	Flow
+	----
+	1. Verify HMAC signature
+	2. Parse the JSON payload
+	3. Derive a convention-based BPMN message name from the event
+	4. Extract the linked Work Item ID from the PR/commit/branch
+	5. Build a clean payload dict with relevant data
+	6. Deliver the message to the BPMN engine via ``send_message()``
+
+	The webhook handler contains **no business logic** — all routing and
+	state transitions are defined in the BPMN process diagram.
 	"""
 	_verify_signature()
 
@@ -89,168 +104,105 @@ def handle_github_webhook():
 		)
 		frappe.throw(_("Invalid JSON payload"), frappe.ValidationError)
 
-	if event_type == "pull_request":
-		_handle_pull_request(payload)
-	elif event_type == "pull_request_review":
-		_handle_pull_request_review(payload)
-	elif event_type == "push":
-		_handle_push(payload)
-	else:
-		# Silently ignore unhandled events (ping, etc.)
-		pass
+	# ── 1. Derive message name ───────────────────────────────────────────
+	message_name = _derive_message_name(event_type, payload)
+	if not message_name:
+		# Unhandled or irrelevant event (ping, etc.) — silently ignore
+		return {"status": "ignored"}
+
+	# ── 2. Extract Work Item ID ──────────────────────────────────────────
+	wi_name = _extract_wi_from_payload(event_type, payload)
+	if not wi_name:
+		frappe.log_error(
+			title=f"GitHub Webhook – no Work Item ID found ({event_type})",
+			message=(
+				f"Event '{message_name}' — could not find a WI-XXXXXX "
+				"reference in the PR body, title, branch name, or commit messages."
+			),
+		)
+		return {"status": "no_work_item"}
+
+	# ── 3. Build message payload ─────────────────────────────────────────
+	msg_payload = _build_message_payload(event_type, payload)
+
+	# ── 4. Deliver to BPMN engine ────────────────────────────────────────
+	_deliver_bpmn_message(wi_name, message_name, msg_payload)
 
 	return {"status": "ok"}
 
 
 # ---------------------------------------------------------------------------
-# Event handlers
+# Message name derivation
 # ---------------------------------------------------------------------------
 
 
-def _handle_pull_request(payload: dict):
+def _derive_message_name(event_type: str, payload: dict) -> str | None:
 	"""
-	PR opened  → "Assign Reviewer"  → Pending Review
-	PR merged  → "Merge PR"         → In Staging
+	Derive a BPMN message name from the GitHub event type and payload.
 
-	When a PR is opened with a requested reviewer, the reviewer's GitHub
-	login is resolved to a Frappe User via the Development Team Member
-	table and set on the Work Item's ``pr_reviewer_user`` field.  This
-	enables the "Work Item - PR Reviewer" Assignment Rule to auto-assign
-	the Work Item when it enters "Pending Review".
+	Convention: ``github:<event_type>:<action>``
+
+	Special cases:
+	    - pull_request closed + merged → ``github:pull_request:merged``
+	    - pull_request closed (not merged) → ``github:pull_request:closed``
+	    - pull_request_review → uses review.state (e.g. ``changes_requested``)
+
+	Returns None for events we don't route (ping, etc.).
 	"""
-	action = payload.get("action", "")
-	pr = payload.get("pull_request", {})
-	pr_url = pr.get("html_url", "")
-	merged = pr.get("merged", False)
+	if event_type == "pull_request":
+		action = payload.get("action", "")
+		pr = payload.get("pull_request", {})
 
-	# Extract Work Item ID from PR body, title, or branch name (in that order)
-	wi_name = _extract_wi_name(
-		pr.get("body") or "",
-		pr.get("title") or "",
-		pr.get("head", {}).get("ref") or "",
-	)
-	if not wi_name:
-		frappe.log_error(
-			title="GitHub Webhook – no Work Item ID found (pull_request)",
-			message=(
-				f"PR action='{action}' url='{pr_url}' — could not find a WI-XXXXXX "
-				"reference in the PR body, title, or branch name."
-			),
-		)
-		return
+		# Distinguish merged from simply closed
+		if action == "closed" and pr.get("merged"):
+			return "github:pull_request:merged"
+		elif action == "closed":
+			return "github:pull_request:closed"
+		elif action:
+			return f"github:pull_request:{action}"
+		return None
 
-	if action == "opened":
-		# Resolve the first requested reviewer to a Frappe User
-		reviewers = pr.get("requested_reviewers") or []
-		reviewer_github_login = reviewers[0].get("login", "") if reviewers else ""
-		reviewer_user = _resolve_frappe_user(reviewer_github_login)
+	elif event_type == "pull_request_review":
+		review = payload.get("review", {})
+		state = review.get("state", "").lower()
+		if state:
+			return f"github:pull_request_review:{state}"
+		return None
 
-		if reviewer_github_login and not reviewer_user:
-			frappe.log_error(
-				title="GitHub Webhook – reviewer not mapped",
-				message=(
-					f"GitHub reviewer '{reviewer_github_login}' on PR '{pr_url}' "
-					f"could not be mapped to a Frappe User. "
-					"Ensure the GitHub Username is configured in "
-					"Frappe Agile Settings → Development Team."
-				),
-			)
+	elif event_type == "push":
+		return "github:push"
 
-		# If the WI is still in Pending Execution (push webhook never fired),
-		# auto-advance it to Pending PR first, then assign the reviewer.
-		current_state = frappe.db.get_value("Work Item", wi_name, "workflow_state") if frappe.db.exists("Work Item", wi_name) else None
-		if current_state == "Pending Execution":
-			_apply(wi_name, "Execute Work Item", pr_url=pr_url)
-		_apply(wi_name, "Assign Reviewer", pr_url=pr_url, pr_reviewer_user=reviewer_user or "")
-
-	elif action == "closed" and merged:
-		_apply(wi_name, "Merge PR", pr_url=pr_url)
-
-
-def _handle_pull_request_review(payload: dict):
-	"""
-	Review state == changes_requested → "Request Changes" → Changes Requested
-	"""
-	review = payload.get("review", {})
-	pr = payload.get("pull_request", {})
-	pr_url = pr.get("html_url", "")
-
-	if review.get("state", "").lower() != "changes_requested":
-		return
-
-	wi_name = _extract_wi_name(
-		pr.get("body") or "",
-		pr.get("title") or "",
-		pr.get("head", {}).get("ref") or "",
-	)
-	if not wi_name:
-		frappe.log_error(
-			title="GitHub Webhook – no Work Item ID found (pull_request_review)",
-			message=(
-				f"Review changes_requested on PR url='{pr_url}' — could not find a "
-				"WI-XXXXXX reference in the PR body, title, or branch name."
-			),
-		)
-		return
-
-	_apply(wi_name, "Request Changes", pr_url=pr_url)
-
-
-def _handle_push(payload: dict):
-	"""
-	Branch pushed → "Execute Work Item" → Pending PR
-	(only when the Work Item is currently in 'Pending Execution')
-	"""
-	ref = payload.get("ref", "")  # e.g. "refs/heads/feature/WI-000001-my-task"
-	branch_name = ref.replace("refs/heads/", "") if ref.startswith("refs/heads/") else ref
-
-	# For push events the Work Item reference is taken from commit messages
-	# first, then the branch name (commit messages are more explicit).
-	commits = payload.get("commits", [])
-	commit_messages = " ".join(c.get("message", "") for c in commits)
-
-	wi_name = _extract_wi_name(commit_messages, branch_name)
-	if not wi_name:
-		# Not every push has a WI reference — silently ignore.
-		return
-
-	# Verify the Work Item exists before trying to read its state.
-	if not frappe.db.exists("Work Item", wi_name):
-		frappe.log_error(
-			title="GitHub Webhook – Work Item not found (push)",
-			message=(
-				f"Work Item '{wi_name}' found in push ref/commit messages "
-				f"(ref='{ref}') but does not exist in the system."
-			),
-		)
-		return
-
-	current_state = frappe.db.get_value("Work Item", wi_name, "workflow_state")
-
-	# Guard: workflow_state may be None if the workflow was never applied.
-	if not current_state:
-		frappe.log_error(
-			title="GitHub Webhook – missing workflow_state (push)",
-			message=(
-				f"Work Item '{wi_name}' has no workflow_state set. "
-				"Ensure the Work Item workflow is active and the document has been saved."
-			),
-		)
-		return
-
-	# Guard: only advance from Pending Execution; never roll back.
-	if current_state in _LATER_THAN_PENDING_PR:
-		return  # Already past Pending PR, do not touch it.
-
-	if current_state != "Pending Execution":
-		return  # Not in the right state for this transition.
-
-	_apply(wi_name, "Execute Work Item")
+	# Ignore ping, check_suite, etc.
+	return None
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Work Item extraction
 # ---------------------------------------------------------------------------
+
+
+def _extract_wi_from_payload(event_type: str, payload: dict) -> str | None:
+	"""
+	Extract the Work Item ID from the appropriate fields based on event type.
+
+	- pull_request / pull_request_review → PR body, title, branch name
+	- push → commit messages, branch name
+	"""
+	if event_type in ("pull_request", "pull_request_review"):
+		pr = payload.get("pull_request", {})
+		return _extract_wi_name(
+			pr.get("body") or "",
+			pr.get("title") or "",
+			pr.get("head", {}).get("ref") or "",
+		)
+	elif event_type == "push":
+		ref = payload.get("ref", "")
+		branch_name = ref.replace("refs/heads/", "") if ref.startswith("refs/heads/") else ref
+		commits = payload.get("commits", [])
+		commit_messages = " ".join(c.get("message", "") for c in commits)
+		return _extract_wi_name(commit_messages, branch_name)
+
+	return None
 
 
 def _extract_wi_name(*texts: str) -> str | None:
@@ -265,80 +217,107 @@ def _extract_wi_name(*texts: str) -> str | None:
 	return None
 
 
-def _resolve_frappe_user(github_login: str) -> str | None:
+# ---------------------------------------------------------------------------
+# Message payload construction
+# ---------------------------------------------------------------------------
+
+
+def _build_message_payload(event_type: str, payload: dict) -> dict:
 	"""
-	Map a GitHub username to a Frappe User email via the Development Team
-	Member table in Frappe Agile Settings.
+	Build a clean, serializable payload dict from the GitHub event.
 
-	Comparison is case-insensitive (GitHub usernames are case-insensitive).
-
-	Returns the Frappe User email string, or ``None`` if the GitHub login
-	is empty or not found in the Development Team.
+	Only includes fields that are useful for BPMN process conditions and
+	downstream tasks.  The full raw payload is NOT forwarded (too large
+	and not serializable by SpiffWorkflow).
 	"""
-	if not github_login:
-		return None
+	result = {
+		"event_type": event_type,
+	}
 
-	settings = frappe.get_cached_doc("Frappe Agile Settings")
-	for member in settings.development_team:
-		if member.github_username and member.github_username.lower() == github_login.lower():
-			return member.user
-	return None
+	if event_type in ("pull_request", "pull_request_review"):
+		pr = payload.get("pull_request", {})
+		result["pr_url"] = pr.get("html_url", "")
+		result["pr_title"] = pr.get("title", "")
+		result["pr_number"] = pr.get("number", 0)
+		result["pr_state"] = pr.get("state", "")
+		result["pr_merged"] = pr.get("merged", False)
+		result["branch"] = pr.get("head", {}).get("ref", "")
+		result["base_branch"] = pr.get("base", {}).get("ref", "")
+		result["pr_author"] = pr.get("user", {}).get("login", "")
+
+		# PR action
+		result["action"] = payload.get("action", "")
+
+		# Requested reviewers
+		reviewers = pr.get("requested_reviewers") or []
+		result["reviewer_github_login"] = reviewers[0].get("login", "") if reviewers else ""
+
+	if event_type == "pull_request_review":
+		review = payload.get("review", {})
+		result["review_state"] = review.get("state", "")
+		result["reviewer_github_login"] = review.get("user", {}).get("login", "")
+
+	if event_type == "push":
+		ref = payload.get("ref", "")
+		result["branch"] = ref.replace("refs/heads/", "") if ref.startswith("refs/heads/") else ref
+		result["pusher"] = payload.get("pusher", {}).get("name", "")
+		commits = payload.get("commits", [])
+		result["commit_count"] = len(commits)
+		result["head_commit_message"] = payload.get("head_commit", {}).get("message", "")
+
+	return result
 
 
-def _apply(wi_name: str, action: str, pr_url: str = "", pr_reviewer_user: str = ""):
+# ---------------------------------------------------------------------------
+# BPMN message delivery
+# ---------------------------------------------------------------------------
+
+
+def _deliver_bpmn_message(wi_name: str, message_name: str, payload: dict):
 	"""
-	Apply a workflow action to a Work Item, running as Administrator so that
-	role-based guards inside the workflow are bypassed for this service call.
+	Deliver a BPMN message to the active process instance for a Work Item.
 
-	Optionally sets ``pr_link`` and ``pr_reviewer_user`` on the document
-	**before** the workflow transition so that downstream Assignment Rules
-	can pick up the reviewer when the state changes.
+	Best-effort delivery — if there is no active BPMN instance or no task
+	is waiting for this message, the error is logged and the function
+	returns gracefully.
 
-	If the Work Item does not exist, or the transition is not valid from the
-	current state, the error is logged and the function returns gracefully.
+	Runs as Administrator since webhooks arrive without a Frappe session.
 	"""
 	if not frappe.db.exists("Work Item", wi_name):
 		frappe.log_error(
-			title="GitHub Webhook – Work Item not found",
-			message=f"Work Item '{wi_name}' referenced in PR '{pr_url}' does not exist.",
+			title=f"GitHub Webhook – Work Item not found",
+			message=f"Work Item '{wi_name}' does not exist. Message '{message_name}' not delivered.",
 		)
 		return
 
 	original_user = frappe.session.user
 	try:
 		frappe.set_user("Administrator")
-		doc = frappe.get_doc("Work Item", wi_name)
+		from one_bpmn.api import send_message
 
-		# Capture the PR link when available
-		if pr_url and hasattr(doc, "pr_link") and not doc.pr_link:
-			doc.pr_link = pr_url
-
-		# Capture the PR reviewer — must be set BEFORE apply_workflow so the
-		# Assignment Rule can pick it up when state becomes "Pending Review"
-		if pr_reviewer_user and hasattr(doc, "pr_reviewer_user") and not doc.pr_reviewer_user:
-			doc.pr_reviewer_user = pr_reviewer_user
-
-		apply_workflow(doc, action)
-		doc.save(ignore_permissions=True)
-
-		print(f"GitHub Webhook: applied '{action}' to {wi_name} (PR: {pr_url or 'n/a'})")
-
-	except WorkflowTransitionError as exc:
-		current_state = frappe.db.get_value("Work Item", wi_name, "workflow_state")
-		frappe.log_error(
-			title=f"GitHub Webhook – invalid transition '{action}' on {wi_name}",
-			message=(
-				f"Action '{action}' is not valid from current state '{current_state}'. "
-				f"PR: {pr_url or 'n/a'}. Error: {exc}"
-			),
+		result = send_message(
+			message_name=message_name,
+			context_doctype="Work Item",
+			context_docname=wi_name,
+			payload=json.dumps(payload),
 		)
-	except Exception:  # noqa: BLE001
+		print(f"GitHub Webhook → BPMN: '{message_name}' → {wi_name} → {result.get('status', '?')}")
+	except Exception:
+		# Best-effort: log and continue.
 		frappe.log_error(
-			title=f"GitHub Webhook – unexpected error applying '{action}' to {wi_name}",
-			message=frappe.get_traceback(),
+			title=f"GitHub Webhook – BPMN message delivery failed",
+			message=(
+				f"Message '{message_name}' to Work Item '{wi_name}' failed.\n"
+				f"{frappe.get_traceback()}"
+			),
 		)
 	finally:
 		frappe.set_user(original_user)
+
+
+# ---------------------------------------------------------------------------
+# Security
+# ---------------------------------------------------------------------------
 
 
 def _get_webhook_secret() -> str | None:
