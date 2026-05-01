@@ -2,7 +2,7 @@
   "name": "Work Item - Developer",
   "document_type": "Work Item",
   "priority": 0,
-  "disabled": 0,
+  "disabled": 1,
   "description": "<p>Here is to inform you that the following {{ doctype }}({{ name }}) requires your attention/action.\n        <br>\n        The details of the request are as follows:\n        <br>\n        </p><table cellpadding=\"0\" cellspacing=\"0\" border=\"1\" style=\"border-collapse: collapse;\">\n            <thead>\n                <tr>\n                    <th style=\"padding: 10px; text-align: left; background-color: #f2f2f2;\">Label</th>\n                    <th style=\"padding: 10px; text-align: left; background-color: #f2f2f2;\">Value</th>\n                </tr>\n            </thead>\n        <tbody>\n        \n            <tr>\n                <td style=\"padding: 10px;\">Work Item Type</td>\n                <td style=\"padding: 10px;\">{{work_item_type}}</td>\n            </tr>\n            </tbody></table><p></p>",
   "assign_condition": "workflow_state in [\"In Progress\", \"Pending Action Plan\", \"Pending Execution\", \"Pending PR\", \"Changes Requested\",\"Rejected\"]",
   "unassign_condition": "workflow_state in [\"Pending Review\",\"In Staging\", \"Done\"]",
