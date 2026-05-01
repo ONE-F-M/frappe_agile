@@ -1,0 +1,10 @@
+{
+	"doctype": "Server Script",
+	"name": "Validate PR Reviewer",
+	"script_type": "API",
+	"api_method": "validate_pr_reviewer",
+	"module": "Frappe Agile",
+	"disabled": 0,
+	"allow_guest": 0,
+	"script": "frappe.msgprint(\"Please set PR Reviewer to proceed.\")"
+}

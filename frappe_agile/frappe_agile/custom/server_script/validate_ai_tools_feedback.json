@@ -1,0 +1,10 @@
+{
+	"doctype": "Server Script",
+	"name": "Validate AI Tools Feedback",
+	"script_type": "API",
+	"api_method": "validate_ai_tools_feedback",
+	"module": "Frappe Agile",
+	"disabled": 0,
+	"allow_guest": 0,
+	"script": "frappe.msgprint(\"Please add AI Tools Feedback to proceed.\")"
+}

@@ -84,7 +84,7 @@
    "fieldtype": "Select",
    "hidden": 1,
    "label": "Status",
-   "options": "Open\nIn Progress\nPending Action Plan\nPending Execution\nPending PR\nPending Review\nChanges Requested\nIn Staging\nRejected\nDone"
+   "options": "Draft\nOpen\nIn Progress\nPending Review\nChanges Requested\nIn Staging\nRejected\nDone"
   },
   {
    "fieldname": "assignee_user",
@@ -233,16 +233,16 @@
    "read_only": 1
   },
   {
+   "fetch_from": "epic.title",
    "fieldname": "small_text_yecv",
    "fieldtype": "Small Text",
    "label": "Epic Title",
-   "read_only": 1,
-   "fetch_from": "epic.title"
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-04-23 12:57:32.185919",
+ "modified": "2026-04-30 12:14:24.534547",
  "modified_by": "Administrator",
  "module": "Frappe Agile",
  "name": "Work Item",
