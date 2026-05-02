@@ -2,6 +2,7 @@ import json
 import frappe
 from frappe_agile.setup.workflow import create_workflows, delete_workflows
 from frappe_agile.setup.assignment_rule import create_assignment_rules, delete_assignment_rules
+from frappe_agile.setup.server_script import create_server_scripts, delete_server_scripts
 
 
 REQUIRED_ROLES = ["Business Analyst", "Developer", "Process Owner"]
@@ -144,14 +145,15 @@ def after_install():
 	create_roles()
 	create_workflows()
 	create_assignment_rules()
+	create_server_scripts()
 	create_list_filters()
 	create_sprint_board_kanban()
 	create_list_view_settings()
 	frappe.db.commit()
 
 def before_uninstall():
+	delete_server_scripts()
 	delete_assignment_rules()
 	delete_backlog_list_filter()
 	delete_list_view_settings()
-	delete_assignment_rules()
 	delete_workflows()

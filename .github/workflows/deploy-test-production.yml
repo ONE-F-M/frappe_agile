@@ -1,9 +1,10 @@
-name: Deploy CI/CD to Staging
+name: Deploy CI/CD to Test Production site
+
 
 on:
   push:
     branches:
-      - staging
+      - test-production
 
 jobs:
   deploy:
@@ -11,7 +12,7 @@ jobs:
     timeout-minutes: 90
 
     steps:
-      - name: Deploy to Staging
+      - name: Deploy to Test Production site
         uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5
         with:
           host: ${{ secrets.STAGING_HOST }}
@@ -22,12 +23,11 @@ jobs:
           script_stop: true
           script: |
             set -x
-            cd /home/frappe/frappe-bench/apps/frappe_agile
-            git pull upstream staging
-            cd /home/frappe/frappe-bench
+            cd /home/frappe/test-production/apps/frappe_agile
+            git pull upstream test-production
+            cd /home/frappe/test-production
             bench setup requirements frappe_agile
             bench migrate
             bench build --app frappe_agile
             bench clear-cache
             bench restart
-
