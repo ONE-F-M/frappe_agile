@@ -5,10 +5,19 @@ from frappe.tests.utils import FrappeTestCase
 from frappe.utils import today, add_days
 
 
+# Prefixes used by tests — any Sprint / Work Item using these is test data.
+TEST_PREFIXES = ["TEST", "ALPHA", "BETA"]
+
+
 class TestSprint(FrappeTestCase):
 	def setUp(self):
-		"""Clean up any test sprints before each test."""
-		frappe.db.delete("Sprint", {"sprint_prefix": ("in", ["TEST", "ALPHA", "BETA"])})
+		"""Clean up any leaked test data from prior runs.
+
+		handle_incomplete_items() performs an unconditional frappe.db.commit(),
+		so tearDown's rollback cannot clean up data created before that call.
+		We explicitly delete known test records here to avoid leakage.
+		"""
+		self._cleanup_test_data()
 		frappe.db.commit()
 		# Frappe resets transaction_writes to 0 when a COMMIT or ROLLBACK
 		# SQL query is processed by check_transaction_status(). However,
@@ -16,6 +25,28 @@ class TestSprint(FrappeTestCase):
 		# Explicitly reset it to guarantee Sprint tests start with a clean
 		# write budget and avoid TooManyWritesError.
 		frappe.db.transaction_writes = 0
+
+	def _cleanup_test_data(self):
+		"""Delete Sprints, Sprint Work Items, and Work Items created by tests."""
+		test_sprints = frappe.get_all(
+			"Sprint",
+			filters={"sprint_prefix": ("in", TEST_PREFIXES)},
+			fields=["name"],
+			pluck="name",
+		)
+
+		if test_sprints:
+			# Delete child table rows parented to test sprints
+			frappe.db.delete("Sprint Work Item", {"parent": ("in", test_sprints)})
+			# Delete Work Items linked to test sprints
+			frappe.db.delete("Work Item", {"sprint": ("in", test_sprints)})
+
+		# Delete orphaned Work Items created by tests (title pattern)
+		frappe.db.delete("Work Item", {"title": ("like", "Test WI%")})
+		frappe.db.delete("Work Item", {"title": ("like", "WI %pts")})
+
+		# Delete test sprints
+		frappe.db.delete("Sprint", {"sprint_prefix": ("in", TEST_PREFIXES)})
 
 	def _make_sprint(self, prefix="TEST", status="Draft", project=None):
 		sprint = frappe.get_doc({
@@ -84,7 +115,9 @@ class TestSprint(FrappeTestCase):
 		sprint.reload()
 		self.assertEqual(sprint.expected_velocity, 16.0)
 
-		# Simulate closing: move incomplete items out, then complete
+		# Simulate closing: move incomplete items out, then complete.
+		# NOTE: handle_incomplete_items calls frappe.db.commit(), so data
+		# created above is persisted. setUp's _cleanup_test_data handles this.
 		from frappe_agile.frappe_agile.doctype.sprint.sprint import handle_incomplete_items
 		handle_incomplete_items(sprint=sprint.name, action="Move to Backlog")
 
@@ -100,5 +133,7 @@ class TestSprint(FrappeTestCase):
 		)
 
 	def tearDown(self):
+		# Explicit cleanup for data committed by handle_incomplete_items
+		self._cleanup_test_data()
 		frappe.db.rollback()
 

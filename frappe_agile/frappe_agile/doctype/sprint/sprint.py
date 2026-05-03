@@ -11,10 +11,21 @@ class Sprint(Document):
 			from frappe.model.naming import make_autoname
 			self.name = make_autoname(f"{self.sprint_prefix}-.###")
 
+	def _is_transitioning_to_completed(self):
+		"""True only when an existing Sprint is being moved to Completed.
+
+		New documents (even if inserted directly as Completed) must still
+		go through velocity calculation so the field is never left stale.
+		"""
+		if self.is_new():
+			return False
+		doc_before = self.get_doc_before_save()
+		return self.status == "Completed" and (not doc_before or doc_before.status != "Completed")
+
 	def validate(self):
 		self.validate_status_transition()
 		self.validate_active_sprint_uniqueness()
-		if self.status != "Completed":
+		if not self._is_transitioning_to_completed():
 			self.calculate_expected_velocity()
 
 	def on_update(self):
@@ -226,8 +237,9 @@ def get_or_create_target_sprint(sprint_name: str) -> str:
 @frappe.whitelist()
 def handle_incomplete_items(sprint: str, action: str):
 	"""Handle Work Items that are not Done when a sprint is completed."""
-	# Snapshot the current velocity before any items are moved away
-	current_velocity = frappe.db.get_value("Sprint", sprint, "expected_velocity")
+	# Snapshot the current velocity before any items are moved away.
+	# Normalize with flt() to avoid restoring NULL into a Float field.
+	current_velocity = flt(frappe.db.get_value("Sprint", sprint, "expected_velocity"))
 
 	work_items = frappe.get_all(
 		"Work Item",
