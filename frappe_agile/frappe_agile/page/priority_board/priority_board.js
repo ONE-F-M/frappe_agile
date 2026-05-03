@@ -179,7 +179,7 @@ class PriorityBoardPage {
 				fieldtype: "Link",
 				fieldname: "assignee",
 				options: "User",
-				placeholder: __("All Assignees"),
+				placeholder: __("Loading…"),
 				get_query: () => {
 					return {
 						filters: {
@@ -197,6 +197,8 @@ class PriorityBoardPage {
 		});
 		this._assignee_field.$input.addClass("input-xs");
 		this._assignee_field.$input.css("height", "32px");
+		// Disable until dev team list is loaded (null = still loading)
+		this._assignee_field.$input.prop("disabled", true);
 		this.$filters.find("#wi-sel-status").on("change", (e) => {
 			this.filters.status = e.target.value;
 			this.refresh();
@@ -243,14 +245,26 @@ class PriorityBoardPage {
 				method: "frappe_agile.frappe_agile.doctype.frappe_agile_settings.frappe_agile_settings.get_development_team_users",
 				callback: (r) => {
 					this._dev_team_users = r.message || [];
+					this._enable_assignee_field();
 					resolve();
 				},
 				error: () => {
 					this._dev_team_users = [];
+					this._enable_assignee_field();
 					resolve();
 				},
 			});
 		});
+	}
+
+	// ----------------------------------------------------------
+	// Enable assignee field after dev team list is loaded
+	// ----------------------------------------------------------
+	_enable_assignee_field() {
+		if (this._assignee_field) {
+			this._assignee_field.$input.prop("disabled", false);
+			this._assignee_field.$input.attr("placeholder", __("All Assignees"));
+		}
 	}
 
 	// ----------------------------------------------------------
@@ -352,8 +366,10 @@ class PriorityBoardPage {
 
 		// Header strip
 		const total = this.ordered_items.length;
+		const showing = Math.min(PAGE_SIZE, total);
 		this.$header.html(`
-			${__("Showing")} <strong>${total}</strong> ${__("items")}
+			${__("Showing")} <strong class="wi-showing-count">${showing}</strong>
+			${__("of")} <strong>${total}</strong> ${__("items")}
 		`);
 
 		// Items list
@@ -398,7 +414,8 @@ class PriorityBoardPage {
 		});
 		this.displayed_count += next_batch.length;
 
-		// Header shows total count which doesn't change on load-more
+		// Update header displayed count
+		this.$header.find(".wi-showing-count").text(this.displayed_count);
 
 		// Update or hide load-more button
 		const $btn = this.$list.find("#wi-load-more");
