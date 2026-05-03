@@ -77,15 +77,6 @@
 	padding: 0 4px;
 }
 
-.wi-local-badge {
-	margin-left: 12px;
-	font-size: 11px;
-	background-color: #e0f2fe;
-	color: #0369a1;
-	padding: 2px 8px;
-	border-radius: 12px;
-	font-weight: 500;
-}
 
 /* List Container */
 .wi-list-container {
@@ -109,6 +100,11 @@
 	transition: box-shadow 0.2s ease, border-color 0.2s ease;
 	position: relative;
 	overflow: hidden;
+	cursor: grab;
+}
+
+.wi-card:active {
+	cursor: grabbing;
 }
 
 .wi-card:hover {
@@ -116,9 +112,15 @@
 	border-color: #cbd5e1;
 }
 
+.wi-card.no-drag {
+	cursor: default;
+}
 .wi-card.no-drag:hover {
 	box-shadow: none;
 	border-color: var(--border-color, #e2e8f0);
+}
+.wi-card.no-drag:active {
+	cursor: default;
 }
 
 /* Position badge — left column */

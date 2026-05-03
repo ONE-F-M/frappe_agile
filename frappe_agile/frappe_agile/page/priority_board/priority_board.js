@@ -53,7 +53,7 @@ class PriorityBoardPage {
 		// Build UI skeleton, then load
 		this._check_permission().then(() => {
 			this._build_ui();
-			this._load_sprints().then(() => {
+			Promise.all([this._load_sprints(), this._load_dev_team()]).then(() => {
 				this.refresh();
 			});
 		});
@@ -157,6 +157,11 @@ class PriorityBoardPage {
 				fieldname: "sprint",
 				options: "Sprint",
 				placeholder: __("All Active Sprints"),
+				get_query: () => {
+					return {
+						filters: { status: "Active" },
+					};
+				},
 				change: () => {
 					this.filters.sprint = this._sprint_field.get_value() || "";
 					this.refresh();
@@ -175,6 +180,13 @@ class PriorityBoardPage {
 				fieldname: "assignee",
 				options: "User",
 				placeholder: __("All Assignees"),
+				get_query: () => {
+					return {
+						filters: {
+							name: ["in", this._dev_team_users || []],
+						},
+					};
+				},
 				change: () => {
 					this.filters.assignee = this._assignee_field.get_value() || "";
 					this.refresh();
@@ -216,6 +228,25 @@ class PriorityBoardPage {
 				},
 				error: () => {
 					this.active_sprints = [];
+					resolve();
+				},
+			});
+		});
+	}
+
+	// ----------------------------------------------------------
+	// Load development team users for assignee filter
+	// ----------------------------------------------------------
+	_load_dev_team() {
+		return new Promise((resolve) => {
+			frappe.call({
+				method: "frappe_agile.frappe_agile.doctype.frappe_agile_settings.frappe_agile_settings.get_development_team_users",
+				callback: (r) => {
+					this._dev_team_users = r.message || [];
+					resolve();
+				},
+				error: () => {
+					this._dev_team_users = [];
 					resolve();
 				},
 			});
@@ -321,13 +352,8 @@ class PriorityBoardPage {
 
 		// Header strip
 		const total = this.ordered_items.length;
-		const showing = Math.min(PAGE_SIZE, total);
 		this.$header.html(`
-			<strong>${total}</strong>&nbsp;${__("items")}
-			&nbsp;·&nbsp;${__("Showing")} <strong>${showing}</strong>
-			<span class="wi-local-badge">
-				<i class="fa fa-user"></i>&nbsp;${__("Local order — not shared")}
-			</span>
+			${__("Showing")} <strong>${total}</strong> ${__("items")}
 		`);
 
 		// Items list
@@ -372,8 +398,7 @@ class PriorityBoardPage {
 		});
 		this.displayed_count += next_batch.length;
 
-		// Update header
-		this.$header.find("strong").last().text(this.displayed_count);
+		// Header shows total count which doesn't change on load-more
 
 		// Update or hide load-more button
 		const $btn = this.$list.find("#wi-load-more");
@@ -468,11 +493,12 @@ class PriorityBoardPage {
 
 		this.sortable = new Sortable(el, {
 			animation: 150,
-			handle: ".wi-drag-handle-icon",
 			ghostClass: "sortable-ghost",
 			chosenClass: "sortable-chosen",
 			dragClass: "sortable-drag",
 			forceFallback: false,
+			filter: ".wi-card-title a",
+			preventOnFilter: false,
 
 			onEnd: (evt) => {
 				this._on_reorder(evt, el);
