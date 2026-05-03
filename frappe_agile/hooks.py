@@ -44,7 +44,10 @@ app_include_css = "/assets/frappe_agile/css/backlog_page.css"
 
 # include js in doctype views
 # doctype_js = {"doctype" : "public/js/doctype.js"}
-doctype_list_js = {"Work Item": "public/js/work_item_list.js"}
+doctype_list_js = {
+	"Work Item": "public/js/work_item_list.js",
+	"Sprint": "public/js/sprint_list.js",
+}
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
 # doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}
 
