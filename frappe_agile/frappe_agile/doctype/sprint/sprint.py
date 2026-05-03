@@ -11,17 +11,30 @@ class Sprint(Document):
 			from frappe.model.naming import make_autoname
 			self.name = make_autoname(f"{self.sprint_prefix}-.###")
 
+	def _is_transitioning_to_completed(self):
+		"""True only when an existing Sprint is being moved to Completed.
+
+		New documents (even if inserted directly as Completed) must still
+		go through velocity calculation so the field is never left stale.
+		"""
+		if self.is_new():
+			return False
+		doc_before = self.get_doc_before_save()
+		return self.status == "Completed" and (not doc_before or doc_before.status != "Completed")
+
 	def validate(self):
 		self.validate_status_transition()
 		self.validate_active_sprint_uniqueness()
-		self.calculate_expected_velocity()
+		if not self._is_transitioning_to_completed():
+			self.calculate_expected_velocity()
 
 	def on_update(self):
 		# Guard: skip velocity DB write during DocType schema migration context
 		if not frappe.db.table_exists("Work Item"):
 			return
-		self.calculate_expected_velocity()
-		self.db_set("expected_velocity", self.expected_velocity, update_modified=False)
+		if self.status != "Completed":
+			self.calculate_expected_velocity()
+			self.db_set("expected_velocity", self.expected_velocity, update_modified=False)
 		self.sync_sprint_status_to_work_items()
 
 	def sync_sprint_status_to_work_items(self):
@@ -125,6 +138,11 @@ def update_sprint_velocity(doc, method=None):
 
 	for sprint_name in sprints_to_update:
 		if not frappe.db.exists("Sprint", sprint_name):
+			continue
+
+		# Never recalculate velocity on a completed sprint — it's frozen
+		sprint_status = frappe.db.get_value("Sprint", sprint_name, "status")
+		if sprint_status == "Completed":
 			continue
 
 		total = frappe.db.sql(
@@ -232,6 +250,10 @@ def get_or_create_target_sprint(sprint_name: str) -> str:
 @frappe.whitelist()
 def handle_incomplete_items(sprint: str, action: str):
 	"""Handle Work Items that are not Done when a sprint is completed."""
+	# Snapshot the current velocity before any items are moved away.
+	# Normalize with flt() to avoid restoring NULL into a Float field.
+	current_velocity = flt(frappe.db.get_value("Sprint", sprint, "expected_velocity"))
+
 	work_items = frappe.get_all(
 		"Work Item",
 		filters={"sprint": sprint, "workflow_state": ["!=", "Done"]},
@@ -260,6 +282,10 @@ def handle_incomplete_items(sprint: str, action: str):
 				"parenttype": "Sprint",
 				"work_item": wi_name,
 			}).insert(ignore_permissions=True)
+
+	# Restore the velocity snapshot — guards in update_sprint_velocity should
+	# prevent overwrites, but this is a safety net
+	frappe.db.set_value("Sprint", sprint, "expected_velocity", current_velocity, update_modified=False)
 
 	frappe.db.commit()
 
