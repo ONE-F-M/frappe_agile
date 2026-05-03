@@ -181,7 +181,7 @@ function setupListViewFilters(listview) {
 		// Apply team-user restriction on the Assignee User filter
 		fetchDevelopmentTeamUsers(function (team_users) {
 			let assignee_ctrl = listview.custom_list_controls["assignee_user"];
-			if (assignee_ctrl && team_users.length > 0) {
+			if (assignee_ctrl) {
 				assignee_ctrl.df.get_query = function () {
 					return { filters: { name: ["in", team_users] } };
 				};
@@ -246,7 +246,7 @@ function setupKanbanFilters(listview) {
 		setTimeout(function() {
 			fetchDevelopmentTeamUsers(function (team_users) {
 				let assignee_ctrl = listview.custom_kanban_controls["assignee_user"];
-				if (assignee_ctrl && team_users.length > 0) {
+				if (assignee_ctrl) {
 					assignee_ctrl.df.get_query = function () {
 						return { filters: { name: ["in", team_users] } };
 					};
