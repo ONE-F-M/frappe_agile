@@ -10,7 +10,6 @@
 //   1. Provide inline filters for Status, Start Date, and End Date
 
 frappe.listview_settings["Sprint"] = {
-	onload: function (listview) {},
 	refresh: function (listview) {
 		setupSprintListFilters(listview);
 	},
