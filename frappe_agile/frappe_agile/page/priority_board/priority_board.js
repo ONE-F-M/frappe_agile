@@ -106,11 +106,9 @@ class PriorityBoardPage {
 				<span class="wi-filter-label">${__("Status")}</span>
 				<select id="wi-sel-status" class="form-control input-xs">
 					<option value="">${__("All Statuses")}</option>
+					<option value="Draft">${__("Draft")}</option>
 					<option value="Open">${__("Open")}</option>
 					<option value="In Progress">${__("In Progress")}</option>
-					<option value="Pending Action Plan">${__("Pending Action Plan")}</option>
-					<option value="Pending Execution">${__("Pending Execution")}</option>
-					<option value="Pending PR">${__("Pending PR")}</option>
 					<option value="Pending Review">${__("Pending Review")}</option>
 					<option value="Changes Requested">${__("Changes Requested")}</option>
 					<option value="In Staging">${__("In Staging")}</option>
@@ -641,11 +639,9 @@ class PriorityBoardPage {
 
 	_status_class(status) {
 		const map = {
+			"Draft":                "wi-status-draft",
 			"Open":                 "wi-status-open",
 			"In Progress":          "wi-status-in-progress",
-			"Pending Action Plan":  "wi-status-pending-action",
-			"Pending Execution":    "wi-status-pending-exec",
-			"Pending PR":           "wi-status-pending-pr",
 			"Pending Review":       "wi-status-pending-review",
 			"Changes Requested":    "wi-status-changes",
 			"In Staging":           "wi-status-staging",
