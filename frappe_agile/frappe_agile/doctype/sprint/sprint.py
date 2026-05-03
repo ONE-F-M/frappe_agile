@@ -1,7 +1,7 @@
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import flt
+from frappe.utils import add_days, date_diff, flt
 
 
 class Sprint(Document):
@@ -165,6 +165,41 @@ def validate_work_item_sprint(doc, method=None):
 		)
 
 
+def _build_new_sprint_dates(source_doc):
+	"""Derive start_date and end_date for a new sprint from the source sprint.
+
+	start_date = source end_date + 1 day
+	end_date   = start_date + same duration as the source sprint
+	"""
+	duration = date_diff(source_doc.end_date, source_doc.start_date)
+	new_start = add_days(source_doc.end_date, 1)
+	new_end = add_days(new_start, duration)
+	return new_start, new_end
+
+
+def _make_new_sprint(source_doc, extra_fields=None):
+	"""Create and insert a new Draft Sprint derived from *source_doc*.
+
+	Dates are computed lazily — only called from branches that actually need
+	a new Sprint document.
+	"""
+	new_start, new_end = _build_new_sprint_dates(source_doc)
+	values = {
+		"doctype": "Sprint",
+		"sprint_prefix": source_doc.sprint_prefix,
+		"project": source_doc.project,
+		"status": "Draft",
+		"start_date": new_start,
+		"end_date": new_end,
+	}
+	if extra_fields:
+		values.update(extra_fields)
+
+	new_sprint = frappe.get_doc(values)
+	new_sprint.insert(ignore_permissions=True)
+	return new_sprint.name
+
+
 @frappe.whitelist()
 def get_or_create_target_sprint(sprint_name: str) -> str:
 	"""
@@ -175,17 +210,10 @@ def get_or_create_target_sprint(sprint_name: str) -> str:
 	"""
 	import re
 	doc = frappe.get_doc("Sprint", sprint_name)
-	
+
 	match = re.search(r'-(\d+)$', sprint_name)
 	if not match:
-		new_sprint = frappe.get_doc({
-			"doctype": "Sprint",
-			"sprint_prefix": doc.sprint_prefix,
-			"project": doc.project,
-			"status": "Draft",
-		})
-		new_sprint.insert(ignore_permissions=True)
-		return new_sprint.name
+		return _make_new_sprint(doc)
 
 	num_str = match.group(1)
 	next_num = int(num_str) + 1
@@ -196,24 +224,9 @@ def get_or_create_target_sprint(sprint_name: str) -> str:
 		if status == "Draft":
 			return target_sprint_name
 		else:
-			new_sprint = frappe.get_doc({
-				"doctype": "Sprint",
-				"sprint_prefix": doc.sprint_prefix,
-				"project": doc.project,
-				"status": "Draft",
-			})
-			new_sprint.insert(ignore_permissions=True)
-			return new_sprint.name
+			return _make_new_sprint(doc)
 	else:
-		new_sprint = frappe.get_doc({
-			"doctype": "Sprint",
-			"name": target_sprint_name,
-			"sprint_prefix": doc.sprint_prefix,
-			"project": doc.project,
-			"status": "Draft",
-		})
-		new_sprint.insert(ignore_permissions=True)
-		return new_sprint.name
+		return _make_new_sprint(doc, {"name": target_sprint_name})
 
 
 @frappe.whitelist()
