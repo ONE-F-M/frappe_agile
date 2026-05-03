@@ -29,6 +29,20 @@ class TestSprint(FrappeTestCase):
 		sprint.insert(ignore_permissions=True)
 		return sprint
 
+	def _make_work_item(self, title, sprint_name, story_points=0):
+		"""Create a Work Item compatible with the active workflow."""
+		wi = frappe.get_doc({
+			"doctype": "Work Item",
+			"work_item_type": "User Story",
+			"title": title,
+			"sprint": sprint_name,
+			"story_points": story_points,
+			"workflow_state": "Open",
+			"status": "Open",
+		})
+		wi.insert(ignore_permissions=True)
+		return wi
+
 	def test_autoname_format(self):
 		"""Sprint name should follow format {sprint_prefix}-{##}."""
 		sprint = self._make_sprint(prefix="ALPHA")
@@ -53,26 +67,38 @@ class TestSprint(FrappeTestCase):
 		sprint = self._make_sprint(prefix="TEST")
 
 		# Create two work items linked to this sprint
-		wi1 = frappe.get_doc({
-			"doctype": "Work Item",
-			"work_item_type": "User Story",
-			"title": "Test WI 1",
-			"sprint": sprint.name,
-			"story_points": 5,
-		})
-		wi1.insert(ignore_permissions=True)
-
-		wi2 = frappe.get_doc({
-			"doctype": "Work Item",
-			"work_item_type": "User Story",
-			"title": "Test WI 2",
-			"sprint": sprint.name,
-			"story_points": 8,
-		})
-		wi2.insert(ignore_permissions=True)
+		self._make_work_item("Test WI 1", sprint.name, story_points=5)
+		self._make_work_item("Test WI 2", sprint.name, story_points=8)
 
 		sprint.reload()
 		self.assertEqual(sprint.expected_velocity, 13.0)
 
+	def test_velocity_preserved_on_sprint_close(self):
+		"""Expected Velocity must NOT reset when a sprint is completed."""
+		sprint = self._make_sprint(prefix="TEST", status="Active")
+
+		# Create work items with story points
+		for sp in [5, 8, 3]:
+			self._make_work_item(f"WI {sp}pts", sprint.name, story_points=sp)
+
+		sprint.reload()
+		self.assertEqual(sprint.expected_velocity, 16.0)
+
+		# Simulate closing: move incomplete items out, then complete
+		from frappe_agile.frappe_agile.doctype.sprint.sprint import handle_incomplete_items
+		handle_incomplete_items(sprint=sprint.name, action="Move to Backlog")
+
+		# Now complete the sprint
+		sprint.reload()
+		sprint.status = "Completed"
+		sprint.save(ignore_permissions=True)
+
+		sprint.reload()
+		self.assertEqual(
+			sprint.expected_velocity, 16.0,
+			"Expected Velocity was reset to 0 on sprint close!"
+		)
+
 	def tearDown(self):
 		frappe.db.rollback()
+
