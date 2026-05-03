@@ -1,7 +1,7 @@
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import flt
+from frappe.utils import add_days, flt
 
 
 class Sprint(Document):
@@ -165,6 +165,17 @@ def validate_work_item_sprint(doc, method=None):
 		)
 
 
+def _build_new_sprint_dates(source_doc):
+	"""Derive start_date and end_date for a new sprint from the source sprint.
+
+	start_date = source end_date + 1 day
+	end_date   = start_date + 7 days
+	"""
+	new_start = add_days(source_doc.end_date, 1)
+	new_end = add_days(new_start, 7)
+	return new_start, new_end
+
+
 @frappe.whitelist()
 def get_or_create_target_sprint(sprint_name: str) -> str:
 	"""
@@ -175,7 +186,8 @@ def get_or_create_target_sprint(sprint_name: str) -> str:
 	"""
 	import re
 	doc = frappe.get_doc("Sprint", sprint_name)
-	
+	new_start, new_end = _build_new_sprint_dates(doc)
+
 	match = re.search(r'-(\d+)$', sprint_name)
 	if not match:
 		new_sprint = frappe.get_doc({
@@ -183,6 +195,8 @@ def get_or_create_target_sprint(sprint_name: str) -> str:
 			"sprint_prefix": doc.sprint_prefix,
 			"project": doc.project,
 			"status": "Draft",
+			"start_date": new_start,
+			"end_date": new_end,
 		})
 		new_sprint.insert(ignore_permissions=True)
 		return new_sprint.name
@@ -201,6 +215,8 @@ def get_or_create_target_sprint(sprint_name: str) -> str:
 				"sprint_prefix": doc.sprint_prefix,
 				"project": doc.project,
 				"status": "Draft",
+				"start_date": new_start,
+				"end_date": new_end,
 			})
 			new_sprint.insert(ignore_permissions=True)
 			return new_sprint.name
@@ -211,6 +227,8 @@ def get_or_create_target_sprint(sprint_name: str) -> str:
 			"sprint_prefix": doc.sprint_prefix,
 			"project": doc.project,
 			"status": "Draft",
+			"start_date": new_start,
+			"end_date": new_end,
 		})
 		new_sprint.insert(ignore_permissions=True)
 		return new_sprint.name
