@@ -11,20 +11,8 @@ TEST_PREFIXES = ["TEST", "ALPHA", "BETA"]
 
 class TestSprint(FrappeTestCase):
 	def setUp(self):
-		"""Clean up any leaked test data from prior runs.
-
-		handle_incomplete_items() performs an unconditional frappe.db.commit(),
-		so tearDown's rollback cannot clean up data created before that call.
-		We explicitly delete known test records here to avoid leakage.
-		"""
+		"""Clean up any leaked test data from prior runs."""
 		self._cleanup_test_data()
-		frappe.db.commit()
-		# Frappe resets transaction_writes to 0 when a COMMIT or ROLLBACK
-		# SQL query is processed by check_transaction_status(). However,
-		# earlier test classes may have accumulated a large counter.
-		# Explicitly reset it to guarantee Sprint tests start with a clean
-		# write budget and avoid TooManyWritesError.
-		frappe.db.transaction_writes = 0
 
 	def _cleanup_test_data(self):
 		"""Delete Sprints, Sprint Work Items, and Work Items created by tests."""
@@ -116,8 +104,6 @@ class TestSprint(FrappeTestCase):
 		self.assertEqual(sprint.expected_velocity, 16.0)
 
 		# Simulate closing: move incomplete items out, then complete.
-		# NOTE: handle_incomplete_items calls frappe.db.commit(), so data
-		# created above is persisted. setUp's _cleanup_test_data handles this.
 		from frappe_agile.frappe_agile.doctype.sprint.sprint import handle_incomplete_items
 		handle_incomplete_items(sprint=sprint.name, action="Move to Backlog")
 
@@ -132,8 +118,34 @@ class TestSprint(FrappeTestCase):
 			"Expected Velocity was reset to 0 on sprint close!"
 		)
 
+
+	def test_move_to_new_sprint(self):
+		"""Incomplete items should move to a new sprint with 7-day duration."""
+		sprint = self._make_sprint(prefix="TEST", status="Active")
+		sprint.end_date = "2024-01-01"
+		sprint.save()
+
+		wi = self._make_work_item("Test WI Move", sprint.name, story_points=5)
+
+		from frappe_agile.frappe_agile.doctype.sprint.sprint import handle_incomplete_items
+		new_sprint_name = handle_incomplete_items(sprint=sprint.name, action="Move to New Sprint")
+
+		self.assertIsNotNone(new_sprint_name)
+		new_sprint = frappe.get_doc("Sprint", new_sprint_name)
+
+		# Check dates
+		self.assertEqual(str(new_sprint.start_date), "2024-01-02")
+		self.assertEqual(str(new_sprint.end_date), "2024-01-09") # 2nd + 7 days
+
+		# Check Work Item
+		wi.reload()
+		self.assertEqual(wi.sprint, new_sprint_name)
+		self.assertEqual(wi.sprint_status, "Draft")
+
+		# Check child table
+		self.assertEqual(len(new_sprint.work_items), 1)
+		self.assertEqual(new_sprint.work_items[0].work_item, wi.name)
+
 	def tearDown(self):
-		# Explicit cleanup for data committed by handle_incomplete_items
 		self._cleanup_test_data()
-		frappe.db.rollback()
 

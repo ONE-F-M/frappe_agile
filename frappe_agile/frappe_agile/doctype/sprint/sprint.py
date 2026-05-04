@@ -187,11 +187,10 @@ def _build_new_sprint_dates(source_doc):
 	"""Derive start_date and end_date for a new sprint from the source sprint.
 
 	start_date = source end_date + 1 day
-	end_date   = start_date + same duration as the source sprint
+	end_date   = start_date + 7 days (standard duration)
 	"""
-	duration = date_diff(source_doc.end_date, source_doc.start_date)
 	new_start = add_days(source_doc.end_date, 1)
-	new_end = add_days(new_start, duration)
+	new_end = add_days(new_start, 7)
 	return new_start, new_end
 
 
@@ -269,24 +268,29 @@ def handle_incomplete_items(sprint: str, action: str):
 
 	# Move each incomplete Work Item
 	work_item_names = [wi.name for wi in work_items]
-	for wi_name in work_item_names:
-		frappe.db.set_value("Work Item", wi_name, "sprint", new_sprint_name or "")
+	target_status = "Draft" if new_sprint_name else ""
 
-	# If moving to new sprint, add to new sprint's child table
+	for wi_name in work_item_names:
+		frappe.db.set_value(
+			"Work Item",
+			wi_name,
+			{"sprint": new_sprint_name or "", "sprint_status": target_status},
+			update_modified=False
+		)
+
+	# If moving to new sprint, add to new sprint's child table using standard append/save
 	if new_sprint_name:
+		target_sprint = frappe.get_doc("Sprint", new_sprint_name)
+		existing_items = {d.work_item for d in target_sprint.work_items}
+
 		for wi_name in work_item_names:
-			frappe.get_doc({
-				"doctype": "Sprint Work Item",
-				"parent": new_sprint_name,
-				"parentfield": "work_items",
-				"parenttype": "Sprint",
-				"work_item": wi_name,
-			}).insert(ignore_permissions=True)
+			if wi_name not in existing_items:
+				target_sprint.append("work_items", {"work_item": wi_name})
+
+		target_sprint.save(ignore_permissions=True)
 
 	# Restore the velocity snapshot — guards in update_sprint_velocity should
 	# prevent overwrites, but this is a safety net
 	frappe.db.set_value("Sprint", sprint, "expected_velocity", current_velocity, update_modified=False)
-
-	frappe.db.commit()
 
 	return new_sprint_name
