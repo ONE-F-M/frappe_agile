@@ -1,7 +1,7 @@
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import flt
+from frappe.utils import flt, add_days, getdate
 
 
 class Sprint(Document):
@@ -104,6 +104,14 @@ class Sprint(Document):
 # ---------------------------------------------------------------------------
 
 
+def _build_new_sprint_dates(source_doc):
+	"""Calculate dates for the next sprint: starts day after source ends, lasts 7 days."""
+	new_start = add_days(source_doc.end_date, 1) if source_doc.end_date else None
+	new_end = add_days(new_start, 7) if new_start else None
+	return new_start, new_end
+
+
+
 def update_sprint_velocity(doc, method=None):
 	"""
 	Recalculate expected_velocity on the linked Sprint(s) whenever a
@@ -175,6 +183,7 @@ def get_or_create_target_sprint(sprint_name: str) -> str:
 	"""
 	import re
 	doc = frappe.get_doc("Sprint", sprint_name)
+	new_start, new_end = _build_new_sprint_dates(doc)
 	
 	match = re.search(r'-(\d+)$', sprint_name)
 	if not match:
@@ -183,6 +192,8 @@ def get_or_create_target_sprint(sprint_name: str) -> str:
 			"sprint_prefix": doc.sprint_prefix,
 			"project": doc.project,
 			"status": "Draft",
+			"start_date": new_start,
+			"end_date": new_end,
 		})
 		new_sprint.insert(ignore_permissions=True)
 		return new_sprint.name
@@ -201,6 +212,8 @@ def get_or_create_target_sprint(sprint_name: str) -> str:
 				"sprint_prefix": doc.sprint_prefix,
 				"project": doc.project,
 				"status": "Draft",
+				"start_date": new_start,
+				"end_date": new_end,
 			})
 			new_sprint.insert(ignore_permissions=True)
 			return new_sprint.name
@@ -211,6 +224,8 @@ def get_or_create_target_sprint(sprint_name: str) -> str:
 			"sprint_prefix": doc.sprint_prefix,
 			"project": doc.project,
 			"status": "Draft",
+			"start_date": new_start,
+			"end_date": new_end,
 		})
 		new_sprint.insert(ignore_permissions=True)
 		return new_sprint.name
@@ -219,10 +234,15 @@ def get_or_create_target_sprint(sprint_name: str) -> str:
 @frappe.whitelist()
 def handle_incomplete_items(sprint: str, action: str):
 	"""Handle Work Items that are not Done when a sprint is completed."""
+	frappe.has_permission("Sprint", "write", throw=True)
+
+	# Snapshot the old velocity before we move items
+	old_velocity = frappe.db.get_value("Sprint", sprint, "expected_velocity")
+
 	work_items = frappe.get_all(
 		"Work Item",
 		filters={"sprint": sprint, "workflow_state": ["!=", "Done"]},
-		fields=["name"]
+		fields=["name", "work_item_type", "title", "status", "story_points", "assignee_user"]
 	)
 
 	new_sprint_name = None
@@ -235,19 +255,29 @@ def handle_incomplete_items(sprint: str, action: str):
 	# Move each incomplete Work Item
 	work_item_names = [wi.name for wi in work_items]
 	for wi_name in work_item_names:
-		frappe.db.set_value("Work Item", wi_name, "sprint", new_sprint_name or "")
+		frappe.db.set_value("Work Item", wi_name, {
+			"sprint": new_sprint_name or "",
+			"sprint_status": "Draft" if new_sprint_name else ""
+		}, update_modified=False)
 
-	# If moving to new sprint, add to new sprint's child table
+	# Remove moved items from the current sprint's child table
+	frappe.db.delete("Sprint Work Item", {"parent": sprint, "work_item": ["in", work_item_names]})
+
+	# If moving to new sprint, load the new sprint document, append the items to its work_items table, and save
 	if new_sprint_name:
-		for wi_name in work_item_names:
-			frappe.get_doc({
-				"doctype": "Sprint Work Item",
-				"parent": new_sprint_name,
-				"parentfield": "work_items",
-				"parenttype": "Sprint",
-				"work_item": wi_name,
-			}).insert(ignore_permissions=True)
+		new_sprint = frappe.get_doc("Sprint", new_sprint_name)
+		for wi in work_items:
+			new_sprint.append("work_items", {
+				"work_item": wi.name,
+				"work_item_type": wi.work_item_type,
+				"title": wi.title,
+				"status": wi.status,
+				"story_points": wi.story_points,
+				"assignee_user": wi.assignee_user
+			})
+		new_sprint.save(ignore_permissions=True)
 
-	frappe.db.commit()
+	# Restore old sprint's velocity from snapshot
+	frappe.db.set_value("Sprint", sprint, "expected_velocity", old_velocity, update_modified=False)
 
 	return new_sprint_name
