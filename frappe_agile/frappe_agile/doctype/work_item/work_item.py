@@ -71,7 +71,7 @@ class WorkItem(Document):
 				"work_item_type": self.work_item_type,
 				"title": self.title,
 				"status": self.status,
-				"story_points": self.story_points,
+				"story_points": flt(self.story_points),
 				"assignee_user": self.assignee_user,
 			},
 			update_modified=False,
@@ -84,8 +84,11 @@ class WorkItem(Document):
 
 		sprint_doc = frappe.get_doc("Sprint", sprint_name)
 
+		# Clean up any empty rows from the child table first
+		sprint_doc.work_items = [row for row in sprint_doc.get("work_items", []) if row.work_item]
+
 		# Avoid duplicate rows
-		if any(row.work_item == self.name for row in sprint_doc.get("work_items", [])):
+		if any(row.work_item == self.name for row in sprint_doc.work_items):
 			return
 
 		sprint_doc.append(
@@ -95,7 +98,7 @@ class WorkItem(Document):
 				"work_item_type": self.work_item_type,
 				"title": self.title,
 				"status": self.status,
-				"story_points": self.story_points,
+				"story_points": flt(self.story_points),
 				"assignee_user": self.assignee_user,
 			},
 		)
