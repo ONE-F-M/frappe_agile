@@ -83,6 +83,13 @@ frappe.ui.form.on("Sprint", {
 										action: values.move_to
 									},
 									callback: function (r) {
+										// Sync client-side child table state before saving
+										let moved_item_names = incomplete.map(wi => wi.name);
+										frm.doc.work_items = (frm.doc.work_items || []).filter(
+											row => !moved_item_names.includes(row.work_item)
+										);
+										frm.refresh_field("work_items");
+
 										d.hide();
 										_trigger_save(frm, r.message);
 									}
