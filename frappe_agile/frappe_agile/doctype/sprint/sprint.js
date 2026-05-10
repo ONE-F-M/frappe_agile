@@ -84,6 +84,9 @@ frappe.ui.form.on("Sprint", {
 									},
 									callback: function (r) {
 										d.hide();
+										// Filter out moved items from the local work_items table
+										frm.doc.work_items = (frm.doc.work_items || []).filter(wi => wi.status === "Done");
+										frm.refresh_field("work_items");
 										_trigger_save(frm, r.message);
 									}
 								});

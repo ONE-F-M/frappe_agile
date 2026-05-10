@@ -1,7 +1,7 @@
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import flt
+from frappe.utils import flt, add_days
 
 
 class Sprint(Document):
@@ -165,6 +165,15 @@ def validate_work_item_sprint(doc, method=None):
 		)
 
 
+def _build_new_sprint_dates(source_doc):
+	"""Calculate start and end dates for the next sprint."""
+	# New start is day after old end
+	new_start = add_days(source_doc.end_date, 1)
+	# New end is exactly 7 days after new start
+	new_end = add_days(new_start, 7)
+	return new_start, new_end
+
+
 @frappe.whitelist()
 def get_or_create_target_sprint(sprint_name: str) -> str:
 	"""
@@ -175,7 +184,8 @@ def get_or_create_target_sprint(sprint_name: str) -> str:
 	"""
 	import re
 	doc = frappe.get_doc("Sprint", sprint_name)
-	
+	start_date, end_date = _build_new_sprint_dates(doc)
+
 	match = re.search(r'-(\d+)$', sprint_name)
 	if not match:
 		new_sprint = frappe.get_doc({
@@ -183,6 +193,8 @@ def get_or_create_target_sprint(sprint_name: str) -> str:
 			"sprint_prefix": doc.sprint_prefix,
 			"project": doc.project,
 			"status": "Draft",
+			"start_date": start_date,
+			"end_date": end_date,
 		})
 		new_sprint.insert(ignore_permissions=True)
 		return new_sprint.name
@@ -194,6 +206,11 @@ def get_or_create_target_sprint(sprint_name: str) -> str:
 	if frappe.db.exists("Sprint", target_sprint_name):
 		status = frappe.db.get_value("Sprint", target_sprint_name, "status")
 		if status == "Draft":
+			# Update dates even if it exists in Draft
+			frappe.db.set_value("Sprint", target_sprint_name, {
+				"start_date": start_date,
+				"end_date": end_date
+			})
 			return target_sprint_name
 		else:
 			new_sprint = frappe.get_doc({
@@ -201,6 +218,8 @@ def get_or_create_target_sprint(sprint_name: str) -> str:
 				"sprint_prefix": doc.sprint_prefix,
 				"project": doc.project,
 				"status": "Draft",
+				"start_date": start_date,
+				"end_date": end_date,
 			})
 			new_sprint.insert(ignore_permissions=True)
 			return new_sprint.name
@@ -211,6 +230,8 @@ def get_or_create_target_sprint(sprint_name: str) -> str:
 			"sprint_prefix": doc.sprint_prefix,
 			"project": doc.project,
 			"status": "Draft",
+			"start_date": start_date,
+			"end_date": end_date,
 		})
 		new_sprint.insert(ignore_permissions=True)
 		return new_sprint.name
@@ -219,6 +240,9 @@ def get_or_create_target_sprint(sprint_name: str) -> str:
 @frappe.whitelist()
 def handle_incomplete_items(sprint: str, action: str):
 	"""Handle Work Items that are not Done when a sprint is completed."""
+	# Snapshot the current velocity before we start moving items
+	current_velocity = frappe.db.get_value("Sprint", sprint, "expected_velocity")
+
 	work_items = frappe.get_all(
 		"Work Item",
 		filters={"sprint": sprint, "workflow_state": ["!=", "Done"]},
@@ -239,14 +263,19 @@ def handle_incomplete_items(sprint: str, action: str):
 
 	# If moving to new sprint, add to new sprint's child table
 	if new_sprint_name:
+		new_sprint = frappe.get_doc("Sprint", new_sprint_name)
 		for wi_name in work_item_names:
-			frappe.get_doc({
-				"doctype": "Sprint Work Item",
-				"parent": new_sprint_name,
-				"parentfield": "work_items",
-				"parenttype": "Sprint",
-				"work_item": wi_name,
-			}).insert(ignore_permissions=True)
+			new_sprint.append("work_items", {"work_item": wi_name})
+		new_sprint.save(ignore_permissions=True)
+
+	# Remove items from the current sprint's child table
+	frappe.db.delete("Sprint Work Item", {
+		"parent": sprint,
+		"work_item": ["in", work_item_names]
+	})
+
+	# Restore the snapshot velocity so the completed sprint doesn't lose its history
+	frappe.db.set_value("Sprint", sprint, "expected_velocity", current_velocity, update_modified=False)
 
 	frappe.db.commit()
 
