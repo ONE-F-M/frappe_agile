@@ -20,8 +20,10 @@ class Sprint(Document):
 		# Guard: skip velocity DB write during DocType schema migration context
 		if not frappe.db.table_exists("Work Item"):
 			return
-		self.calculate_expected_velocity()
-		self.db_set("expected_velocity", self.expected_velocity, update_modified=False)
+		# Completed sprints have their velocity frozen — don't recalculate
+		if self.status != "Completed":
+			self.calculate_expected_velocity()
+			self.db_set("expected_velocity", self.expected_velocity, update_modified=False)
 		self.sync_sprint_status_to_work_items()
 
 	def sync_sprint_status_to_work_items(self):
@@ -81,20 +83,28 @@ class Sprint(Document):
 			)
 
 	def calculate_expected_velocity(self):
-		"""Sum story_points of all Work Items linked to this sprint."""
+		"""Sum story_points of all Work Items linked to this sprint.
+
+		Completed sprints have their velocity frozen — the value at completion
+		time is preserved as a historical "planned scope" metric.
+		"""
+		# Freeze: never overwrite a Completed sprint's velocity
+		if self.status == "Completed":
+			return
+
 		if not self.name or not frappe.db.table_exists("tabWork Item"):
 			self.expected_velocity = 0.0
 			return
 
-		result = frappe.db.sql(
-			"""
-			SELECT COALESCE(SUM(story_points), 0) AS total
-			FROM `tabWork Item`
-			WHERE sprint = %s
-			""",
-			(self.name,),
-			as_dict=True,
-		)
+		from frappe.query_builder import DocType
+		from frappe.query_builder.functions import Coalesce, Sum
+
+		WorkItem = DocType("Work Item")
+		result = (
+			frappe.qb.from_(WorkItem)
+			.select(Coalesce(Sum(WorkItem.story_points), 0).as_("total"))
+			.where(WorkItem.sprint == self.name)
+		).run(as_dict=True)
 
 		self.expected_velocity = flt(result[0].total if result else 0, 2)
 
@@ -102,6 +112,33 @@ class Sprint(Document):
 # ---------------------------------------------------------------------------
 # Module-level helpers called via doc_events from hooks.py
 # ---------------------------------------------------------------------------
+
+
+def _recalculate_sprint_velocity(sprint_name: str):
+	"""Recalculate and persist expected_velocity for a single Sprint.
+
+	Completed sprints are frozen — their velocity is never recalculated.
+	"""
+	if not sprint_name or not frappe.db.exists("Sprint", sprint_name):
+		return
+
+	# Don't touch Completed sprints — velocity is frozen at completion time
+	status = frappe.db.get_value("Sprint", sprint_name, "status")
+	if status == "Completed":
+		return
+
+	from frappe.query_builder import DocType
+	from frappe.query_builder.functions import Coalesce, Sum
+
+	WorkItem = DocType("Work Item")
+	result = (
+		frappe.qb.from_(WorkItem)
+		.select(Coalesce(Sum(WorkItem.story_points), 0).as_("total"))
+		.where(WorkItem.sprint == sprint_name)
+	).run(as_dict=True)
+
+	velocity = flt(result[0].total if result else 0, 2)
+	frappe.db.set_value("Sprint", sprint_name, "expected_velocity", velocity, update_modified=False)
 
 
 def update_sprint_velocity(doc, method=None):
@@ -124,21 +161,7 @@ def update_sprint_velocity(doc, method=None):
 		sprints_to_update.add(doc_before.sprint)
 
 	for sprint_name in sprints_to_update:
-		if not frappe.db.exists("Sprint", sprint_name):
-			continue
-
-		total = frappe.db.sql(
-			"""
-			SELECT COALESCE(SUM(story_points), 0) AS total
-			FROM `tabWork Item`
-			WHERE sprint = %s
-			""",
-			(sprint_name,),
-			as_dict=True,
-		)
-
-		velocity = flt(total[0].total if total else 0, 2)
-		frappe.db.set_value("Sprint", sprint_name, "expected_velocity", velocity, update_modified=False)
+		_recalculate_sprint_velocity(sprint_name)
 
 
 def validate_work_item_sprint(doc, method=None):
@@ -174,16 +197,28 @@ def get_or_create_target_sprint(sprint_name: str) -> str:
 	Falls back to normal creation if the sequence is broken.
 	"""
 	import re
+	from frappe.utils import add_days, date_diff, getdate
+
 	doc = frappe.get_doc("Sprint", sprint_name)
-	
+
+	# Derive new sprint dates: starts the day after source sprint ends,
+	# spans the same duration as the source sprint.
+	duration = date_diff(doc.end_date, doc.start_date) if doc.end_date and doc.start_date else 14
+	new_start = add_days(getdate(doc.end_date), 1) if doc.end_date else doc.start_date
+	new_end = add_days(new_start, duration)
+
+	base_fields = {
+		"doctype": "Sprint",
+		"sprint_prefix": doc.sprint_prefix,
+		"project": doc.project,
+		"status": "Draft",
+		"start_date": new_start,
+		"end_date": new_end,
+	}
+
 	match = re.search(r'-(\d+)$', sprint_name)
 	if not match:
-		new_sprint = frappe.get_doc({
-			"doctype": "Sprint",
-			"sprint_prefix": doc.sprint_prefix,
-			"project": doc.project,
-			"status": "Draft",
-		})
+		new_sprint = frappe.get_doc(base_fields)
 		new_sprint.insert(ignore_permissions=True)
 		return new_sprint.name
 
@@ -196,22 +231,11 @@ def get_or_create_target_sprint(sprint_name: str) -> str:
 		if status == "Draft":
 			return target_sprint_name
 		else:
-			new_sprint = frappe.get_doc({
-				"doctype": "Sprint",
-				"sprint_prefix": doc.sprint_prefix,
-				"project": doc.project,
-				"status": "Draft",
-			})
+			new_sprint = frappe.get_doc(base_fields)
 			new_sprint.insert(ignore_permissions=True)
 			return new_sprint.name
 	else:
-		new_sprint = frappe.get_doc({
-			"doctype": "Sprint",
-			"name": target_sprint_name,
-			"sprint_prefix": doc.sprint_prefix,
-			"project": doc.project,
-			"status": "Draft",
-		})
+		new_sprint = frappe.get_doc({**base_fields, "name": target_sprint_name})
 		new_sprint.insert(ignore_permissions=True)
 		return new_sprint.name
 
@@ -237,6 +261,10 @@ def handle_incomplete_items(sprint: str, action: str):
 	for wi_name in work_item_names:
 		frappe.db.set_value("Work Item", wi_name, "sprint", new_sprint_name or "")
 
+	# Clean up child table rows from the completing sprint
+	for wi_name in work_item_names:
+		frappe.db.delete("Sprint Work Item", {"parent": sprint, "work_item": wi_name})
+
 	# If moving to new sprint, add to new sprint's child table
 	if new_sprint_name:
 		for wi_name in work_item_names:
@@ -247,6 +275,12 @@ def handle_incomplete_items(sprint: str, action: str):
 				"parenttype": "Sprint",
 				"work_item": wi_name,
 			}).insert(ignore_permissions=True)
+		# Recalculate velocity on the new sprint that gained items
+		_recalculate_sprint_velocity(new_sprint_name)
+
+	# NOTE: We intentionally do NOT recalculate velocity on the completing
+	# sprint.  Its velocity will be frozen by calculate_expected_velocity()
+	# when the Sprint is saved with status = "Completed" immediately after.
 
 	frappe.db.commit()
 

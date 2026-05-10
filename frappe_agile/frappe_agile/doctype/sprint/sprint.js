@@ -105,7 +105,11 @@ function _trigger_save(frm, target_sprint) {
 	frappe.validated = true;
 	frm.save().then(() => {
 		if (target_sprint) {
-			frappe.set_route("Form", "Sprint", target_sprint);
+			frappe.set_route("Form", "Sprint", target_sprint).then(() => {
+				// Force a fresh reload so expected_velocity reflects the
+				// server-side recalculation done during handle_incomplete_items.
+				cur_frm && cur_frm.reload_doc();
+			});
 		} else {
 			frm.reload_doc();
 		}
