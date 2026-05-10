@@ -29,6 +29,19 @@ class TestSprint(FrappeTestCase):
 		sprint.insert(ignore_permissions=True)
 		return sprint
 
+	def _make_work_item(self, sprint_name, title, story_points):
+		"""Create a Work Item in the initial workflow state (Open)."""
+		wi = frappe.get_doc({
+			"doctype": "Work Item",
+			"work_item_type": "User Story",
+			"title": title,
+			"sprint": sprint_name,
+			"story_points": story_points,
+			"workflow_state": "Open",
+		})
+		wi.insert(ignore_permissions=True)
+		return wi
+
 	def test_autoname_format(self):
 		"""Sprint name should follow format {sprint_prefix}-{##}."""
 		sprint = self._make_sprint(prefix="ALPHA")
@@ -52,24 +65,8 @@ class TestSprint(FrappeTestCase):
 		"""Expected Velocity should equal the sum of Work Item story points."""
 		sprint = self._make_sprint(prefix="TEST")
 
-		# Create two work items linked to this sprint
-		wi1 = frappe.get_doc({
-			"doctype": "Work Item",
-			"work_item_type": "User Story",
-			"title": "Test WI 1",
-			"sprint": sprint.name,
-			"story_points": 5,
-		})
-		wi1.insert(ignore_permissions=True)
-
-		wi2 = frappe.get_doc({
-			"doctype": "Work Item",
-			"work_item_type": "User Story",
-			"title": "Test WI 2",
-			"sprint": sprint.name,
-			"story_points": 8,
-		})
-		wi2.insert(ignore_permissions=True)
+		wi1 = self._make_work_item(sprint.name, "Test WI 1", 5)
+		wi2 = self._make_work_item(sprint.name, "Test WI 2", 8)
 
 		sprint.reload()
 		self.assertEqual(sprint.expected_velocity, 13.0)
@@ -78,23 +75,8 @@ class TestSprint(FrappeTestCase):
 		"""Removing a Work Item from a Sprint should reduce expected velocity."""
 		sprint = self._make_sprint(prefix="TEST")
 
-		wi1 = frappe.get_doc({
-			"doctype": "Work Item",
-			"work_item_type": "User Story",
-			"title": "WI Remove Test 1",
-			"sprint": sprint.name,
-			"story_points": 5,
-		})
-		wi1.insert(ignore_permissions=True)
-
-		wi2 = frappe.get_doc({
-			"doctype": "Work Item",
-			"work_item_type": "User Story",
-			"title": "WI Remove Test 2",
-			"sprint": sprint.name,
-			"story_points": 8,
-		})
-		wi2.insert(ignore_permissions=True)
+		wi1 = self._make_work_item(sprint.name, "WI Remove Test 1", 5)
+		wi2 = self._make_work_item(sprint.name, "WI Remove Test 2", 8)
 
 		sprint.reload()
 		self.assertEqual(sprint.expected_velocity, 13.0)
@@ -113,23 +95,8 @@ class TestSprint(FrappeTestCase):
 
 		sprint = self._make_sprint(prefix="TEST", status="Active")
 
-		wi1 = frappe.get_doc({
-			"doctype": "Work Item",
-			"work_item_type": "User Story",
-			"title": "WI Move Test 1",
-			"sprint": sprint.name,
-			"story_points": 3,
-		})
-		wi1.insert(ignore_permissions=True)
-
-		wi2 = frappe.get_doc({
-			"doctype": "Work Item",
-			"work_item_type": "User Story",
-			"title": "WI Move Test 2",
-			"sprint": sprint.name,
-			"story_points": 5,
-		})
-		wi2.insert(ignore_permissions=True)
+		wi1 = self._make_work_item(sprint.name, "WI Move Test 1", 3)
+		wi2 = self._make_work_item(sprint.name, "WI Move Test 2", 5)
 
 		sprint.reload()
 		self.assertEqual(sprint.expected_velocity, 8.0)
@@ -151,6 +118,10 @@ class TestSprint(FrappeTestCase):
 		sprint.reload()
 		self.assertEqual(sprint.expected_velocity, 8.0)
 
+		# New sprint velocity must still be correct after old sprint completion
+		new_velocity_after = frappe.db.get_value("Sprint", new_sprint_name, "expected_velocity")
+		self.assertEqual(flt(new_velocity_after, 2), 8.0)
+
 	def test_velocity_frozen_on_move_to_backlog(self):
 		"""Completing a sprint with 'Move to Backlog' should freeze velocity
 		at the pre-completion value, not reset it to 0."""
@@ -158,23 +129,8 @@ class TestSprint(FrappeTestCase):
 
 		sprint = self._make_sprint(prefix="TEST", status="Active")
 
-		wi1 = frappe.get_doc({
-			"doctype": "Work Item",
-			"work_item_type": "User Story",
-			"title": "WI Backlog Test 1",
-			"sprint": sprint.name,
-			"story_points": 5,
-		})
-		wi1.insert(ignore_permissions=True)
-
-		wi2 = frappe.get_doc({
-			"doctype": "Work Item",
-			"work_item_type": "User Story",
-			"title": "WI Backlog Test 2",
-			"sprint": sprint.name,
-			"story_points": 3,
-		})
-		wi2.insert(ignore_permissions=True)
+		wi1 = self._make_work_item(sprint.name, "WI Backlog Test 1", 5)
+		wi2 = self._make_work_item(sprint.name, "WI Backlog Test 2", 3)
 
 		sprint.reload()
 		self.assertEqual(sprint.expected_velocity, 8.0)
