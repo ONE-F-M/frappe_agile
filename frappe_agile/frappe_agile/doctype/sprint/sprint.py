@@ -1,7 +1,7 @@
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import flt
+from frappe.utils import add_days, date_diff, flt
 
 
 class Sprint(Document):
@@ -11,10 +11,22 @@ class Sprint(Document):
 			from frappe.model.naming import make_autoname
 			self.name = make_autoname(f"{self.sprint_prefix}-.###")
 
+	def _is_transitioning_to_completed(self):
+		"""True only when an existing Sprint is being moved to Completed.
+
+		New documents (even if inserted directly as Completed) must still
+		go through velocity calculation so the field is never left stale.
+		"""
+		if self.is_new():
+			return False
+		doc_before = self.get_doc_before_save()
+		return self.status == "Completed" and (not doc_before or doc_before.status != "Completed")
+
 	def validate(self):
 		self.validate_status_transition()
 		self.validate_active_sprint_uniqueness()
-		self.calculate_expected_velocity()
+		if not self._is_transitioning_to_completed():
+			self.calculate_expected_velocity()
 
 	def on_update(self):
 		# Guard: skip velocity DB write during DocType schema migration context
@@ -188,6 +200,41 @@ def validate_work_item_sprint(doc, method=None):
 		)
 
 
+def _build_new_sprint_dates(source_doc):
+	"""Derive start_date and end_date for a new sprint from the source sprint.
+
+	start_date = source end_date + 1 day
+	end_date   = start_date + same duration as the source sprint
+	"""
+	duration = date_diff(source_doc.end_date, source_doc.start_date)
+	new_start = add_days(source_doc.end_date, 1)
+	new_end = add_days(new_start, duration)
+	return new_start, new_end
+
+
+def _make_new_sprint(source_doc, extra_fields=None):
+	"""Create and insert a new Draft Sprint derived from *source_doc*.
+
+	Dates are computed lazily — only called from branches that actually need
+	a new Sprint document.
+	"""
+	new_start, new_end = _build_new_sprint_dates(source_doc)
+	values = {
+		"doctype": "Sprint",
+		"sprint_prefix": source_doc.sprint_prefix,
+		"project": source_doc.project,
+		"status": "Draft",
+		"start_date": new_start,
+		"end_date": new_end,
+	}
+	if extra_fields:
+		values.update(extra_fields)
+
+	new_sprint = frappe.get_doc(values)
+	new_sprint.insert(ignore_permissions=True)
+	return new_sprint.name
+
+
 @frappe.whitelist()
 def get_or_create_target_sprint(sprint_name: str) -> str:
 	"""
@@ -197,30 +244,12 @@ def get_or_create_target_sprint(sprint_name: str) -> str:
 	Falls back to normal creation if the sequence is broken.
 	"""
 	import re
-	from frappe.utils import add_days, date_diff, getdate
 
 	doc = frappe.get_doc("Sprint", sprint_name)
 
-	# Derive new sprint dates: starts the day after source sprint ends,
-	# spans the same duration as the source sprint.
-	duration = date_diff(doc.end_date, doc.start_date) if doc.end_date and doc.start_date else 14
-	new_start = add_days(getdate(doc.end_date), 1) if doc.end_date else doc.start_date
-	new_end = add_days(new_start, duration)
-
-	base_fields = {
-		"doctype": "Sprint",
-		"sprint_prefix": doc.sprint_prefix,
-		"project": doc.project,
-		"status": "Draft",
-		"start_date": new_start,
-		"end_date": new_end,
-	}
-
 	match = re.search(r'-(\d+)$', sprint_name)
 	if not match:
-		new_sprint = frappe.get_doc(base_fields)
-		new_sprint.insert(ignore_permissions=True)
-		return new_sprint.name
+		return _make_new_sprint(doc)
 
 	num_str = match.group(1)
 	next_num = int(num_str) + 1
@@ -231,18 +260,18 @@ def get_or_create_target_sprint(sprint_name: str) -> str:
 		if status == "Draft":
 			return target_sprint_name
 		else:
-			new_sprint = frappe.get_doc(base_fields)
-			new_sprint.insert(ignore_permissions=True)
-			return new_sprint.name
+			return _make_new_sprint(doc)
 	else:
-		new_sprint = frappe.get_doc({**base_fields, "name": target_sprint_name})
-		new_sprint.insert(ignore_permissions=True)
-		return new_sprint.name
+		return _make_new_sprint(doc, {"name": target_sprint_name})
 
 
 @frappe.whitelist()
 def handle_incomplete_items(sprint: str, action: str):
 	"""Handle Work Items that are not Done when a sprint is completed."""
+	# Snapshot the current velocity before any items are moved away.
+	# Normalize with flt() to avoid restoring NULL into a Float field.
+	current_velocity = flt(frappe.db.get_value("Sprint", sprint, "expected_velocity"))
+
 	work_items = frappe.get_all(
 		"Work Item",
 		filters={"sprint": sprint, "workflow_state": ["!=", "Done"]},
@@ -281,6 +310,10 @@ def handle_incomplete_items(sprint: str, action: str):
 	# NOTE: We intentionally do NOT recalculate velocity on the completing
 	# sprint.  Its velocity will be frozen by calculate_expected_velocity()
 	# when the Sprint is saved with status = "Completed" immediately after.
+
+	# Restore the velocity snapshot — guards in update_sprint_velocity should
+	# prevent overwrites, but this is a safety net
+	frappe.db.set_value("Sprint", sprint, "expected_velocity", current_velocity, update_modified=False)
 
 	frappe.db.commit()
 
