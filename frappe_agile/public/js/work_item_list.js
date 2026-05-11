@@ -11,6 +11,37 @@
 //   2. Note: "Backlog" filter behavior is natively handled by standard Frappe 
 //      List Filter DocType managed in setup.py
 
+// Cache for Development Team users (loaded once per page lifecycle)
+let _team_users_cache = null;
+let _team_users_loading = false;
+let _team_users_callbacks = [];
+
+function fetchDevelopmentTeamUsers(callback) {
+	if (_team_users_cache !== null) {
+		callback(_team_users_cache);
+		return;
+	}
+	_team_users_callbacks.push(callback);
+	if (_team_users_loading) return;
+	_team_users_loading = true;
+
+	frappe.call({
+		method: "frappe_agile.frappe_agile.doctype.frappe_agile_settings.frappe_agile_settings.get_development_team_users",
+		callback: function (r) {
+			_team_users_cache = r.message || [];
+			_team_users_loading = false;
+			_team_users_callbacks.forEach(cb => cb(_team_users_cache));
+			_team_users_callbacks = [];
+		},
+		error: function () {
+			_team_users_cache = [];
+			_team_users_loading = false;
+			_team_users_callbacks.forEach(cb => cb(_team_users_cache));
+			_team_users_callbacks = [];
+		}
+	});
+}
+
 frappe.listview_settings["Work Item"] = {
 	onload: function(listview) {
 		listenForKanbanCardClicks(listview);
@@ -102,7 +133,9 @@ function setupListViewFilters(listview) {
 		let filters_to_add = [
 			{ fieldname: 'work_item_type', fieldtype: 'Select', options: type_options, label: __('Work Item Type'), placeholder: __('Work Item Type') },
 			{ fieldname: 'status', fieldtype: 'Select', options: status_options, label: __('Status'), placeholder: __('Status') },
-			{ fieldname: 'sprint', fieldtype: 'Link', options: 'Sprint', label: __('Sprint'), placeholder: __('Sprint') },
+			{ fieldname: 'sprint', fieldtype: 'Link', options: 'Sprint', label: __('Sprint'), placeholder: __('Sprint'),
+				get_query: function() { return { filters: { "status": "Active" } }; }
+			},
 			{ fieldname: 'epic', fieldtype: 'Link', options: 'Work Item', label: __('Epic'), placeholder: __('Epic'),
 				get_query: function() { return { filters: { "work_item_type": "Epic" } }; }
 			},
@@ -144,6 +177,15 @@ function setupListViewFilters(listview) {
 			
 			control.$wrapper.css({'min-width': '20%', 'margin-bottom': '0', 'flex': '1'});
 			listview.custom_list_controls[df.fieldname] = control;
+		});
+		// Apply team-user restriction on the Assignee User filter
+		fetchDevelopmentTeamUsers(function (team_users) {
+			let assignee_ctrl = listview.custom_list_controls["assignee_user"];
+			if (assignee_ctrl) {
+				assignee_ctrl.df.get_query = function () {
+					return { filters: { name: ["in", team_users] } };
+				};
+			}
 		});
 	} else {
 		listview.$custom_list_filters.show();
@@ -199,6 +241,18 @@ function setupKanbanFilters(listview) {
 			},
 			{ fieldname: 'assignee_user', fieldtype: 'Link', options: 'User', label: __('Assignee'), placeholder: __('Assignee') }
 		];
+
+		// Apply team-user restriction on the Kanban Assignee filter after controls are created
+		setTimeout(function() {
+			fetchDevelopmentTeamUsers(function (team_users) {
+				let assignee_ctrl = listview.custom_kanban_controls["assignee_user"];
+				if (assignee_ctrl) {
+					assignee_ctrl.df.get_query = function () {
+						return { filters: { name: ["in", team_users] } };
+					};
+				}
+			});
+		}, 0);
 
 		filters_to_add.forEach(df => {
 			let control = frappe.ui.form.make_control({
