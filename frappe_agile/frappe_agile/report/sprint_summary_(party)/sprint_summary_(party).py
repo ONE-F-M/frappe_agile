@@ -20,16 +20,16 @@ def get_columns(filters):
 	]
 
 	if party == "Business Analyst":
-		columns.append({"fieldname": "business_analyst", "label": "Business Analyst", "fieldtype": "Link", "options": "User", "width": 150})
+		columns.insert(0, {"fieldname": "business_analyst", "label": "Business Analyst", "fieldtype": "Data", "width": 150})
+		points_label = "Total Points Scoped"
 	else:
-		columns.append({"fieldname": "developer", "label": "Developer", "fieldtype": "Link", "options": "User", "width": 150})
-	columns.append({"fieldname": "total_planned_points", "label": "Total Planned Points", "fieldtype": "Float", "width": 150})
-	columns.append({"fieldname": "total_estimated_points", "label": "Total Estimated Points", "fieldtype": "Float", "width": 160})
-	columns.append({"fieldname": "target_actual_points", "label": "Target Actual Points", "fieldtype": "Float", "width": 160})
-	columns.append({"fieldname": "accepted_points", "label": "Accepted Points", "fieldtype": "Float", "width": 160})
-	columns.append({"fieldname": "target_performance", "label": "Target Performance %", "fieldtype": "Percent", "width": 160})
-	columns.append({"fieldname": "completion_rate", "label": "Completion Rate %", "fieldtype": "Percent", "width": 160})
-	columns.append({"fieldname": "acceptance_rate", "label": "Acceptance Rate %", "fieldtype": "Percent", "width": 160})
+		columns.insert(0, {"fieldname": "developer", "label": "Developer", "fieldtype": "Data", "width": 150})
+		points_label = "Total Points Assigned"
+
+	columns.append({"fieldname": "target_points", "label": "Target Points", "fieldtype": "Float", "width": 130})
+	columns.append({"fieldname": "total_points", "label": points_label, "fieldtype": "Float", "width": 150})
+	columns.append({"fieldname": "pct_completed", "label": "% Completed", "fieldtype": "Percent", "width": 130})
+	columns.append({"fieldname": "pct_acceptance", "label": "% Acceptance", "fieldtype": "Percent", "width": 130})
 	
 	return columns
 
@@ -37,10 +37,11 @@ def get_data(filters):
 	if not filters:
 		filters = {}
 		
+	party = filters.get("party", "Business Analyst")
 	Sprint = frappe.qb.DocType("Sprint")
 	query = (
 		frappe.qb.from_(Sprint)
-		.select(Sprint.name, Sprint.start_date, Sprint.end_date)
+		.select(Sprint.name, Sprint.start_date, Sprint.end_date, Sprint.business_analyst)
 		.orderby(Sprint.start_date, order=frappe.qb.desc)
 	)
 	
@@ -52,6 +53,14 @@ def get_data(filters):
 	if filters.get("sprint"):
 		query = query.where(Sprint.name == filters.get("sprint"))
 		
+	if party == "Business Analyst":
+		if filters.get("business_analyst"):
+			query = query.where(Sprint.business_analyst == filters.get("business_analyst"))
+		else:
+			# Exclude sprints with no BA as requested
+			query = query.where(Sprint.business_analyst.isnotnull())
+			query = query.where(Sprint.business_analyst != "")
+		
 	sprints = query.run(as_dict=True)
 	if not sprints:
 		return []
@@ -59,39 +68,27 @@ def get_data(filters):
 	sprint_names = [s.name for s in sprints]
 	sprint_map = {s.name: s for s in sprints}
 	
-	party = filters.get("party", "Business Analyst")
-	
 	SprintItem = frappe.qb.DocType("Sprint Work Item")
-	
-	if party == "Business Analyst":
-		WorkItem = frappe.qb.DocType("Work Item")
-		wi_query = (
-			frappe.qb.from_(SprintItem)
-			.join(WorkItem).on(SprintItem.work_item == WorkItem.name)
-			.select(
-				SprintItem.parent.as_("sprint"),
-				WorkItem.owner,
-				SprintItem.story_points,
-				SprintItem.status
-			)
-			.where(SprintItem.parent.isin(sprint_names))
-			.where(SprintItem.work_item_type.isin(["User Story", "Task"]))
+	wi_query = (
+		frappe.qb.from_(SprintItem)
+		.select(
+			SprintItem.parent.as_("sprint"),
+			SprintItem.assignee_user,
+			SprintItem.story_points,
+			SprintItem.status
 		)
-	else:
-		wi_query = (
-			frappe.qb.from_(SprintItem)
-			.select(
-				SprintItem.parent.as_("sprint"),
-				SprintItem.assignee_user,
-				SprintItem.story_points,
-				SprintItem.status
-			)
-			.where(SprintItem.parent.isin(sprint_names))
-			.where(SprintItem.work_item_type.isin(["User Story", "Task"]))
-		)
+		.where(SprintItem.parent.isin(sprint_names))
+		.where(SprintItem.work_item_type.isin(["User Story", "Task"]))
+	)
 	
 	work_items = wi_query.run(as_dict=True)
 	
+	# Target Velocity from Settings
+	if party == "Business Analyst":
+		target_velocity = flt(frappe.db.get_single_value("Frappe Agile Settings", "ba_velocity"))
+	else:
+		target_velocity = flt(frappe.db.get_single_value("Frappe Agile Settings", "developer_velocity"))
+
 	# Group by (sprint, user)
 	grouped_data = {}
 	
@@ -99,10 +96,7 @@ def get_data(filters):
 		sprint_name = wi.sprint
 		
 		if party == "Business Analyst":
-			user = wi.owner
-			# Apply filter if set
-			if filters.get("business_analyst") and user != filters.get("business_analyst"):
-				continue
+			user = sprint_map[sprint_name].business_analyst
 		else:
 			user = wi.assignee_user
 			# Apply filter if set
@@ -115,61 +109,66 @@ def get_data(filters):
 		key = (sprint_name, user)
 		if key not in grouped_data:
 			grouped_data[key] = {
-				"total_estimated_points": 0.0,
-				"target_actual_points": 0.0,
-				"accepted_points": 0.0
+				"total_points": 0.0,
+				"points_completed": 0.0,
+				"points_accepted": 0.0
 			}
 			
-		grouped_data[key]["total_estimated_points"] += flt(wi.story_points)
+		points = flt(wi.story_points)
+		grouped_data[key]["total_points"] += points
 		
 		if wi.status in ["Done", "In Staging"]:
-			grouped_data[key]["target_actual_points"] += flt(wi.story_points)
+			grouped_data[key]["points_completed"] += points
 			
 		if wi.status == "Done":
-			grouped_data[key]["accepted_points"] += flt(wi.story_points)
+			grouped_data[key]["points_accepted"] += points
 			
 	data = []
 	
-	default_planned_points = 80.0
+	# Fetch all user full names for mapping
+	involved_users = set()
+	for (sprint_name, user) in grouped_data.keys():
+		involved_users.add(user)
+		
+	user_full_name_map = {}
+	if involved_users:
+		users_data = frappe.get_all("User", 
+			filters={"name": ["in", list(involved_users)]}, 
+			fields=["name", "full_name"]
+		)
+		user_full_name_map = {u.name: u.full_name or u.name for u in users_data}
 
-	if party == "Business Analyst":
-		configured_planned_points = flt(frappe.db.get_single_value("Frappe Agile Settings", "ba_velocity"))
-	else:
-		configured_planned_points = flt(frappe.db.get_single_value("Frappe Agile Settings", "developer_velocity"))
-
-	total_planned_points = configured_planned_points if configured_planned_points > 0 else default_planned_points
 	for (sprint_name, user), metrics in grouped_data.items():
 		sprint_doc = sprint_map.get(sprint_name)
 		
-		total_estimated_points = metrics["total_estimated_points"]
-		target_actual_points = metrics["target_actual_points"]
-		accepted_points = metrics["accepted_points"]
+		total_points = metrics["total_points"]
+		points_completed = metrics["points_completed"]
+		points_accepted = metrics["points_accepted"]
 		
-		target_performance = (total_estimated_points / total_planned_points) * 100 if total_planned_points else 0.0
-		completion_rate = (target_actual_points / total_planned_points) * 100 if total_planned_points else 0.0
-		acceptance_rate = (accepted_points / total_planned_points) * 100 if total_planned_points else 0.0
+		# Percentages use total_points as denominator
+		pct_completed = (points_completed / total_points) * 100 if total_points else 0.0
+		pct_acceptance = (points_accepted / total_points) * 100 if total_points else 0.0
+
+		full_name = user_full_name_map.get(user, user)
 
 		row = {
 			"sprint": sprint_name,
 			"sprint_start_date": sprint_doc.start_date,
 			"sprint_end_date": sprint_doc.end_date,
-			"total_planned_points": total_planned_points,
-			"total_estimated_points": total_estimated_points,
-			"target_actual_points": target_actual_points,
-			"accepted_points": accepted_points,
-			"target_performance": target_performance,
-			"completion_rate": completion_rate,
-			"acceptance_rate": acceptance_rate
+			"target_points": target_velocity,
+			"total_points": total_points,
+			"pct_completed": pct_completed,
+			"pct_acceptance": pct_acceptance
 		}
 		
 		if party == "Business Analyst":
-			row["business_analyst"] = user
+			row["business_analyst"] = full_name
 		else:
-			row["developer"] = user
+			row["developer"] = full_name
 			
 		data.append(row)
 		
-	# Sort data
-	data.sort(key=lambda x: x.get("sprint") or "", reverse=True)
+	# Sort data by start date desc
+	data.sort(key=lambda x: (x.get("sprint_start_date") or "", x.get("sprint") or ""), reverse=True)
 		
 	return data
