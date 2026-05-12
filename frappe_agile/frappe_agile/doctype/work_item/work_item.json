@@ -175,14 +175,11 @@
    "label": "Implementation Details"
   },
   {
-   "depends_on": "eval:doc.pr_required==1",
    "fieldname": "planning_prompt_count",
    "fieldtype": "Int",
-   "label": "Planning Prompt Count",
-   "mandatory_depends_on": "eval:doc.pr_required==1"
+   "label": "Planning Prompt Count"
   },
   {
-   "depends_on": "eval:doc.pr_required==1",
    "fieldname": "execution_prompt_count",
    "fieldtype": "Int",
    "label": "Execution Prompt Count"
@@ -192,7 +189,6 @@
    "fieldname": "pr_link",
    "fieldtype": "Data",
    "label": "PR Link",
-   "mandatory_depends_on": "eval:doc.pr_required==1",
    "options": "URL"
   },
   {
@@ -200,7 +196,6 @@
    "fieldname": "pr_reviewer_user",
    "fieldtype": "Link",
    "label": "PR Reviewer User",
-   "mandatory_depends_on": "eval:doc.pr_required==1",
    "options": "User"
   },
   {
@@ -258,7 +253,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-05-12 09:35:30.070357",
+ "modified": "2026-05-12 15:55:12.455710",
  "modified_by": "Administrator",
  "module": "Frappe Agile",
  "name": "Work Item",
@@ -304,7 +299,6 @@
  ],
  "row_format": "Dynamic",
  "sort_field": "modified",
- "show_title_field_in_link": 1,
  "sort_order": "DESC",
  "states": [],
  "title_field": "title"
