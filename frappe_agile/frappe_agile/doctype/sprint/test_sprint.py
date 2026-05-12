@@ -132,6 +132,60 @@ class TestSprint(FrappeTestCase):
 			"Expected Velocity was reset to 0 on sprint close!"
 		)
 
+
+	def test_move_to_new_sprint(self):
+		"""Incomplete items should move to a new sprint with correct dates."""
+		from frappe_agile.frappe_agile.doctype.sprint.sprint import handle_incomplete_items
+
+		# 1. Setup source sprint and items
+		sprint = self._make_sprint(prefix="TEST", status="Active")
+
+		wi1 = self._make_work_item("Test WI 1", sprint.name, story_points=5)
+		wi2 = self._make_work_item("Test WI 2", sprint.name, story_points=8)
+
+		# Add items to sprint child table (simulating UI behavior)
+		sprint.append("work_items", {
+			"work_item": wi1.name,
+			"work_item_type": wi1.work_item_type,
+			"title": wi1.title,
+			"status": wi1.status,
+			"story_points": wi1.story_points
+		})
+		sprint.append("work_items", {
+			"work_item": wi2.name,
+			"work_item_type": wi2.work_item_type,
+			"title": wi2.title,
+			"status": wi2.status,
+			"story_points": wi2.story_points
+		})
+		sprint.save()
+
+		old_end_date = sprint.end_date
+
+		# 2. Move items to new sprint
+		new_sprint_name = handle_incomplete_items(sprint.name, action="Move to New Sprint")
+
+		# 3. Verify new sprint
+		self.assertTrue(new_sprint_name)
+		new_sprint = frappe.get_doc("Sprint", new_sprint_name)
+
+		from frappe.utils import getdate
+		self.assertEqual(getdate(new_sprint.start_date), getdate(add_days(old_end_date, 1)))
+		self.assertEqual(getdate(new_sprint.end_date), getdate(add_days(new_sprint.start_date, 7)))
+
+		# Verify items moved
+		self.assertEqual(len(new_sprint.work_items), 2)
+		moved_items = [d.work_item for d in new_sprint.work_items]
+		self.assertIn(wi1.name, moved_items)
+		self.assertIn(wi2.name, moved_items)
+
+		# Verify Work Item records updated
+		self.assertEqual(frappe.db.get_value("Work Item", wi1.name, "sprint"), new_sprint_name)
+
+		# Verify old sprint velocity preserved
+		sprint.reload()
+		self.assertEqual(sprint.expected_velocity, 13.0)
+
 	def tearDown(self):
 		# Explicit cleanup for data committed by handle_incomplete_items
 		self._cleanup_test_data()
