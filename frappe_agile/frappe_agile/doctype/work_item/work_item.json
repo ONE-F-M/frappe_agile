@@ -29,6 +29,7 @@
   "epic",
   "small_text_yecv",
   "implementation_details_section",
+  "pr_required",
   "planning_prompt_count",
   "execution_prompt_count",
   "pr_link",
@@ -184,12 +185,14 @@
    "label": "Execution Prompt Count"
   },
   {
+   "depends_on": "eval:doc.pr_required==1",
    "fieldname": "pr_link",
    "fieldtype": "Data",
    "label": "PR Link",
    "options": "URL"
   },
   {
+   "depends_on": "eval:doc.pr_required==1",
    "fieldname": "pr_reviewer_user",
    "fieldtype": "Link",
    "label": "PR Reviewer User",
@@ -200,9 +203,11 @@
    "fieldtype": "Column Break"
   },
   {
+   "depends_on": "eval:doc.pr_required==1",
    "fieldname": "ai_tools_feedback",
    "fieldtype": "Long Text",
-   "label": "AI Tools Feedback"
+   "label": "AI Tools Feedback",
+   "mandatory_depends_on": "eval:doc.pr_required==1"
   },
   {
    "fieldname": "labels_section",
@@ -238,11 +243,17 @@
    "fieldtype": "Small Text",
    "label": "Epic Title",
    "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "pr_required",
+   "fieldtype": "Check",
+   "label": "PR Required"
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-04-30 12:14:24.534547",
+ "modified": "2026-05-12 15:55:12.455710",
  "modified_by": "Administrator",
  "module": "Frappe Agile",
  "name": "Work Item",
@@ -288,7 +299,6 @@
  ],
  "row_format": "Dynamic",
  "sort_field": "modified",
- "show_title_field_in_link": 1,
  "sort_order": "DESC",
  "states": [],
  "title_field": "title"

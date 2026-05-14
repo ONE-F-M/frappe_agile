@@ -2,7 +2,7 @@
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
-from frappe.utils import today, add_days
+from frappe.utils import today, add_days, flt
 
 
 # Prefixes used by tests — any Sprint / Work Item using these is test data.
@@ -43,7 +43,7 @@ class TestSprint(FrappeTestCase):
 
 		# Delete orphaned Work Items created by tests (title pattern)
 		frappe.db.delete("Work Item", {"title": ("like", "Test WI%")})
-		frappe.db.delete("Work Item", {"title": ("like", "WI %pts")})
+		frappe.db.delete("Work Item", {"title": ("like", "WI %")})
 
 		# Delete test sprints
 		frappe.db.delete("Sprint", {"sprint_prefix": ("in", TEST_PREFIXES)})
@@ -104,6 +104,57 @@ class TestSprint(FrappeTestCase):
 		sprint.reload()
 		self.assertEqual(sprint.expected_velocity, 13.0)
 
+	def test_velocity_updates_on_work_item_removal(self):
+		"""Removing a Work Item from a Sprint should reduce expected velocity."""
+		sprint = self._make_sprint(prefix="TEST")
+
+		wi1 = self._make_work_item("WI Remove Test 1", sprint.name, story_points=5)
+		self._make_work_item("WI Remove Test 2", sprint.name, story_points=8)
+
+		sprint.reload()
+		self.assertEqual(sprint.expected_velocity, 13.0)
+
+		# Remove wi1 from the sprint
+		wi1.sprint = ""
+		wi1.save(ignore_permissions=True)
+
+		sprint.reload()
+		self.assertEqual(sprint.expected_velocity, 8.0)
+
+	def test_velocity_on_new_sprint_after_handle_incomplete_items(self):
+		"""When incomplete items are moved to a new sprint, the new sprint
+		should have the correct expected velocity (not zero)."""
+		from frappe_agile.frappe_agile.doctype.sprint.sprint import handle_incomplete_items
+
+		sprint = self._make_sprint(prefix="TEST", status="Active")
+
+		self._make_work_item("WI Move Test 1", sprint.name, story_points=3)
+		self._make_work_item("WI Move Test 2", sprint.name, story_points=5)
+
+		sprint.reload()
+		self.assertEqual(sprint.expected_velocity, 8.0)
+
+		# Move incomplete items to a new sprint
+		new_sprint_name = handle_incomplete_items(sprint.name, "Move to New Sprint")
+		self.assertTrue(new_sprint_name)
+
+		# New sprint should have the correct sum of moved story points
+		new_velocity = frappe.db.get_value("Sprint", new_sprint_name, "expected_velocity")
+		self.assertEqual(flt(new_velocity, 2), 8.0)
+
+		# Now simulate the completion save (as _trigger_save does on the client)
+		sprint.reload()
+		sprint.status = "Completed"
+		sprint.save(ignore_permissions=True)
+
+		# Completed sprint's velocity should be frozen at the pre-completion value
+		sprint.reload()
+		self.assertEqual(sprint.expected_velocity, 8.0)
+
+		# New sprint velocity must still be correct after old sprint completion
+		new_velocity_after = frappe.db.get_value("Sprint", new_sprint_name, "expected_velocity")
+		self.assertEqual(flt(new_velocity_after, 2), 8.0)
+
 	def test_velocity_preserved_on_sprint_close(self):
 		"""Expected Velocity must NOT reset when a sprint is completed."""
 		sprint = self._make_sprint(prefix="TEST", status="Active")
@@ -132,8 +183,41 @@ class TestSprint(FrappeTestCase):
 			"Expected Velocity was reset to 0 on sprint close!"
 		)
 
+	def test_velocity_frozen_on_move_to_backlog(self):
+		"""Completing a sprint with 'Move to Backlog' should freeze velocity
+		at the pre-completion value, not reset it to 0."""
+		from frappe_agile.frappe_agile.doctype.sprint.sprint import handle_incomplete_items
+
+		sprint = self._make_sprint(prefix="TEST", status="Active")
+
+		self._make_work_item("WI Backlog Test 1", sprint.name, story_points=5)
+		self._make_work_item("WI Backlog Test 2", sprint.name, story_points=3)
+
+		sprint.reload()
+		self.assertEqual(sprint.expected_velocity, 8.0)
+
+		# Move items to backlog (no new sprint created)
+		result = handle_incomplete_items(sprint.name, "Move to Backlog")
+		self.assertIsNone(result)
+
+		# Now simulate the completion save
+		sprint.reload()
+		sprint.status = "Completed"
+		sprint.save(ignore_permissions=True)
+
+		# Velocity should be frozen at 8.0, NOT reset to 0
+		sprint.reload()
+		self.assertEqual(sprint.expected_velocity, 8.0)
+
+		# Child table rows should have been cleaned up
+		child_rows = frappe.get_all(
+			"Sprint Work Item",
+			filters={"parent": sprint.name},
+			fields=["name"]
+		)
+		self.assertEqual(len(child_rows), 0)
+
 	def tearDown(self):
 		# Explicit cleanup for data committed by handle_incomplete_items
 		self._cleanup_test_data()
 		frappe.db.rollback()
-
