@@ -65,8 +65,10 @@ jobs:
           bench set-redis-cache-host 127.0.0.1:13000
           bench set-redis-queue-host 127.0.0.1:11000
           bench set-redis-socketio-host 127.0.0.1:12000
+          bench get-app erpnext https://github.com/frappe/erpnext --branch version-15
           bench get-app frappe_agile "$GITHUB_WORKSPACE"
           bench new-site --db-root-password root --admin-password admin --mariadb-root-password root test_site
+          bench --site test_site install-app erpnext
           bench --site test_site install-app frappe_agile
           bench --site test_site set-config allow_tests true
       - name: Run tests
