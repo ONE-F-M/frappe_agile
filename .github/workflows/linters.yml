@@ -3,6 +3,7 @@ name: Linters
 
 on:
   pull_request:
+    branches: [staging, test-production, version-15]
   workflow_dispatch:
 
 permissions:
@@ -77,3 +78,15 @@ jobs:
           pip install pip-audit
           cd ${GITHUB_WORKSPACE}
           pip-audit --desc on --ignore-vuln GHSA-4xqq-73wg-5mjp --ignore-vuln PYSEC-2023-312 .
+
+  precommit:
+    name: 'pre-commit'
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.14'
+      - uses: pre-commit/action@v3.0.1
