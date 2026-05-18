@@ -17,7 +17,7 @@ build-backend = "flit_core.buildapi"
 
 # These dependencies are only installed when developer mode is enabled
 [tool.bench.dev-dependencies]
-# package_name = "~=1.1.0"
+basedmypy = "~=2.9.0"
 
 [tool.ruff]
 line-length = 110
@@ -62,8 +62,11 @@ incremental = true
 sqlite_cache = true
 files = [
     "frappe_agile/__init__.py",
+    "frappe_agile/hooks.py",
+    "frappe_agile/api/github_webhook.py",
+    "frappe_agile/frappe_agile/doctype/sprint/sprint.py",
 ]
-exclude = "^frappe_agile/patches|/test_.*\.py$"
+exclude = "^frappe_agile/patches|/test_.*\\.py$"
 
 [[tool.mypy.overrides]]
 module = [
