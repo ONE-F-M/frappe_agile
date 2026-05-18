@@ -1,3 +1,5 @@
+![Coverage](https://img.shields.io/badge/coverage-30%25%2B-brightgreen)
+
 # Frappe Agile
 
 > Agile project management for Frappe — sprints, boards, and backlogs, natively integrated with your Frappe/ERPNext instance.
