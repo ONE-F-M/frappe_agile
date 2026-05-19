@@ -215,6 +215,26 @@ Core entities:
 - Sprints with start/end dates
 - Epic → User Story → Task hierarchy
 
+### Agile Data Model Diagram
+
+```text
+Board
+└── Column
+    └── Work Item (Task / Bug / User Story)
+
+Epic
+└── User Story
+    └── Task
+
+Sprint
+└── Work Items
+    ├── story_points
+    ├── sprint_status
+    └── expected_velocity contribution
+```
+
+This structure lets teams plan on boards, group delivery into sprints, and trace execution work back to larger user-facing outcomes.
+
 ## Running Tests
 
 ```bash
