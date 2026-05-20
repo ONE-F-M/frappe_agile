@@ -204,3 +204,32 @@ Push your branch and open a PR against the `develop` branch on GitHub.
 ## License
 
 [MIT](license.txt) — © One FM
+
+
+## Architecture Overview
+
+frappe_agile provides sprint and task management built on Frappe v15.
+
+Core entities:
+- Boards, Columns, Tasks
+- Sprints with start/end dates
+- Epic → User Story → Task hierarchy
+
+## Running Tests
+
+```bash
+bench --site <site> run-tests --app frappe_agile --failfast
+```
+
+## Contributing
+
+1. Branch from `staging`
+2. Keep changes scoped to the work item
+3. Open PRs back to `staging`
+4. Use conventional commits
+
+## Data Model
+
+- **Board** → **Column** → **Task**
+- **Sprint** groups tasks with story points
+- **Epic** → **User Story** → **Task** hierarchy tracks work breakdown
