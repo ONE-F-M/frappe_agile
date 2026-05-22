@@ -87,7 +87,8 @@
   {
    "fieldname": "sprint_goal",
    "fieldtype": "Small Text",
-   "label": "Sprint Goal"
+   "label": "Sprint Goal",
+   "reqd": 1
   },
   {
    "fieldname": "column_break_utgf",
