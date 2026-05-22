@@ -22,6 +22,9 @@
   "column_break_utgf",
   "expected_velocity",
   "target_points",
+  "column_break_hkuw",
+  "stories_carried_forward",
+  "points_carried_forward",
   "work_items_section",
   "work_items"
  ],
@@ -104,6 +107,24 @@
    "fieldname": "target_points",
    "fieldtype": "Float",
    "label": "Target Points"
+  },
+  {
+   "fieldname": "column_break_hkuw",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "stories_carried_forward",
+   "fieldtype": "Int",
+   "label": "Stories Carried Forward",
+   "non_negative": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "points_carried_forward",
+   "fieldtype": "Float",
+   "label": "Points Carried Forward",
+   "precision": "1",
+   "read_only": 1
   },
   {
    "fieldname": "work_items_section",
