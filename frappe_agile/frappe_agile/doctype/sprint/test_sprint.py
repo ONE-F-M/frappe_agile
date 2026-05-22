@@ -48,7 +48,7 @@ class TestSprint(FrappeTestCase):
 		# Delete test sprints
 		frappe.db.delete("Sprint", {"sprint_prefix": ("in", TEST_PREFIXES)})
 
-	def _make_sprint(self, prefix="TEST", status="Draft", project=None):
+	def _make_sprint(self, prefix="TEST", status="Draft", project=None, sprint_goal="Test Sprint Goal"):
 		sprint = frappe.get_doc({
 			"doctype": "Sprint",
 			"sprint_prefix": prefix,
@@ -56,6 +56,7 @@ class TestSprint(FrappeTestCase):
 			"project": project,
 			"start_date": today(),
 			"end_date": add_days(today(), 14),
+			"sprint_goal": sprint_goal,
 		})
 		sprint.insert(ignore_permissions=True)
 		return sprint
