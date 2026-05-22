@@ -1,7 +1,7 @@
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import add_days, date_diff, flt
+from frappe.utils import add_days, cint, date_diff, flt
 
 
 class Sprint(Document):
@@ -151,6 +151,47 @@ def _recalculate_sprint_velocity(sprint_name: str):
 
 	velocity = flt(result[0].total if result else 0, 2)
 	frappe.db.set_value("Sprint", sprint_name, "expected_velocity", velocity, update_modified=False)
+
+
+def _recalculate_brought_forward(sprint_name: str):
+	"""Recalculate and persist stories_brought_forward and points_brought_forward.
+
+	Counts Sprint Work Item child rows where is_brought_forward == 1,
+	which are set when a Work Item moves into this sprint from a different sprint.
+	"""
+	if not sprint_name or not frappe.db.exists("Sprint", sprint_name):
+		return
+
+	if not frappe.db.table_exists("tabSprint Work Item"):
+		return
+
+	from frappe.query_builder import DocType
+	from frappe.query_builder.functions import Coalesce, Count, Sum
+
+	SWI = DocType("Sprint Work Item")
+	result = (
+		frappe.qb.from_(SWI)
+		.select(
+			Count(SWI.name).as_("stories"),
+			Coalesce(Sum(SWI.story_points), 0).as_("points"),
+		)
+		.where(SWI.parent == sprint_name)
+		.where(SWI.is_brought_forward == 1)
+	).run(as_dict=True)
+
+	row = result[0] if result else {}
+	stories = cint(row.get("stories", 0))
+	points = flt(row.get("points", 0), 1)
+
+	frappe.db.set_value(
+		"Sprint",
+		sprint_name,
+		{
+			"stories_brought_forward": stories,
+			"points_brought_forward": points,
+		},
+		update_modified=False,
+	)
 
 
 def update_sprint_velocity(doc, method=None):

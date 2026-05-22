@@ -38,7 +38,9 @@ class WorkItem(Document):
 			if old_sprint:
 				self._remove_from_sprint(old_sprint)
 			if self.sprint:
-				self._add_to_sprint(self.sprint)
+				# Mark as brought forward if the item previously belonged to a different sprint
+				is_brought_forward = bool(old_sprint and old_sprint != self.sprint)
+				self._add_to_sprint(self.sprint, is_brought_forward=is_brought_forward)
 		elif self.sprint:
 			# Sprint didn't change, but other fields (title, status, etc.) might have
 			self._sync_with_sprint(self.sprint)
@@ -77,8 +79,12 @@ class WorkItem(Document):
 			update_modified=False,
 		)
 
-	def _add_to_sprint(self, sprint_name):
-		"""Append a row to Sprint.work_items for this work item."""
+	def _add_to_sprint(self, sprint_name, is_brought_forward: bool = False):
+		"""Append a row to Sprint.work_items for this work item.
+
+		is_brought_forward: set True when the work item was previously assigned
+		to a different sprint (i.e., it's being moved in, not originally scoped).
+		"""
 		if not frappe.db.exists("Sprint", sprint_name):
 			return
 
@@ -97,9 +103,15 @@ class WorkItem(Document):
 				"status": self.status,
 				"story_points": self.story_points,
 				"assignee_user": self.assignee_user,
+				"is_brought_forward": 1 if is_brought_forward else 0,
 			},
 		)
 		sprint_doc.save(ignore_permissions=True)
+
+		# Recalculate brought-forward counts on the sprint that received this item
+		if is_brought_forward:
+			from frappe_agile.frappe_agile.doctype.sprint.sprint import _recalculate_brought_forward
+			_recalculate_brought_forward(sprint_name)
 
 	def _remove_from_sprint(self, sprint_name):
 		"""Remove the row for this work item from Sprint.work_items.
