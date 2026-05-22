@@ -36,6 +36,12 @@ def get_data(filters):
 		.select(Sprint.name)
 	)
 
+	# Server-side guard: require date range when no explicit sprint is given
+	if not filters.get("sprint") and (
+		not filters.get("start_date") or not filters.get("end_date")
+	):
+		return []
+
 	if filters.get("start_date") and filters.get("end_date"):
 		sprint_query = sprint_query.where(Sprint.start_date <= filters.get("end_date"))
 		sprint_query = sprint_query.where(Sprint.end_date >= filters.get("start_date"))
@@ -85,9 +91,10 @@ def get_data(filters):
 		wi_label_map.setdefault(row.parent, []).append(row.label)
 
 	# Sort each WI's labels alphabetically for consistent grouping key
+	# Deduplicate first to prevent "OpenAI, OpenAI" style keys from duplicate rows
 	wi_combo_map = {}
 	for wi_name, labels in wi_label_map.items():
-		combo = ", ".join(sorted(labels))
+		combo = ", ".join(sorted(set(labels)))
 		wi_combo_map[wi_name] = combo
 
 	# Work items with no labels get grouped as "(No Labels)"
@@ -114,13 +121,15 @@ def get_data(filters):
 	data = []
 	for combo, metrics in combo_data.items():
 		count = metrics["story_count"]
-		points = flt(metrics["story_points"], 1)
+		points_raw = metrics["story_points"]
+		points = flt(points_raw, 1)
 		data.append({
 			"combined_labels": combo,
 			"story_count": count,
 			"story_count_pct": flt((count / total_stories * 100) if total_stories else 0, 2),
 			"story_points": points,
-			"story_points_pct": flt((points / total_points * 100) if total_points else 0, 2),
+			# Use raw unrounded value for percentage to avoid compounding rounding error
+			"story_points_pct": flt((points_raw / total_points * 100) if total_points else 0, 2),
 		})
 
 	# Sort by story count descending, then alphabetically by label combo
