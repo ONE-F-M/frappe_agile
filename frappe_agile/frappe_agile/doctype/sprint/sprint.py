@@ -282,8 +282,13 @@ def handle_incomplete_items(sprint: str, action: str):
 	if action == "Move to New Sprint":
 		new_sprint_name = get_or_create_target_sprint(sprint)
 
+	if not work_items:
+		return new_sprint_name
+
 	# --- Capture carried-forward snapshot BEFORE items are moved ---
 	# This permanently records the spill-over on the completing sprint.
+	# Only written when there are actually incomplete items (otherwise the
+	# default value of 0 is already correct, and writing before commit is safe).
 	stories_cf = len(work_items)
 	points_cf = flt(sum(flt(wi.story_points) for wi in work_items), 1)
 	frappe.db.set_value(
@@ -296,8 +301,6 @@ def handle_incomplete_items(sprint: str, action: str):
 		update_modified=False,
 	)
 
-	if not work_items:
-		return new_sprint_name
 
 	# Move each incomplete Work Item
 	work_item_names = [wi.name for wi in work_items]
