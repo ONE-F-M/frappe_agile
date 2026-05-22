@@ -17,8 +17,8 @@ def get_columns():
 	return [
 		{"fieldname": "business_analyst", "label": "Business Analyst", "fieldtype": "Data", "width": 180},
 		{"fieldname": "sprints", "label": "Sprint(s)", "fieldtype": "Data", "width": 200},
-		{"fieldname": "sprint_start_date", "label": "Sprint Start Date", "fieldtype": "Date", "width": 150},
-		{"fieldname": "sprint_end_date", "label": "Sprint End Date", "fieldtype": "Date", "width": 150},
+		{"fieldname": "sprint_start_date", "label": "Start Date", "fieldtype": "Date", "width": 150},
+		{"fieldname": "sprint_end_date", "label": "End Date", "fieldtype": "Date", "width": 150},
 		{"fieldname": "no_of_sprints", "label": "No. of Sprints", "fieldtype": "Int", "width": 120},
 		{"fieldname": "target_points", "label": "Target Points", "fieldtype": "Float", "width": 130},
 		{"fieldname": "expected_velocity", "label": "Expected Velocity", "fieldtype": "Float", "width": 150},
@@ -161,13 +161,17 @@ def get_data(filters):
 			1
 		)
 
-		# Sum completed and accepted across all sprints
-		total_completed = flt(sum(v["completed_points"] for v in sprint_dict.values()), 1)
-		total_accepted = flt(sum(v["accepted_points"] for v in sprint_dict.values()), 1)
+		# Sum completed and accepted across all sprints — keep raw for rate calculation
+		total_completed_raw = sum(v["completed_points"] for v in sprint_dict.values())
+		total_accepted_raw = sum(v["accepted_points"] for v in sprint_dict.values())
 
-		# Rates use Expected Velocity as denominator (consistent with developer report)
-		completion_rate = (total_completed / expected_velocity * 100) if expected_velocity else 0.0
-		acceptance_rate = (total_accepted / expected_velocity * 100) if expected_velocity else 0.0
+		# Rates are computed from raw (unrounded) values to avoid compounding error
+		completion_rate = (total_completed_raw / expected_velocity * 100) if expected_velocity else 0.0
+		acceptance_rate = (total_accepted_raw / expected_velocity * 100) if expected_velocity else 0.0
+
+		# Round display values after rate calculation
+		total_completed = flt(total_completed_raw, 1)
+		total_accepted = flt(total_accepted_raw, 1)
 
 		# Date range across all sprints for this BA
 		sprint_docs = [sprint_map[s] for s in sprint_names_for_ba if s in sprint_map]
