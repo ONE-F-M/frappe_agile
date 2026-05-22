@@ -36,6 +36,9 @@ class Sprint(Document):
 		if self.status != "Completed":
 			self.calculate_expected_velocity()
 			self.db_set("expected_velocity", self.expected_velocity, update_modified=False)
+		# points_accepted is also frozen once Completed
+		if self.status != "Completed":
+			_recalculate_accepted_points(self.name)
 		self.sync_sprint_status_to_work_items()
 
 	def sync_sprint_status_to_work_items(self):
@@ -153,6 +156,39 @@ def _recalculate_sprint_velocity(sprint_name: str):
 	frappe.db.set_value("Sprint", sprint_name, "expected_velocity", velocity, update_modified=False)
 
 
+def _recalculate_accepted_points(sprint_name: str):
+	"""Recalculate and persist points_accepted for a single Sprint.
+
+	Accepted points = sum of story_points of Work Items in this sprint
+	with workflow_state (status) == 'Done'.
+	Completed sprints are frozen — their accepted points are never recalculated.
+	"""
+	if not sprint_name or not frappe.db.exists("Sprint", sprint_name):
+		return
+
+	# Don't touch Completed sprints — accepted points are frozen at completion time
+	status = frappe.db.get_value("Sprint", sprint_name, "status")
+	if status == "Completed":
+		return
+
+	if not frappe.db.table_exists("tabWork Item"):
+		return
+
+	from frappe.query_builder import DocType
+	from frappe.query_builder.functions import Coalesce, Sum
+
+	WorkItem = DocType("Work Item")
+	result = (
+		frappe.qb.from_(WorkItem)
+		.select(Coalesce(Sum(WorkItem.story_points), 0).as_("total"))
+		.where(WorkItem.sprint == sprint_name)
+		.where(WorkItem.status == "Done")
+	).run(as_dict=True)
+
+	accepted = flt(result[0].total if result else 0, 1)
+	frappe.db.set_value("Sprint", sprint_name, "points_accepted", accepted, update_modified=False)
+
+
 def update_sprint_velocity(doc, method=None):
 	"""
 	Recalculate expected_velocity on the linked Sprint(s) whenever a
@@ -174,6 +210,7 @@ def update_sprint_velocity(doc, method=None):
 
 	for sprint_name in sprints_to_update:
 		_recalculate_sprint_velocity(sprint_name)
+		_recalculate_accepted_points(sprint_name)
 
 
 def validate_work_item_sprint(doc, method=None):
