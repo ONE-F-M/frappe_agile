@@ -165,6 +165,10 @@ def _recalculate_brought_forward(sprint_name: str):
 	if not frappe.db.table_exists("tabSprint Work Item"):
 		return
 
+	# Guard against being called before bench migrate has added the new columns
+	if not frappe.db.has_column("Sprint", "stories_brought_forward"):
+		return
+
 	from frappe.query_builder import DocType
 	from frappe.query_builder.functions import Coalesce, Count, Sum
 
@@ -215,6 +219,7 @@ def update_sprint_velocity(doc, method=None):
 
 	for sprint_name in sprints_to_update:
 		_recalculate_sprint_velocity(sprint_name)
+		_recalculate_brought_forward(sprint_name)
 
 
 def validate_work_item_sprint(doc, method=None):
@@ -344,9 +349,11 @@ def handle_incomplete_items(sprint: str, action: str):
 				"parentfield": "work_items",
 				"parenttype": "Sprint",
 				"work_item": wi_name,
+				"is_brought_forward": 1,
 			}).insert(ignore_permissions=True)
-		# Recalculate velocity on the new sprint that gained items
+		# Recalculate velocity and brought-forward counts on the new sprint
 		_recalculate_sprint_velocity(new_sprint_name)
+		_recalculate_brought_forward(new_sprint_name)
 
 	# NOTE: We intentionally do NOT recalculate velocity on the completing
 	# sprint.  Its velocity will be frozen by calculate_expected_velocity()

@@ -216,6 +216,65 @@ class TestSprint(FrappeTestCase):
 			fields=["name"]
 		)
 		self.assertEqual(len(child_rows), 0)
+	def test_stories_brought_forward_on_sprint_change(self):
+		"""When a Work Item is moved from Sprint A to Sprint B, Sprint B should
+		show is_brought_forward=1 on its child row and aggregate counts updated."""
+		from frappe.utils import cint
+
+		sprint_a = self._make_sprint(prefix="ALPHA", status="Active")
+		sprint_b = self._make_sprint(prefix="BETA", status="Active")
+
+		# Create WI in sprint A
+		wi = self._make_work_item("Test BF Move", sprint_a.name, story_points=5)
+
+		# Move WI to sprint B (triggers is_brought_forward logic)
+		wi.sprint = sprint_b.name
+		wi.save(ignore_permissions=True)
+
+		# Sprint B child row should have is_brought_forward = 1
+		swi_rows = frappe.get_all(
+			"Sprint Work Item",
+			filters={"parent": sprint_b.name, "work_item": wi.name},
+			fields=["is_brought_forward"]
+		)
+		self.assertEqual(len(swi_rows), 1)
+		self.assertEqual(cint(swi_rows[0].is_brought_forward), 1)
+
+		# Sprint B brought-forward aggregates should reflect the moved item
+		sprint_b.reload()
+		self.assertEqual(sprint_b.stories_brought_forward, 1)
+		from frappe.utils import flt
+		self.assertEqual(flt(sprint_b.points_brought_forward, 1), 5.0)
+
+	def test_handle_incomplete_items_sets_brought_forward_on_new_sprint(self):
+		"""When handle_incomplete_items moves items to a new sprint, the new
+		sprint's Sprint Work Item rows should have is_brought_forward=1 and
+		the aggregate counts should be non-zero."""
+		from frappe_agile.frappe_agile.doctype.sprint.sprint import handle_incomplete_items
+		from frappe.utils import cint, flt
+
+		sprint = self._make_sprint(prefix="TEST", status="Active")
+		self._make_work_item("Test BF Close 1", sprint.name, story_points=3)
+		self._make_work_item("Test BF Close 2", sprint.name, story_points=5)
+
+		new_sprint_name = handle_incomplete_items(sprint.name, "Move to New Sprint")
+		self.assertTrue(new_sprint_name)
+
+		# All Sprint Work Item rows on the new sprint should be is_brought_forward=1
+		swi_rows = frappe.get_all(
+			"Sprint Work Item",
+			filters={"parent": new_sprint_name},
+			fields=["is_brought_forward", "story_points"]
+		)
+		self.assertEqual(len(swi_rows), 2)
+		for row in swi_rows:
+			self.assertEqual(cint(row.is_brought_forward), 1, "is_brought_forward not set on moved row")
+
+		# New sprint should reflect 2 stories and 8 points brought forward
+		stories_bf = frappe.db.get_value("Sprint", new_sprint_name, "stories_brought_forward")
+		points_bf = frappe.db.get_value("Sprint", new_sprint_name, "points_brought_forward")
+		self.assertEqual(cint(stories_bf), 2)
+		self.assertEqual(flt(points_bf, 1), 8.0)
 
 	def tearDown(self):
 		# Explicit cleanup for data committed by handle_incomplete_items
