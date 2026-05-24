@@ -27,6 +27,8 @@
   "target_points",
   "column_break_hkuw",
   "points_accepted",
+  "stories_carried_forward",
+  "points_carried_forward",
   "work_items_section",
   "work_items"
  ],
@@ -138,6 +140,20 @@
    "fieldtype": "Float",
    "label": "Points Accepted",
    "non_negative": 1,
+   "precision": "1",
+   "read_only": 1
+  },
+  {
+   "fieldname": "stories_carried_forward",
+   "fieldtype": "Int",
+   "label": "Stories Carried Forward",
+   "non_negative": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "points_carried_forward",
+   "fieldtype": "Float",
+   "label": "Points Carried Forward",
    "precision": "1",
    "read_only": 1
   },
