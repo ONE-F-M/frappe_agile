@@ -103,7 +103,8 @@
    "fieldtype": "Float",
    "label": "Points Brought Forward",
    "precision": "1",
-   "read_only": 1
+   "read_only": 1,
+   "non_negative": 1
   },
   {
    "fieldname": "column_break_shlg",
@@ -155,7 +156,8 @@
    "fieldtype": "Float",
    "label": "Points Carried Forward",
    "precision": "1",
-   "read_only": 1
+   "read_only": 1,
+   "non_negative": 1
   },
   {
    "fieldname": "work_items_section",
