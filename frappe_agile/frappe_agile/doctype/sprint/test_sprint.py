@@ -48,7 +48,7 @@ class TestSprint(FrappeTestCase):
 		# Delete test sprints
 		frappe.db.delete("Sprint", {"sprint_prefix": ("in", TEST_PREFIXES)})
 
-	def _make_sprint(self, prefix="TEST", status="Draft", project=None):
+	def _make_sprint(self, prefix="TEST", status="Draft", project=None, sprint_goal="Test Sprint Goal"):
 		sprint = frappe.get_doc({
 			"doctype": "Sprint",
 			"sprint_prefix": prefix,
@@ -56,6 +56,7 @@ class TestSprint(FrappeTestCase):
 			"project": project,
 			"start_date": today(),
 			"end_date": add_days(today(), 14),
+			"sprint_goal": sprint_goal,
 		})
 		sprint.insert(ignore_permissions=True)
 		return sprint
@@ -323,6 +324,83 @@ class TestSprint(FrappeTestCase):
 			sprint.expected_velocity, 12.0,
 			"on_update must restore velocity from doc_before when completing — not leave it at 0"
 		)
+
+	def test_points_accepted_updates_when_work_item_done(self):
+		"""points_accepted should increase when a Work Item status becomes Done."""
+		sprint = self._make_sprint(prefix="TEST", status="Active")
+
+		wi = self._make_work_item("Test WI Accepted", sprint.name, story_points=5)
+
+		sprint.reload()
+		# Initially no Work Items are Done
+		self.assertEqual(flt(sprint.points_accepted, 1), 0.0)
+
+		# Mark the Work Item as Done
+		wi.status = "Done"
+		wi.workflow_state = "Done"
+		wi.save(ignore_permissions=True)
+
+		sprint.reload()
+		self.assertEqual(flt(sprint.points_accepted, 1), 5.0)
+
+	def test_points_accepted_frozen_on_sprint_completion(self):
+		"""points_accepted must NOT change after a sprint is marked Completed."""
+		sprint = self._make_sprint(prefix="TEST", status="Active")
+
+		wi = self._make_work_item("Test WI Freeze", sprint.name, story_points=8)
+
+		# Mark WI as Done so accepted points are 8
+		wi.status = "Done"
+		wi.workflow_state = "Done"
+		wi.save(ignore_permissions=True)
+
+		sprint.reload()
+		self.assertEqual(flt(sprint.points_accepted, 1), 8.0)
+
+		# Complete the sprint
+		sprint.status = "Completed"
+		sprint.save(ignore_permissions=True)
+
+		# Simulate a subsequent WI change that would normally trigger recalc
+		wi2 = self._make_work_item("Test WI Post-Complete", sprint.name, story_points=3)
+		wi2.status = "Done"
+		wi2.workflow_state = "Done"
+		wi2.save(ignore_permissions=True)
+
+		# points_accepted must remain frozen at 8.0
+		sprint.reload()
+		self.assertEqual(
+			flt(sprint.points_accepted, 1),
+			8.0,
+			"points_accepted changed after sprint was Completed"
+		)
+
+	def test_points_accepted_captured_on_completion_transition(self):
+		"""points_accepted should be captured correctly at the moment of completion."""
+		from frappe_agile.frappe_agile.doctype.sprint.sprint import handle_incomplete_items
+
+		sprint = self._make_sprint(prefix="TEST", status="Active")
+
+		wi1 = self._make_work_item("Test WI Comp 1", sprint.name, story_points=5)
+		wi2 = self._make_work_item("Test WI Comp 2", sprint.name, story_points=3)
+
+		# Mark wi1 Done, leave wi2 Open
+		wi1.status = "Done"
+		wi1.workflow_state = "Done"
+		wi1.save(ignore_permissions=True)
+
+		sprint.reload()
+		self.assertEqual(flt(sprint.points_accepted, 1), 5.0)
+
+		# Complete sprint: move wi2 to backlog
+		handle_incomplete_items(sprint.name, "Move to Backlog")
+		sprint.reload()
+		sprint.status = "Completed"
+		sprint.save(ignore_permissions=True)
+
+		# At completion, only wi1 was Done → accepted = 5.0
+		sprint.reload()
+		self.assertEqual(flt(sprint.points_accepted, 1), 5.0)
 
 	def tearDown(self):
 		# Explicit cleanup for data committed by handle_incomplete_items
