@@ -222,6 +222,45 @@ class TestSprint(FrappeTestCase):
 			"Sprint Work Item rows must be preserved as a historical record after Move to Backlog"
 		)
 
+	def test_stories_and_points_carried_forward_on_sprint_close(self):
+		"""stories_carried_forward and points_carried_forward should be set
+		when a sprint completes with incomplete items."""
+		from frappe_agile.frappe_agile.doctype.sprint.sprint import handle_incomplete_items
+
+		sprint = self._make_sprint(prefix="TEST", status="Active")
+
+		self._make_work_item("Test CF 1", sprint.name, story_points=3)
+		self._make_work_item("Test CF 2", sprint.name, story_points=5)
+
+		# Both items are Open (not Done) — all will be carried forward
+		handle_incomplete_items(sprint.name, "Move to Backlog")
+
+		stories_cf = frappe.db.get_value("Sprint", sprint.name, "stories_carried_forward")
+		points_cf = frappe.db.get_value("Sprint", sprint.name, "points_carried_forward")
+		self.assertEqual(stories_cf, 2)
+		self.assertEqual(flt(points_cf, 1), 8.0)
+
+	def test_carried_forward_zero_when_all_items_done(self):
+		"""stories_carried_forward and points_carried_forward should remain 0
+		when all Work Items are Done (no spill-over)."""
+		from frappe_agile.frappe_agile.doctype.sprint.sprint import handle_incomplete_items
+
+		sprint = self._make_sprint(prefix="TEST", status="Active")
+
+		wi = self._make_work_item("Test No CF", sprint.name, story_points=5)
+		wi.status = "Done"
+		wi.workflow_state = "Done"
+		wi.save(ignore_permissions=True)
+
+		# All items Done — handle_incomplete_items finds nothing to carry forward
+		result = handle_incomplete_items(sprint.name, "Move to Backlog")
+		self.assertIsNone(result)
+
+		stories_cf = frappe.db.get_value("Sprint", sprint.name, "stories_carried_forward")
+		points_cf = frappe.db.get_value("Sprint", sprint.name, "points_carried_forward")
+		self.assertEqual(flt(stories_cf), 0.0)
+		self.assertEqual(flt(points_cf), 0.0)
+
 	def test_child_table_preserved_on_move_to_backlog(self):
 		"""Sprint Work Item rows must remain on the completing sprint (as a frozen
 		historical record) when incomplete items are moved to the Backlog."""
