@@ -10,7 +10,8 @@
   "title",
   "status",
   "story_points",
-  "assignee_user"
+  "assignee_user",
+  "is_brought_forward"
  ],
  "fields": [
   {
@@ -71,6 +72,13 @@
    "label": "Assignee User",
    "options": "User",
    "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "is_brought_forward",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "Is Brought Forward"
   }
  ],
  "index_web_pages_for_search": 0,

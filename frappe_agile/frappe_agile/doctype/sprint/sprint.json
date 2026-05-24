@@ -18,6 +18,9 @@
   "column_break_cjmv",
   "end_date",
   "goals_and_metrics_section",
+  "stories_brought_forward",
+  "points_brought_forward",
+  "column_break_shlg",
   "sprint_goal",
   "column_break_utgf",
   "expected_velocity",
@@ -89,6 +92,25 @@
    "label": "Goals and Metrics"
   },
   {
+   "fieldname": "stories_brought_forward",
+   "fieldtype": "Int",
+   "label": "Stories Brought Forward",
+   "non_negative": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "points_brought_forward",
+   "fieldtype": "Float",
+   "label": "Points Brought Forward",
+   "precision": "1",
+   "read_only": 1,
+   "non_negative": 1
+  },
+  {
+   "fieldname": "column_break_shlg",
+   "fieldtype": "Column Break"
+  },
+  {
    "fieldname": "sprint_goal",
    "fieldtype": "Small Text",
    "label": "Sprint Goal",
@@ -134,7 +156,8 @@
    "fieldtype": "Float",
    "label": "Points Carried Forward",
    "precision": "1",
-   "read_only": 1
+   "read_only": 1,
+   "non_negative": 1
   },
   {
    "fieldname": "work_items_section",

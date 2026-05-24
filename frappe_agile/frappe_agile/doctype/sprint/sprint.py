@@ -1,7 +1,7 @@
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import add_days, date_diff, flt
+from frappe.utils import add_days, cint, date_diff, flt
 
 
 class Sprint(Document):
@@ -171,6 +171,51 @@ def _recalculate_sprint_velocity(sprint_name: str):
 	frappe.db.set_value("Sprint", sprint_name, "expected_velocity", velocity, update_modified=False)
 
 
+def _recalculate_brought_forward(sprint_name: str):
+	"""Recalculate and persist stories_brought_forward and points_brought_forward.
+
+	Counts Sprint Work Item child rows where is_brought_forward == 1,
+	which are set when a Work Item moves into this sprint from a different sprint.
+	"""
+	if not sprint_name or not frappe.db.exists("Sprint", sprint_name):
+		return
+
+	if not frappe.db.table_exists("tabSprint Work Item"):
+		return
+
+	# Guard against being called before bench migrate has added the new columns
+	if not frappe.db.has_column("Sprint", "stories_brought_forward"):
+		return
+
+	from frappe.query_builder import DocType
+	from frappe.query_builder.functions import Coalesce, Count, Sum
+
+	SWI = DocType("Sprint Work Item")
+	result = (
+		frappe.qb.from_(SWI)
+		.select(
+			Count(SWI.name).as_("stories"),
+			Coalesce(Sum(SWI.story_points), 0).as_("points"),
+		)
+		.where(SWI.parent == sprint_name)
+		.where(SWI.is_brought_forward == 1)
+	).run(as_dict=True)
+
+	row = result[0] if result else {}
+	stories = cint(row.get("stories", 0))
+	points = flt(row.get("points", 0), 1)
+
+	frappe.db.set_value(
+		"Sprint",
+		sprint_name,
+		{
+			"stories_brought_forward": stories,
+			"points_brought_forward": points,
+		},
+		update_modified=False,
+	)
+
+
 def _recalculate_accepted_points(sprint_name: str, force: bool = False):
 	"""Recalculate and persist points_accepted for a single Sprint.
 
@@ -228,6 +273,7 @@ def update_sprint_velocity(doc, method=None):
 
 	for sprint_name in sprints_to_update:
 		_recalculate_sprint_velocity(sprint_name)
+		_recalculate_brought_forward(sprint_name)
 		_recalculate_accepted_points(sprint_name)
 
 
@@ -382,9 +428,11 @@ def handle_incomplete_items(sprint: str, action: str):
 				"parentfield": "work_items",
 				"parenttype": "Sprint",
 				"work_item": wi_name,
+				"is_brought_forward": 1,
 			}).insert(ignore_permissions=True)
-		# Recalculate velocity on the new sprint that gained items
+		# Recalculate velocity and brought-forward counts on the new sprint
 		_recalculate_sprint_velocity(new_sprint_name)
+		_recalculate_brought_forward(new_sprint_name)
 
 	# Persist the velocity snapshot so it survives the form save that
 	# immediately follows this call.  on_update will restore it again from
