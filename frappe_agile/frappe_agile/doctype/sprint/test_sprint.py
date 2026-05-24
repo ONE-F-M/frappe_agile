@@ -48,7 +48,7 @@ class TestSprint(FrappeTestCase):
 		# Delete test sprints
 		frappe.db.delete("Sprint", {"sprint_prefix": ("in", TEST_PREFIXES)})
 
-	def _make_sprint(self, prefix="TEST", status="Draft", project=None):
+	def _make_sprint(self, prefix="TEST", status="Draft", project=None, sprint_goal="Test Sprint Goal"):
 		sprint = frappe.get_doc({
 			"doctype": "Sprint",
 			"sprint_prefix": prefix,
@@ -56,6 +56,7 @@ class TestSprint(FrappeTestCase):
 			"project": project,
 			"start_date": today(),
 			"end_date": add_days(today(), 14),
+			"sprint_goal": sprint_goal,
 		})
 		sprint.insert(ignore_permissions=True)
 		return sprint
@@ -209,13 +210,18 @@ class TestSprint(FrappeTestCase):
 		sprint.reload()
 		self.assertEqual(sprint.expected_velocity, 8.0)
 
-		# Child table rows should have been cleaned up
+		# Bug fix: child table rows must REMAIN on the completing sprint
+		# as a frozen historical record (not be deleted).
 		child_rows = frappe.get_all(
 			"Sprint Work Item",
 			filters={"parent": sprint.name},
 			fields=["name"]
 		)
-		self.assertEqual(len(child_rows), 0)
+		self.assertEqual(
+			len(child_rows), 2,
+			"Sprint Work Item rows must be preserved as a historical record after Move to Backlog"
+		)
+
 	def test_stories_and_points_carried_forward_on_sprint_close(self):
 		"""stories_carried_forward and points_carried_forward should be set
 		when a sprint completes with incomplete items."""
@@ -252,9 +258,188 @@ class TestSprint(FrappeTestCase):
 
 		stories_cf = frappe.db.get_value("Sprint", sprint.name, "stories_carried_forward")
 		points_cf = frappe.db.get_value("Sprint", sprint.name, "points_carried_forward")
-		# Fields were never written — DB returns None (which is effectively 0)
-		self.assertIn(flt(stories_cf), [None, 0, 0.0])
-		self.assertIn(flt(points_cf), [None, 0, 0.0])
+		self.assertEqual(flt(stories_cf), 0.0)
+		self.assertEqual(flt(points_cf), 0.0)
+
+	def test_child_table_preserved_on_move_to_backlog(self):
+		"""Sprint Work Item rows must remain on the completing sprint (as a frozen
+		historical record) when incomplete items are moved to the Backlog."""
+		from frappe_agile.frappe_agile.doctype.sprint.sprint import handle_incomplete_items
+
+		sprint = self._make_sprint(prefix="TEST", status="Active")
+		wi1 = self._make_work_item("WI Child Row 1", sprint.name, story_points=3)
+		wi2 = self._make_work_item("WI Child Row 2", sprint.name, story_points=5)
+
+		# Confirm both are in the child table before closing
+		pre_rows = frappe.get_all(
+			"Sprint Work Item",
+			filters={"parent": sprint.name},
+			fields=["work_item"]
+		)
+		self.assertEqual(len(pre_rows), 2)
+
+		handle_incomplete_items(sprint.name, "Move to Backlog")
+
+		# Work Items must be moved to backlog (sprint field cleared)
+		self.assertEqual(frappe.db.get_value("Work Item", wi1.name, "sprint"), "")
+		self.assertEqual(frappe.db.get_value("Work Item", wi2.name, "sprint"), "")
+
+		# Sprint Work Item rows must NOT be deleted — they are the historical record
+		post_rows = frappe.get_all(
+			"Sprint Work Item",
+			filters={"parent": sprint.name},
+			fields=["work_item"]
+		)
+		self.assertEqual(
+			len(post_rows), 2,
+			"Child rows must survive Move to Backlog as a frozen historical record"
+		)
+		present = {r.work_item for r in post_rows}
+		self.assertIn(wi1.name, present)
+		self.assertIn(wi2.name, present)
+
+	def test_child_table_preserved_on_move_to_new_sprint(self):
+		"""When incomplete items are moved to a new sprint:
+		  - the completing sprint's child table rows stay (historical record)
+		  - the new sprint's child table gains the rows too."""
+		from frappe_agile.frappe_agile.doctype.sprint.sprint import handle_incomplete_items
+
+		sprint = self._make_sprint(prefix="TEST", status="Active")
+		wi1 = self._make_work_item("WI Move Row 1", sprint.name, story_points=2)
+		wi2 = self._make_work_item("WI Move Row 2", sprint.name, story_points=4)
+
+		new_sprint_name = handle_incomplete_items(sprint.name, "Move to New Sprint")
+		self.assertTrue(new_sprint_name)
+
+		# Completing sprint: rows preserved
+		old_rows = frappe.get_all(
+			"Sprint Work Item",
+			filters={"parent": sprint.name},
+			fields=["work_item"]
+		)
+		self.assertEqual(len(old_rows), 2, "Completing sprint rows must be preserved")
+
+		# New sprint: rows added
+		new_rows = frappe.get_all(
+			"Sprint Work Item",
+			filters={"parent": new_sprint_name},
+			fields=["work_item"]
+		)
+		self.assertEqual(len(new_rows), 2, "New sprint must have the moved rows")
+		new_wis = {r.work_item for r in new_rows}
+		self.assertIn(wi1.name, new_wis)
+		self.assertIn(wi2.name, new_wis)
+
+	def test_velocity_not_zeroed_by_form_payload_on_completion(self):
+		"""The core velocity bug: when frm.save() is called after
+		handle_incomplete_items, the form payload carries expected_velocity = 0
+		(all items were moved out).  on_update must restore it from doc_before
+		so the completed sprint keeps the correct frozen value."""
+		from frappe_agile.frappe_agile.doctype.sprint.sprint import handle_incomplete_items
+
+		sprint = self._make_sprint(prefix="TEST", status="Active")
+		self._make_work_item("WI Vel Bug 1", sprint.name, story_points=5)
+		self._make_work_item("WI Vel Bug 2", sprint.name, story_points=7)
+
+		sprint.reload()
+		self.assertEqual(sprint.expected_velocity, 12.0)
+
+		# Step 1: simulate handle_incomplete_items (moves items, restores velocity in DB)
+		handle_incomplete_items(sprint.name, "Move to Backlog")
+
+		# Step 2: simulate frm.save() — Frappe would write the form payload
+		# which carries expected_velocity = 0.  Force this by corrupting the
+		# field directly in the DB before saving, then let on_update fix it.
+		frappe.db.set_value("Sprint", sprint.name, "expected_velocity", 0, update_modified=False)
+
+		# Step 3: complete the sprint (this triggers on_update)
+		sprint.reload()
+		sprint.status = "Completed"
+		sprint.save(ignore_permissions=True)
+
+		# Velocity must be restored to pre-completion value, NOT left as 0
+		sprint.reload()
+		self.assertEqual(
+			sprint.expected_velocity, 12.0,
+			"on_update must restore velocity from doc_before when completing — not leave it at 0"
+		)
+
+	def test_points_accepted_updates_when_work_item_done(self):
+		"""points_accepted should increase when a Work Item status becomes Done."""
+		sprint = self._make_sprint(prefix="TEST", status="Active")
+
+		wi = self._make_work_item("Test WI Accepted", sprint.name, story_points=5)
+
+		sprint.reload()
+		# Initially no Work Items are Done
+		self.assertEqual(flt(sprint.points_accepted, 1), 0.0)
+
+		# Mark the Work Item as Done
+		wi.status = "Done"
+		wi.workflow_state = "Done"
+		wi.save(ignore_permissions=True)
+
+		sprint.reload()
+		self.assertEqual(flt(sprint.points_accepted, 1), 5.0)
+
+	def test_points_accepted_frozen_on_sprint_completion(self):
+		"""points_accepted must NOT change after a sprint is marked Completed."""
+		sprint = self._make_sprint(prefix="TEST", status="Active")
+
+		wi = self._make_work_item("Test WI Freeze", sprint.name, story_points=8)
+
+		# Mark WI as Done so accepted points are 8
+		wi.status = "Done"
+		wi.workflow_state = "Done"
+		wi.save(ignore_permissions=True)
+
+		sprint.reload()
+		self.assertEqual(flt(sprint.points_accepted, 1), 8.0)
+
+		# Complete the sprint
+		sprint.status = "Completed"
+		sprint.save(ignore_permissions=True)
+
+		# Simulate a subsequent WI change that would normally trigger recalc
+		wi2 = self._make_work_item("Test WI Post-Complete", sprint.name, story_points=3)
+		wi2.status = "Done"
+		wi2.workflow_state = "Done"
+		wi2.save(ignore_permissions=True)
+
+		# points_accepted must remain frozen at 8.0
+		sprint.reload()
+		self.assertEqual(
+			flt(sprint.points_accepted, 1),
+			8.0,
+			"points_accepted changed after sprint was Completed"
+		)
+
+	def test_points_accepted_captured_on_completion_transition(self):
+		"""points_accepted should be captured correctly at the moment of completion."""
+		from frappe_agile.frappe_agile.doctype.sprint.sprint import handle_incomplete_items
+
+		sprint = self._make_sprint(prefix="TEST", status="Active")
+
+		wi1 = self._make_work_item("Test WI Comp 1", sprint.name, story_points=5)
+		wi2 = self._make_work_item("Test WI Comp 2", sprint.name, story_points=3)
+
+		# Mark wi1 Done, leave wi2 Open
+		wi1.status = "Done"
+		wi1.workflow_state = "Done"
+		wi1.save(ignore_permissions=True)
+
+		sprint.reload()
+		self.assertEqual(flt(sprint.points_accepted, 1), 5.0)
+
+		# Complete sprint: move wi2 to backlog
+		handle_incomplete_items(sprint.name, "Move to Backlog")
+		sprint.reload()
+		sprint.status = "Completed"
+		sprint.save(ignore_permissions=True)
+
+		# At completion, only wi1 was Done → accepted = 5.0
+		sprint.reload()
+		self.assertEqual(flt(sprint.points_accepted, 1), 5.0)
 
 	def tearDown(self):
 		# Explicit cleanup for data committed by handle_incomplete_items
