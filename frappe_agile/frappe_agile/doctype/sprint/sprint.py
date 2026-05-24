@@ -226,6 +226,7 @@ def _make_new_sprint(source_doc, extra_fields=None):
 		"status": "Draft",
 		"start_date": new_start,
 		"end_date": new_end,
+		"sprint_goal": _("Carry Forward"),
 	}
 	if extra_fields:
 		values.update(extra_fields)
