@@ -189,7 +189,7 @@ def _recalculate_accepted_points(sprint_name: str, force: bool = False):
 		if status == "Completed":
 			return
 
-	if not frappe.db.table_exists("tabWork Item"):
+	if not frappe.db.table_exists("Work Item"):
 		return
 
 	from frappe.query_builder import DocType
