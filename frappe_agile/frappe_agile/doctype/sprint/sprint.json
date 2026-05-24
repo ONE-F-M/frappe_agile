@@ -25,6 +25,8 @@
   "column_break_utgf",
   "expected_velocity",
   "target_points",
+  "column_break_hkuw",
+  "points_accepted",
   "work_items_section",
   "work_items"
  ],
@@ -108,7 +110,8 @@
   {
    "fieldname": "sprint_goal",
    "fieldtype": "Small Text",
-   "label": "Sprint Goal"
+   "label": "Sprint Goal",
+   "reqd": 1
   },
   {
    "fieldname": "column_break_utgf",
@@ -125,6 +128,18 @@
    "fieldname": "target_points",
    "fieldtype": "Float",
    "label": "Target Points"
+  },
+  {
+   "fieldname": "column_break_hkuw",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "points_accepted",
+   "fieldtype": "Float",
+   "label": "Points Accepted",
+   "non_negative": 1,
+   "precision": "1",
+   "read_only": 1
   },
   {
    "fieldname": "work_items_section",
