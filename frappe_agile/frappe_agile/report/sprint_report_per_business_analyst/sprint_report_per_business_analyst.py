@@ -16,7 +16,7 @@ def execute(filters=None):
 def get_columns():
 	return [
 		{"fieldname": "business_analyst", "label": "Business Analyst", "fieldtype": "Data", "width": 180},
-		{"fieldname": "sprints", "label": "Sprint(s)", "fieldtype": "Data", "width": 200},
+		{"fieldname": "sprints", "label": "Sprint(s)", "fieldtype": "HTML", "width": 200},
 		{"fieldname": "sprint_start_date", "label": "Start Date", "fieldtype": "Date", "width": 150},
 		{"fieldname": "sprint_end_date", "label": "End Date", "fieldtype": "Date", "width": 150},
 		{"fieldname": "no_of_sprints", "label": "No. of Sprints", "fieldtype": "Int", "width": 120},
@@ -150,7 +150,13 @@ def get_data(filters):
 
 	for ba, sprint_dict in ba_sprint_data.items():
 		sprint_names_for_ba = list(sprint_dict.keys())
-		no_of_sprints = len(sprint_names_for_ba)
+
+		# Count distinct sprint periods — sprints sharing the same (start_date, end_date) count as 1
+		unique_periods = set()
+		for s in sprint_names_for_ba:
+			if s in sprint_map:
+				unique_periods.add((sprint_map[s].start_date, sprint_map[s].end_date))
+		no_of_sprints = len(unique_periods)
 
 		# Expected Velocity = ba_velocity × No. of Sprints (for this BA's sprints)
 		expected_velocity = flt(ba_velocity * no_of_sprints, 1)
@@ -178,9 +184,17 @@ def get_data(filters):
 		earliest_start = min((s.start_date for s in sprint_docs if s.start_date), default=None)
 		latest_end = max((s.end_date for s in sprint_docs if s.end_date), default=None)
 
-		# Comma-separated sprint names (sorted by start date)
+		# Comma-separated sprint names as clickable links (sorted by start date)
 		sorted_sprints = sorted(sprint_docs, key=lambda s: s.start_date or "")
-		sprint_label = ", ".join(s.name for s in sorted_sprints)
+		sprint_links = []
+		for s in sorted_sprints:
+			url = frappe.utils.get_url_to_form("Sprint", s.name)
+			sprint_links.append(
+				'<a href="{url}" data-doctype="Sprint" data-name="{name}">{name}</a>'.format(
+					url=url, name=frappe.utils.escape_html(s.name)
+				)
+			)
+		sprint_label = ", ".join(sprint_links)
 
 		data.append({
 			"business_analyst": user_full_name_map.get(ba, ba),

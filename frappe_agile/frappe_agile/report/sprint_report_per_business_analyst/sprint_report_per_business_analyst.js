@@ -44,5 +44,11 @@ frappe.query_reports["Sprint Report per Business Analyst"] = {
 			"fieldtype": "Link",
 			"options": "User"
 		}
-	]
+	],
+	"formatter": function (value, row, column, data, default_formatter) {
+		if (column.fieldname === "sprints" && value) {
+			return value;
+		}
+		return default_formatter(value, row, column, data);
+	}
 };
