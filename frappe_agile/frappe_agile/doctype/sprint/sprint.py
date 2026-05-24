@@ -122,7 +122,7 @@ class Sprint(Document):
 		if self.status == "Completed":
 			return
 
-		if not self.name or not frappe.db.table_exists("tabWork Item"):
+		if not self.name or not frappe.db.table_exists("Work Item"):
 			self.expected_velocity = 0.0
 			return
 
@@ -180,7 +180,7 @@ def _recalculate_brought_forward(sprint_name: str):
 	if not sprint_name or not frappe.db.exists("Sprint", sprint_name):
 		return
 
-	if not frappe.db.table_exists("tabSprint Work Item"):
+	if not frappe.db.table_exists("Sprint Work Item"):
 		return
 
 	# Guard against being called before bench migrate has added the new columns
@@ -234,7 +234,7 @@ def _recalculate_accepted_points(sprint_name: str, force: bool = False):
 		if status == "Completed":
 			return
 
-	if not frappe.db.table_exists("tabWork Item"):
+	if not frappe.db.table_exists("Work Item"):
 		return
 
 	from frappe.query_builder import DocType
