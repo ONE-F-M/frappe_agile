@@ -41,9 +41,7 @@ class Sprint(Document):
 			# handle_incomplete_items before frm.save() was called.
 			doc_before = self.get_doc_before_save()
 			if doc_before is not None:
-				frappe.db.set_value(
-					"Sprint",
-					self.name,
+				self.db_set(
 					"expected_velocity",
 					doc_before.expected_velocity,
 					update_modified=False,
@@ -344,7 +342,7 @@ def handle_incomplete_items(sprint: str, action: str):
 		return new_sprint_name
 
 	# Move each incomplete Work Item to the target destination.
-	# We use direct db_set (not Work Item .save()) to avoid triggering
+	# We use frappe.db.set_value() (not Work Item .save()) to avoid triggering
 	# _remove_from_sprint, which would try to modify the completing sprint's
 	# child table — the table is now intentionally left intact as a frozen
 	# historical record.
