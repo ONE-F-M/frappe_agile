@@ -33,15 +33,27 @@ class Sprint(Document):
 		if not frappe.db.table_exists("Work Item"):
 			return
 
-		# Compute accepted points once, just before freezing, on Active→Completed
 		if self._is_transitioning_to_completed():
+			# Bug fix: the form payload that triggered this save may carry
+			# expected_velocity = 0 (the client value dropped when items were
+			# moved out by handle_incomplete_items).  Restore from the
+			# pre-save DB snapshot, which was correctly set by
+			# handle_incomplete_items before frm.save() was called.
+			doc_before = self.get_doc_before_save()
+			if doc_before is not None:
+				self.db_set(
+					"expected_velocity",
+					doc_before.expected_velocity,
+					update_modified=False,
+				)
+			# Compute accepted points once, just before freezing, on Active→Completed
 			_recalculate_accepted_points(self.name, force=True)
-
-		# Completed sprints have their velocity and accepted points frozen
-		if self.status != "Completed":
+		elif self.status != "Completed":
+			# Active / Draft sprint — recalculate from current Work Items
 			self.calculate_expected_velocity()
 			self.db_set("expected_velocity", self.expected_velocity, update_modified=False)
 			_recalculate_accepted_points(self.name)
+
 		self.sync_sprint_status_to_work_items()
 
 	def sync_sprint_status_to_work_items(self):
@@ -329,16 +341,23 @@ def handle_incomplete_items(sprint: str, action: str):
 	if not work_items:
 		return new_sprint_name
 
-	# Move each incomplete Work Item
+	# Move each incomplete Work Item to the target destination.
+	# We use frappe.db.set_value() (not Work Item .save()) to avoid triggering
+	# _remove_from_sprint, which would try to modify the completing sprint's
+	# child table — the table is now intentionally left intact as a frozen
+	# historical record.
 	work_item_names = [wi.name for wi in work_items]
 	for wi_name in work_item_names:
 		frappe.db.set_value("Work Item", wi_name, "sprint", new_sprint_name or "")
 
-	# Clean up child table rows from the completing sprint
-	for wi_name in work_item_names:
-		frappe.db.delete("Sprint Work Item", {"parent": sprint, "work_item": wi_name})
+	# Bug fix: do NOT delete Sprint Work Item rows from the completing sprint.
+	# Those rows stay as a frozen historical record of what was in-flight when
+	# the sprint closed.  The freeze is enforced naturally:
+	#   - _remove_from_sprint() guards against Completed sprints.
+	#   - _sync_with_sprint() uses doc.sprint (new / empty) as the parent,
+	#     so it will never overwrite the completing sprint's historical rows.
 
-	# If moving to new sprint, add to new sprint's child table
+	# If moving to new sprint, add rows to that sprint's child table
 	if new_sprint_name:
 		for wi_name in work_item_names:
 			frappe.get_doc({
@@ -351,12 +370,9 @@ def handle_incomplete_items(sprint: str, action: str):
 		# Recalculate velocity on the new sprint that gained items
 		_recalculate_sprint_velocity(new_sprint_name)
 
-	# NOTE: We intentionally do NOT recalculate velocity on the completing
-	# sprint.  Its velocity will be frozen by calculate_expected_velocity()
-	# when the Sprint is saved with status = "Completed" immediately after.
-
-	# Restore the velocity snapshot — guards in update_sprint_velocity should
-	# prevent overwrites, but this is a safety net
+	# Persist the velocity snapshot so it survives the form save that
+	# immediately follows this call.  on_update will restore it again from
+	# doc_before as a belt-and-suspenders guard.
 	frappe.db.set_value("Sprint", sprint, "expected_velocity", current_velocity, update_modified=False)
 
 	frappe.db.commit()
