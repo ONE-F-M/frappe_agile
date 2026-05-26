@@ -39,11 +39,17 @@ class Sprint(Document):
 			# moved out by handle_incomplete_items).  Restore from the
 			# pre-save DB snapshot, which was correctly set by
 			# handle_incomplete_items before frm.save() was called.
+			# The same applies to stories_carried_forward and
+			# points_carried_forward which are also set by
+			# handle_incomplete_items before the client save.
 			doc_before = self.get_doc_before_save()
 			if doc_before is not None:
 				self.db_set(
-					"expected_velocity",
-					doc_before.expected_velocity,
+					{
+						"expected_velocity": doc_before.expected_velocity,
+						"stories_carried_forward": doc_before.stories_carried_forward,
+						"points_carried_forward": doc_before.points_carried_forward,
+					},
 					update_modified=False,
 				)
 			# Compute accepted points once, just before freezing, on Active→Completed
