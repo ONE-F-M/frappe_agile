@@ -28,11 +28,10 @@ class WorkItem(Document):
 	def _get_old_sprint(self):
 		"""Derive the previous sprint by checking Sprint Work Item child tables.
 
-		Finds sprints (not Completed) that contain this work item in their
-		child table where the child row status is not 'Done'.  If multiple
-		sprints match, the most recent one (by start_date) is returned.
-		The currently assigned sprint (self.sprint) is excluded so we only
-		get the *previous* sprint the item was in.
+		Finds Completed sprints that contain this work item in their child table
+		where the child row status is not 'Done'. If multiple sprints match, the most
+		recent one (by start_date) is returned. The currently assigned sprint
+		(self.sprint) is excluded so we only get the *previous* sprint the item was in.
 		"""
 		if self.is_new():
 			return None
