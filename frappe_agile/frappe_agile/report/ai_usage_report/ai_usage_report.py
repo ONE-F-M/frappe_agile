@@ -58,12 +58,13 @@ def get_data(filters):
 	# ------------------------------------------------------------------
 	# 2. Fetch Work Items (User Story and Task) linked to those sprints
 	# ------------------------------------------------------------------
-	WorkItem = frappe.qb.DocType("Work Item")
+	SWI = frappe.qb.DocType("Sprint Work Item")
 	wi_rows = (
-		frappe.qb.from_(WorkItem)
-		.select(WorkItem.name, WorkItem.story_points)
-		.where(WorkItem.sprint.isin(sprint_names))
-		.where(WorkItem.work_item_type.isin(["User Story", "Task"]))
+		frappe.qb.from_(SWI)
+		.select(SWI.work_item.as_("name"), SWI.story_points)
+		.where(SWI.parent.isin(sprint_names))
+		.where(SWI.parenttype == "Sprint")
+		.where(SWI.work_item_type.isin(["User Story", "Task"]))
 	).run(as_dict=True)
 
 	if not wi_rows:
