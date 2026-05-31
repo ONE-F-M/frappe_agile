@@ -16,7 +16,7 @@ def execute(filters=None):
 def get_columns():
 	return [
 		{"fieldname": "developer", "label": "Developer", "fieldtype": "Data", "width": 180},
-		{"fieldname": "sprints", "label": "Sprint(s)", "fieldtype": "Data", "width": 200},
+		{"fieldname": "sprints", "label": "Sprint(s)", "fieldtype": "HTML", "width": 200},
 		{"fieldname": "sprint_start_date", "label": "Sprint Start Date", "fieldtype": "Date", "width": 150},
 		{"fieldname": "sprint_end_date", "label": "Sprint End Date", "fieldtype": "Date", "width": 150},
 		{"fieldname": "no_of_sprints", "label": "No. of Sprints", "fieldtype": "Int", "width": 120},
@@ -130,27 +130,45 @@ def get_data(filters):
 
 	for user, sprint_dict in dev_sprint_data.items():
 		sprint_names_for_dev = list(sprint_dict.keys())
-		no_of_sprints = len(sprint_names_for_dev)
+
+		# Count distinct sprint periods — sprints sharing the same (start_date, end_date) count as 1
+		unique_periods = set()
+		for s in sprint_names_for_dev:
+			if s in sprint_map:
+				unique_periods.add((sprint_map[s].start_date, sprint_map[s].end_date))
+		no_of_sprints = len(unique_periods)
 
 		# Target Points = developer_velocity × number of sprints for this developer
 		target_points = flt(developer_velocity * no_of_sprints, 1)
 
-		# Sum completed and accepted across all sprints
-		total_completed = flt(sum(v["completed_points"] for v in sprint_dict.values()), 1)
-		total_accepted = flt(sum(v["accepted_points"] for v in sprint_dict.values()), 1)
+		# Sum completed and accepted across all sprints — keep raw for rate calculation
+		total_completed_raw = sum(v["completed_points"] for v in sprint_dict.values())
+		total_accepted_raw = sum(v["accepted_points"] for v in sprint_dict.values())
 
-		# Rate denominators use target_points
-		completion_rate = (total_completed / target_points * 100) if target_points else 0.0
-		acceptance_rate = (total_accepted / target_points * 100) if target_points else 0.0
+		# Rates are computed from raw (unrounded) values to avoid compounding error
+		completion_rate = (total_completed_raw / target_points * 100) if target_points else 0.0
+		acceptance_rate = (total_accepted_raw / target_points * 100) if target_points else 0.0
+
+		# Round display values after rate calculation
+		total_completed = flt(total_completed_raw, 1)
+		total_accepted = flt(total_accepted_raw, 1)
 
 		# Date range across all sprints for this developer
 		sprint_docs = [sprint_map[s] for s in sprint_names_for_dev if s in sprint_map]
 		earliest_start = min((s.start_date for s in sprint_docs if s.start_date), default=None)
 		latest_end = max((s.end_date for s in sprint_docs if s.end_date), default=None)
 
-		# Comma-separated sprint names (sorted by start date)
+		# Comma-separated sprint names as clickable links (sorted by start date)
 		sorted_sprints = sorted(sprint_docs, key=lambda s: s.start_date or "")
-		sprint_label = ", ".join(s.name for s in sorted_sprints)
+		sprint_links = []
+		for s in sorted_sprints:
+			url = frappe.utils.get_url_to_form("Sprint", s.name)
+			sprint_links.append(
+				'<a href="{url}" data-doctype="Sprint" data-name="{name}">{name}</a>'.format(
+					url=url, name=frappe.utils.escape_html(s.name)
+				)
+			)
+		sprint_label = ", ".join(sprint_links)
 
 		data.append({
 			"developer": user_full_name_map.get(user, user),
