@@ -241,6 +241,7 @@
    "fetch_from": "epic.title",
    "fieldname": "small_text_yecv",
    "fieldtype": "Small Text",
+   "in_list_view": 1,
    "label": "Epic Title",
    "read_only": 1
   },
