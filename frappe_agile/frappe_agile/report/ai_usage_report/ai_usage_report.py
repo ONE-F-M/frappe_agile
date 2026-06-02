@@ -20,6 +20,7 @@ def get_columns():
 		{"fieldname": "story_count_pct", "label": "Story Count %", "fieldtype": "Percent", "width": 130},
 		{"fieldname": "story_points", "label": "Story Points", "fieldtype": "Float", "width": 130},
 		{"fieldname": "story_points_pct", "label": "Story Points %", "fieldtype": "Percent", "width": 140},
+		{"fieldname": "ai_tools_feedback", "label": "AI Tools Feedback", "fieldtype": "Data", "width": 400},
 	]
 
 
@@ -74,7 +75,22 @@ def get_data(filters):
 	wi_points_map = {w.name: flt(w.story_points) for w in wi_rows}
 
 	# ------------------------------------------------------------------
-	# 3. Fetch all Work Item Label rows for those work items
+	# 3. Fetch ai_tools_feedback from the Work Item doctype
+	# ------------------------------------------------------------------
+	WI = frappe.qb.DocType("Work Item")
+	feedback_rows = (
+		frappe.qb.from_(WI)
+		.select(WI.name, WI.ai_tools_feedback)
+		.where(WI.name.isin(wi_names))
+	).run(as_dict=True)
+
+	wi_feedback_map = {}
+	for row in feedback_rows:
+		if row.ai_tools_feedback and row.ai_tools_feedback.strip():
+			wi_feedback_map[row.name] = row.ai_tools_feedback.strip()
+
+	# ------------------------------------------------------------------
+	# 4. Fetch all Work Item Label rows for those work items
 	# ------------------------------------------------------------------
 	WILabel = frappe.qb.DocType("Work Item Label")
 	label_rows = (
@@ -84,7 +100,7 @@ def get_data(filters):
 	).run(as_dict=True)
 
 	# ------------------------------------------------------------------
-	# 4. Build label combination per work item
+	# 5. Build label combination per work item
 	# ------------------------------------------------------------------
 	# wi_name -> sorted list of labels
 	wi_label_map = {}
@@ -104,17 +120,21 @@ def get_data(filters):
 			wi_combo_map[wi_name] = "(No Labels)"
 
 	# ------------------------------------------------------------------
-	# 5. Aggregate by label combination
+	# 6. Aggregate by label combination
 	# ------------------------------------------------------------------
 	combo_data = {}
 	for wi_name, combo in wi_combo_map.items():
 		if combo not in combo_data:
-			combo_data[combo] = {"story_count": 0, "story_points": 0.0}
+			combo_data[combo] = {"story_count": 0, "story_points": 0.0, "feedbacks": []}
 		combo_data[combo]["story_count"] += 1
 		combo_data[combo]["story_points"] += wi_points_map.get(wi_name, 0.0)
 
+		feedback = wi_feedback_map.get(wi_name)
+		if feedback:
+			combo_data[combo]["feedbacks"].append(feedback)
+
 	# ------------------------------------------------------------------
-	# 6. Compute totals and build rows
+	# 7. Compute totals and build rows
 	# ------------------------------------------------------------------
 	total_stories = sum(v["story_count"] for v in combo_data.values())
 	total_points = sum(v["story_points"] for v in combo_data.values())
@@ -124,6 +144,7 @@ def get_data(filters):
 		count = metrics["story_count"]
 		points_raw = metrics["story_points"]
 		points = flt(points_raw, 1)
+		combined_feedback = "\n---\n".join(metrics.get("feedbacks", []))
 		data.append({
 			"combined_labels": combo,
 			"story_count": count,
@@ -131,6 +152,7 @@ def get_data(filters):
 			"story_points": points,
 			# Use raw unrounded value for percentage to avoid compounding rounding error
 			"story_points_pct": flt((points_raw / total_points * 100) if total_points else 0, 2),
+			"ai_tools_feedback": combined_feedback,
 		})
 
 	# Sort by story count descending, then alphabetically by label combo
