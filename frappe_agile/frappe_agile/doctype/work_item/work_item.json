@@ -84,6 +84,7 @@
    "fieldname": "status",
    "fieldtype": "Select",
    "hidden": 1,
+   "in_list_view": 1,
    "label": "Status",
    "options": "Draft\nOpen\nIn Progress\nPending Review\nChanges Requested\nIn Staging\nRejected\nDone"
   },
@@ -254,7 +255,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-05-12 15:55:12.455710",
+ "modified": "2026-06-03 13:10:36.203147",
  "modified_by": "Administrator",
  "module": "Frappe Agile",
  "name": "Work Item",
