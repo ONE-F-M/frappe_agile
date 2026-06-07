@@ -58,6 +58,14 @@ frappe.listview_settings["Work Item"] = {
 		"story_points",
 		"assignee_user"
 	],
+	columns: [
+		"name",
+		"title",
+		"work_item_type",
+		"workflow_state",
+		"story_points",
+		"is_groomed"
+	],
 
 	on_row_click: function () {
 		// Handled via name formatter — opens in new tab.
@@ -81,6 +89,25 @@ frappe.listview_settings["Work Item"] = {
 				"User Story": "blue",
 				"Task": "green",
 				"Bug": "red",
+			};
+			const color = color_map[value] || "grey";
+			return `<span class="indicator-pill ${color}">${frappe.utils.escape_html(__(value))}</span>`;
+		},
+
+		// Colored indicator pill for workflow status
+		workflow_state: function (value) {
+			if (!value) return "";
+			const color_map = {
+				"Open": "grey",
+				"In Progress": "orange",
+				"Pending Action Plan": "blue",
+				"Pending Execution": "blue",
+				"Pending PR": "blue",
+				"Pending Review": "orange",
+				"Changes Requested": "orange",
+				"In Staging": "cyan",
+				"Rejected": "red",
+				"Done": "green",
 			};
 			const color = color_map[value] || "grey";
 			return `<span class="indicator-pill ${color}">${frappe.utils.escape_html(__(value))}</span>`;

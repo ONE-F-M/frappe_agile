@@ -1,6 +1,7 @@
 [pre_model_sync]
 # Patches added in this section will be executed before doctypes are migrated
 # Read docs to understand patches: https://frappeframework.com/docs/v14/user/en/database-migrations
+frappe_agile.patches.v1.backfill_sprint_goal
 
 [post_model_sync]
 # Patches added in this section will be executed after doctypes are migrated
@@ -14,3 +15,4 @@ frappe_agile.patches.v1.create_work_item_assignment_rules
 frappe_agile.patches.v1.create_sprint_board #4
 frappe_agile.patches.v1.update_work_item_naming_series_counter
 frappe_agile.patches.v1.create_server_scripts
+frappe_agile.patches.v1.delete_sprint_summary_party_report

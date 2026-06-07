@@ -1,7 +1,7 @@
 // Copyright (c) 2026, One FM and contributors
 // For license information, please see license.txt
 
-frappe.query_reports["Sprint Summary (Party)"] = {
+frappe.query_reports["AI Usage Report"] = {
 	"filters": [
 		{
 			"fieldname": "start_date",
@@ -33,32 +33,10 @@ frappe.query_reports["Sprint Summary (Party)"] = {
 			"reqd": 1
 		},
 		{
-			"fieldname": "party",
-			"label": __("Party"),
-			"fieldtype": "Select",
-			"options": "Business Analyst\nDeveloper",
-			"reqd": 1,
-			"default": "Business Analyst"
-		},
-		{
 			"fieldname": "sprint",
 			"label": __("Sprint"),
 			"fieldtype": "Link",
 			"options": "Sprint"
-		},
-		{
-			"fieldname": "business_analyst",
-			"label": __("Business Analyst"),
-			"fieldtype": "Link",
-			"options": "User",
-			"depends_on": "eval: doc.party === 'Business Analyst'"
-		},
-		{
-			"fieldname": "developer",
-			"label": __("Developer"),
-			"fieldtype": "Link",
-			"options": "User",
-			"depends_on": "eval: doc.party === 'Developer'"
 		}
 	]
 };
