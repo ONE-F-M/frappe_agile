@@ -1,7 +1,7 @@
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import add_days, date_diff, flt
+from frappe.utils import add_days, cint, date_diff, flt
 
 
 class Sprint(Document):
@@ -32,10 +32,34 @@ class Sprint(Document):
 		# Guard: skip velocity DB write during DocType schema migration context
 		if not frappe.db.table_exists("Work Item"):
 			return
-		# Completed sprints have their velocity frozen — don't recalculate
-		if self.status != "Completed":
+
+		if self._is_transitioning_to_completed():
+			# Bug fix: the form payload that triggered this save may carry
+			# expected_velocity = 0 (the client value dropped when items were
+			# moved out by handle_incomplete_items).  Restore from the
+			# pre-save DB snapshot, which was correctly set by
+			# handle_incomplete_items before frm.save() was called.
+			# The same applies to stories_carried_forward and
+			# points_carried_forward which are also set by
+			# handle_incomplete_items before the client save.
+			doc_before = self.get_doc_before_save()
+			if doc_before is not None:
+				self.db_set(
+					{
+						"expected_velocity": doc_before.expected_velocity,
+						"stories_carried_forward": doc_before.stories_carried_forward,
+						"points_carried_forward": doc_before.points_carried_forward,
+					},
+					update_modified=False,
+				)
+			# Compute accepted points once, just before freezing, on Active→Completed
+			_recalculate_accepted_points(self.name, force=True)
+		elif self.status != "Completed":
+			# Active / Draft sprint — recalculate from current Work Items
 			self.calculate_expected_velocity()
 			self.db_set("expected_velocity", self.expected_velocity, update_modified=False)
+			_recalculate_accepted_points(self.name)
+
 		self.sync_sprint_status_to_work_items()
 
 	def sync_sprint_status_to_work_items(self):
@@ -104,7 +128,7 @@ class Sprint(Document):
 		if self.status == "Completed":
 			return
 
-		if not self.name or not frappe.db.table_exists("tabWork Item"):
+		if not self.name or not frappe.db.table_exists("Work Item"):
 			self.expected_velocity = 0.0
 			return
 
@@ -153,6 +177,87 @@ def _recalculate_sprint_velocity(sprint_name: str):
 	frappe.db.set_value("Sprint", sprint_name, "expected_velocity", velocity, update_modified=False)
 
 
+def _recalculate_brought_forward(sprint_name: str):
+	"""Recalculate and persist stories_brought_forward and points_brought_forward.
+
+	Counts Sprint Work Item child rows where is_brought_forward == 1,
+	which are set when a Work Item moves into this sprint from a different sprint.
+	"""
+	if not sprint_name or not frappe.db.exists("Sprint", sprint_name):
+		return
+
+	if not frappe.db.table_exists("Sprint Work Item"):
+		return
+
+	# Guard against being called before bench migrate has added the new columns
+	if not frappe.db.has_column("Sprint", "stories_brought_forward"):
+		return
+
+	from frappe.query_builder import DocType
+	from frappe.query_builder.functions import Coalesce, Count, Sum
+
+	SWI = DocType("Sprint Work Item")
+	result = (
+		frappe.qb.from_(SWI)
+		.select(
+			Count(SWI.name).as_("stories"),
+			Coalesce(Sum(SWI.story_points), 0).as_("points"),
+		)
+		.where(SWI.parent == sprint_name)
+		.where(SWI.is_brought_forward == 1)
+	).run(as_dict=True)
+
+	row = result[0] if result else {}
+	stories = cint(row.get("stories", 0))
+	points = flt(row.get("points", 0), 1)
+
+	frappe.db.set_value(
+		"Sprint",
+		sprint_name,
+		{
+			"stories_brought_forward": stories,
+			"points_brought_forward": points,
+		},
+		update_modified=False,
+	)
+
+
+def _recalculate_accepted_points(sprint_name: str, force: bool = False):
+	"""Recalculate and persist points_accepted for a single Sprint.
+
+	Accepted points = sum of story_points of Work Items in this sprint
+	with status == 'Done'.
+	Completed sprints are frozen — their accepted points are not recalculated
+	unless force=True (used only on the Active→Completed transition).
+	"""
+	if not sprint_name or not frappe.db.exists("Sprint", sprint_name):
+		return
+
+	# Don't touch Completed sprints — accepted points are frozen at completion time
+	# Exception: force=True is used once on the transition itself
+	if not force:
+		status = frappe.db.get_value("Sprint", sprint_name, "status")
+		if status == "Completed":
+			return
+
+	if not frappe.db.table_exists("Work Item"):
+		return
+
+	from frappe.query_builder import DocType
+	from frappe.query_builder.functions import Coalesce, Sum
+
+	WorkItem = DocType("Work Item")
+	result = (
+		frappe.qb.from_(WorkItem)
+		.select(Coalesce(Sum(WorkItem.story_points), 0).as_("total"))
+		.where(WorkItem.sprint == sprint_name)
+		.where(WorkItem.status == "Done")
+	).run(as_dict=True)
+
+	accepted = flt(result[0].total if result else 0, 1)
+	frappe.db.set_value("Sprint", sprint_name, "points_accepted", accepted, update_modified=False)
+
+
 def update_sprint_velocity(doc, method=None):
 	"""
 	Recalculate expected_velocity on the linked Sprint(s) whenever a
@@ -174,6 +279,8 @@ def update_sprint_velocity(doc, method=None):
 
 	for sprint_name in sprints_to_update:
 		_recalculate_sprint_velocity(sprint_name)
+		_recalculate_brought_forward(sprint_name)
+		_recalculate_accepted_points(sprint_name)
 
 
 def validate_work_item_sprint(doc, method=None):
@@ -226,6 +333,7 @@ def _make_new_sprint(source_doc, extra_fields=None):
 		"status": "Draft",
 		"start_date": new_start,
 		"end_date": new_end,
+		"sprint_goal": _("Carry Forward"),
 	}
 	if extra_fields:
 		values.update(extra_fields)
@@ -275,7 +383,7 @@ def handle_incomplete_items(sprint: str, action: str):
 	work_items = frappe.get_all(
 		"Work Item",
 		filters={"sprint": sprint, "workflow_state": ["!=", "Done"]},
-		fields=["name"]
+		fields=["name", "story_points"]
 	)
 
 	new_sprint_name = None
@@ -285,16 +393,39 @@ def handle_incomplete_items(sprint: str, action: str):
 	if not work_items:
 		return new_sprint_name
 
-	# Move each incomplete Work Item
+	# --- Capture carried-forward snapshot BEFORE items are moved ---
+	# This permanently records the spill-over on the completing sprint.
+	# Only written when there are actually incomplete items (otherwise the
+	# default value of 0 is already correct, and writing before commit is safe).
+	stories_cf = len(work_items)
+	points_cf = flt(sum(flt(wi.story_points) for wi in work_items), 1)
+	frappe.db.set_value(
+		"Sprint",
+		sprint,
+		{
+			"stories_carried_forward": stories_cf,
+			"points_carried_forward": points_cf,
+		},
+		update_modified=False,
+	)
+
+	# Move each incomplete Work Item to the target destination.
+	# We use frappe.db.set_value() (not Work Item .save()) to avoid triggering
+	# _remove_from_sprint, which would try to modify the completing sprint's
+	# child table — the table is now intentionally left intact as a frozen
+	# historical record.
 	work_item_names = [wi.name for wi in work_items]
 	for wi_name in work_item_names:
 		frappe.db.set_value("Work Item", wi_name, "sprint", new_sprint_name or "")
 
-	# Clean up child table rows from the completing sprint
-	for wi_name in work_item_names:
-		frappe.db.delete("Sprint Work Item", {"parent": sprint, "work_item": wi_name})
+	# Bug fix: do NOT delete Sprint Work Item rows from the completing sprint.
+	# Those rows stay as a frozen historical record of what was in-flight when
+	# the sprint closed.  The freeze is enforced naturally:
+	#   - _remove_from_sprint() guards against Completed sprints.
+	#   - _sync_with_sprint() uses doc.sprint (new / empty) as the parent,
+	#     so it will never overwrite the completing sprint's historical rows.
 
-	# If moving to new sprint, add to new sprint's child table
+	# If moving to new sprint, add rows to that sprint's child table
 	if new_sprint_name:
 		for wi_name in work_item_names:
 			frappe.get_doc({
@@ -303,16 +434,15 @@ def handle_incomplete_items(sprint: str, action: str):
 				"parentfield": "work_items",
 				"parenttype": "Sprint",
 				"work_item": wi_name,
+				"is_brought_forward": 1,
 			}).insert(ignore_permissions=True)
-		# Recalculate velocity on the new sprint that gained items
+		# Recalculate velocity and brought-forward counts on the new sprint
 		_recalculate_sprint_velocity(new_sprint_name)
+		_recalculate_brought_forward(new_sprint_name)
 
-	# NOTE: We intentionally do NOT recalculate velocity on the completing
-	# sprint.  Its velocity will be frozen by calculate_expected_velocity()
-	# when the Sprint is saved with status = "Completed" immediately after.
-
-	# Restore the velocity snapshot — guards in update_sprint_velocity should
-	# prevent overwrites, but this is a safety net
+	# Persist the velocity snapshot so it survives the form save that
+	# immediately follows this call.  on_update will restore it again from
+	# doc_before as a belt-and-suspenders guard.
 	frappe.db.set_value("Sprint", sprint, "expected_velocity", current_velocity, update_modified=False)
 
 	frappe.db.commit()

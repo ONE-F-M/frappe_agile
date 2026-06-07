@@ -18,27 +18,64 @@ class WorkItem(Document):
 
 	def before_save(self):
 		"""
-		Capture the previous sprint and ensure workflow_state is kept in sync 
-		when `status` is forcefully changed via Kanban Board drag-and-drop.
+		Ensure workflow_state is kept in sync when `status` is forcefully
+		changed via Kanban Board drag-and-drop.
 		"""
-		self._old_sprint = frappe.db.get_value("Work Item", self.name, "sprint")
-
 		if self.status and self.workflow_state != self.status:
 			if frappe.db.exists("Workflow State", self.status):
 				self.workflow_state = self.status
+
+	def _get_old_sprint(self):
+		"""Derive the previous sprint by checking Sprint Work Item child tables.
+
+		Finds Completed sprints that contain this work item in their child table
+		where the child row status is not 'Done'. If multiple sprints match, the most
+		recent one (by start_date) is returned. The currently assigned sprint
+		(self.sprint) is excluded so we only get the *previous* sprint the item was in.
+		"""
+		if self.is_new():
+			return None
+
+		if not frappe.db.table_exists("Sprint Work Item"):
+			return None
+
+		from frappe.query_builder import DocType
+
+		SWI = DocType("Sprint Work Item")
+		Sprint = DocType("Sprint")
+
+		query = (
+			frappe.qb.from_(SWI)
+			.join(Sprint).on(SWI.parent == Sprint.name)
+			.select(Sprint.name)
+			.where(SWI.work_item == self.name)
+			.where(SWI.status != "Done")
+			.where(Sprint.status == "Completed")
+			.orderby(Sprint.start_date, order=frappe.qb.desc)
+			.limit(1)
+		)
+
+		# Exclude the sprint currently being assigned so we only find the
+		# *previous* sprint the work item lived in.
+		if self.sprint:
+			query = query.where(Sprint.name != self.sprint)
+
+		result = query.run(as_dict=True)
+		return result[0].name if result else None
 
 	def on_update(self):
 		"""
 		Keep the Sprint Work Item child table in sync when the sprint
 		assignment changes, then recalculate Sprint velocity.
 		"""
-		old_sprint = getattr(self, "_old_sprint", None)
+		old_sprint = self._get_old_sprint()
 
 		if old_sprint != self.sprint:
-			if old_sprint:
-				self._remove_from_sprint(old_sprint)
+			
 			if self.sprint:
-				self._add_to_sprint(self.sprint)
+				# Mark as brought forward if the item previously belonged to a different sprint
+				is_brought_forward = bool(old_sprint and old_sprint != self.sprint)
+				self._add_to_sprint(self.sprint, is_brought_forward=is_brought_forward)
 		elif self.sprint:
 			# Sprint didn't change, but other fields (title, status, etc.) might have
 			self._sync_with_sprint(self.sprint)
@@ -77,8 +114,12 @@ class WorkItem(Document):
 			update_modified=False,
 		)
 
-	def _add_to_sprint(self, sprint_name):
-		"""Append a row to Sprint.work_items for this work item."""
+	def _add_to_sprint(self, sprint_name, is_brought_forward: bool = False):
+		"""Append a row to Sprint.work_items for this work item.
+
+		is_brought_forward: set True when the work item was previously assigned
+		to a different sprint (i.e., it's being moved in, not originally scoped).
+		"""
 		if not frappe.db.exists("Sprint", sprint_name):
 			return
 
@@ -97,9 +138,15 @@ class WorkItem(Document):
 				"status": self.status,
 				"story_points": self.story_points,
 				"assignee_user": self.assignee_user,
+				"is_brought_forward": 1 if is_brought_forward else 0,
 			},
 		)
 		sprint_doc.save(ignore_permissions=True)
+
+		# Recalculate brought-forward counts on the sprint that received this item
+		if is_brought_forward:
+			from frappe_agile.frappe_agile.doctype.sprint.sprint import _recalculate_brought_forward
+			_recalculate_brought_forward(sprint_name)
 
 	def _remove_from_sprint(self, sprint_name):
 		"""Remove the row for this work item from Sprint.work_items.
