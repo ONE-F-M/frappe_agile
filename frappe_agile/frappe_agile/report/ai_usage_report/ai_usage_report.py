@@ -20,7 +20,7 @@ def get_columns():
 		{"fieldname": "story_count_pct", "label": "Story Count %", "fieldtype": "Percent", "width": 130},
 		{"fieldname": "story_points", "label": "Story Points", "fieldtype": "Float", "width": 130},
 		{"fieldname": "story_points_pct", "label": "Story Points %", "fieldtype": "Percent", "width": 140},
-		{"fieldname": "ai_tools_feedback", "label": "AI Tools Feedback", "fieldtype": "Data", "width": 400},
+		{"fieldname": "ai_tools_feedback", "label": "AI Tools Feedback", "fieldtype": "Long Text", "width": 400},
 	]
 
 
