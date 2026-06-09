@@ -471,7 +471,7 @@ class PriorityBoardPage {
 				<div class="wi-card-top">
 					<span class="wi-card-id">${frappe.utils.escape_html(item.name)}</span>
 					<span class="wi-card-title">
-						<a href="/app/work-item/${encodeURIComponent(item.name)}" target="_blank">
+						<a href="/desk/work-item/${encodeURIComponent(item.name)}" target="_blank">
 							${frappe.utils.escape_html(item.title || "—")}
 						</a>
 					</span>

@@ -77,7 +77,7 @@ frappe.ui.form.on("Work Item", {
 
 					frappe.show_alert({
 						message: __("Please configure the Development Team in {0} to enable Assignee and PR Reviewer selection.", [
-							'<a href="/app/frappe-agile-settings">Frappe Agile Settings</a>'
+							'<a href="/desk/frappe-agile-settings">Frappe Agile Settings</a>'
 						]),
 						indicator: "orange",
 					}, 10);

@@ -75,7 +75,7 @@ frappe.listview_settings["Work Item"] = {
 		// Open Work Item in a new tab on ID click
 		name: function (value, field, doc) {
 			if (!value) return "";
-			const url = "/app/work-item/" + encodeURIComponent(value);
+			const url = "/desk/work-item/" + encodeURIComponent(value);
 			return `<a href="${url}" target="_blank" rel="noopener noreferrer"
 			         onclick="event.stopPropagation()"
 			         class="font-weight-bold">${frappe.utils.escape_html(value)}</a>`;
@@ -130,7 +130,7 @@ function listenForKanbanCardClicks(listview) {
 		let docName = $(this).closest('.kanban-card-wrapper').attr('data-name');
 		if (docName) {
 			docName = decodeURIComponent(docName);
-			const url = frappe.urllib.get_full_url('/app/work-item/' + encodeURIComponent(docName));
+			const url = frappe.urllib.get_full_url('/desk/work-item/' + encodeURIComponent(docName));
 			window.open(url, '_blank');
 		}
 	});
