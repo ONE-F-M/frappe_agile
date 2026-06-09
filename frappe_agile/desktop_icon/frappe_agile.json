@@ -1,0 +1,19 @@
+{
+ "app": "frappe_agile",
+ "creation": "2026-06-08 00:00:00.000000",
+ "docstatus": 0,
+ "doctype": "Desktop Icon",
+ "hidden": 0,
+ "icon_type": "App",
+ "idx": 100,
+ "label": "Frappe Agile",
+ "link_to": "Frappe Agile",
+ "link_type": "Workspace Sidebar",
+ "logo_url": "/assets/frappe_agile/images/frappe_agile_logo.svg",
+ "modified": "2026-06-08 00:00:00.000000",
+ "modified_by": "Administrator",
+ "name": "Frappe Agile",
+ "owner": "Administrator",
+ "roles": [],
+ "standard": 1
+}

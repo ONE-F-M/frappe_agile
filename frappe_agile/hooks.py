@@ -11,15 +11,16 @@ app_license = "mit"
 # required_apps = []
 
 # Each item in the list will be shown as an app in the apps page
-# add_to_apps_screen = [
-# 	{
-# 		"name": "frappe_agile",
-# 		"logo": "/assets/frappe_agile/logo.png",
-# 		"title": "Frappe Agile",
-# 		"route": "/frappe_agile",
-# 		"has_permission": "frappe_agile.api.permission.has_app_permission"
-# 	}
-# ]
+add_to_apps_screen = [
+	{
+		"name": "frappe_agile",
+		"logo": "/assets/frappe_agile/images/frappe_agile_logo.svg",
+		"title": "Frappe Agile",
+		# v16 desk route: slug of the public "Frappe Agile" workspace
+		"route": "/desk/frappe-agile",
+		"has_permission": "frappe_agile.api.permission.has_app_permission",
+	}
+]
 
 # Includes in <head>
 # ------------------
