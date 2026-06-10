@@ -16,4 +16,4 @@ frappe_agile.patches.v1.create_sprint_board #4
 frappe_agile.patches.v1.update_work_item_naming_series_counter
 frappe_agile.patches.v1.create_server_scripts
 frappe_agile.patches.v1.delete_sprint_summary_party_report
-frappe_agile.patches.v1.delete_sprint_report_and_summary
+frappe_agile.patches.v1.delete_sprint_report_and_summary #2
