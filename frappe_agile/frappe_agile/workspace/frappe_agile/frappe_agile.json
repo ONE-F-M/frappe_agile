@@ -66,30 +66,10 @@
             "hidden": 0,
             "is_query_report": 0,
             "label": "Reports",
-            "link_count": 2,
+            "link_count": 0,
             "link_type": "Report",
             "onboard": 0,
             "type": "Card Break"
-        },
-        {
-            "hidden": 0,
-            "is_query_report": 1,
-            "label": "Sprint Report",
-            "link_count": 0,
-            "link_to": "Sprint Report",
-            "link_type": "Report",
-            "onboard": 0,
-            "type": "Link"
-        },
-        {
-            "hidden": 0,
-            "is_query_report": 1,
-            "label": "Sprint Summary",
-            "link_count": 0,
-            "link_to": "Sprint Summary",
-            "link_type": "Report",
-            "onboard": 0,
-            "type": "Link"
         }
     ],
     "modified": "2026-05-05 10:50:00.000000",
