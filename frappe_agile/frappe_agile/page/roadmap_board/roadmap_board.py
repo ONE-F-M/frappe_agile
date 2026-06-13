@@ -66,7 +66,7 @@ def get_roadmap_data(group_by="sprint_prefix", lane=None, sprint_status=None, se
 	if lane:
 		sprint_filters[group_by] = lane
 
-	sprints = frappe.get_all(
+	sprints = frappe.get_list(
 		"Sprint",
 		filters=sprint_filters,
 		fields=[
