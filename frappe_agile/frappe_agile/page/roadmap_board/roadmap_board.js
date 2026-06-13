@@ -293,7 +293,12 @@ class RoadmapBoard {
 		const status_class = this._status_class(cell.status);
 		const pct = cell.acceptance_pct;
 		const pct_class = pct >= 100 ? "rm-pct-full" : pct >= 50 ? "rm-pct-mid" : "rm-pct-low";
-		const matched = term && cell.search_matched ? "rm-matched" : "";
+		const matched = term && (
+			(cell.sprint || "").toLowerCase().includes(term) ||
+			(cell.work_items || []).some((wi) => (wi.title || "").toLowerCase().includes(term))
+		)
+			? "rm-matched"
+			: "";
 		const locked = cell.status === "Completed";
 
 		const items = cell.work_items || [];
