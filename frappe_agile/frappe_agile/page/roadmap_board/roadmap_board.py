@@ -90,7 +90,7 @@ def get_roadmap_data(group_by="sprint_prefix", lane=None, sprint_status=None, se
 
 	# --- Fetch all work items for these sprints in one query ---
 	sprint_names = [s.name for s in sprints]
-	work_items = frappe.get_all(
+	work_items = frappe.get_list(
 		"Work Item",
 		filters={"sprint": ["in", sprint_names]},
 		fields=[
