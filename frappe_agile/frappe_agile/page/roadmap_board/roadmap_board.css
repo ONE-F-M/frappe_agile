@@ -198,10 +198,13 @@
 
 .rm-item-title {
 	flex: 1 1 auto; color: var(--text-color, #374151);
-	white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-decoration: none;
+	white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.rm-item-title:hover { text-decoration: underline; }
 .rm-item-accepted .rm-item-title { color: var(--text-muted, #9ca3af); text-decoration: line-through; }
+
+.rm-item-open { flex: 0 0 auto; color: #94a3b8; text-decoration: none; font-size: 12px; padding: 0 2px; opacity: 0; transition: opacity 0.12s; }
+.rm-item:hover .rm-item-open { opacity: 1; }
+.rm-item-open:hover { color: #2563eb; }
 
 .rm-item-pts { flex: 0 0 auto; font-size: 10px; font-weight: 600; color: var(--text-muted, #94a3b8); background: var(--subtle-fg, #f1f5f9); border-radius: 4px; padding: 0 4px; }
 .rm-item-hit { background: #fef9c3; }
@@ -209,11 +212,19 @@
 .rm-more { align-self: flex-start; background: none; border: none; color: #2563eb; font-size: 11px; font-weight: 600; padding: 2px 0; cursor: pointer; }
 .rm-more:hover { text-decoration: underline; }
 
-/* drag feedback */
+/* drag affordance — the whole writable card is a drag handle */
+.rm-item-draggable { cursor: grab; }
+.rm-item-draggable:active { cursor: grabbing; }
+.rm-item-draggable:hover .rm-item-drag { color: #64748b; }
+
+/* drag feedback (SortableJS fallback engine) */
 .rm-drag-ghost { opacity: 0.4; background: #dbeafe !important; }
 .rm-drag-chosen { background: #eff6ff; }
+.rm-drag-active { box-shadow: 0 6px 18px rgba(15,23,42,0.25); border-radius: 6px; background: #fff; }
+.sortable-fallback { opacity: 0.85 !important; }
 .rm-items.sortable-drag-over { outline: 2px dashed #3b82f6; outline-offset: -2px; border-radius: 6px; }
 .rm-locked .rm-item-drag { display: none; } /* completed sprints: items frozen in place */
+.rm-locked .rm-item-draggable { cursor: default; }
 
 /* ---------------- Cell footer + progress ---------------- */
 .rm-cell-foot { display: flex; align-items: center; justify-content: space-between; font-size: 12px; margin-bottom: 5px; }

@@ -1,4 +1,14 @@
 frappe.ui.form.on("Sprint", {
+	onload(frm) {
+		// Default a new sprint to the standard Wed→Tue window. Editable, so an
+		// explicit override ("stated otherwise") is always respected.
+		if (frm.is_new() && !frm.doc.start_date) {
+			const start = _next_sprint_start();
+			frm.set_value("start_date", start);
+			frm.set_value("end_date", frappe.datetime.add_days(start, 6));
+		}
+	},
+
 	refresh(frm) {
 		frm.set_df_property("expected_velocity", "description",
 			__("Auto-calculated as the sum of Story Points of all linked Work Items."));
@@ -99,6 +109,14 @@ frappe.ui.form.on("Sprint", {
 		return true;
 	}
 });
+
+function _next_sprint_start() {
+	// Wednesday on or after today. JS getDay(): Sun=0 … Wed=3 … Sat=6.
+	const today = frappe.datetime.now_date();
+	const d = frappe.datetime.str_to_obj(today);
+	const offset = (3 - d.getDay() + 7) % 7;
+	return frappe.datetime.add_days(today, offset);
+}
 
 function _trigger_save(frm, target_sprint) {
 	frm.doc._modal_confirmed = true;

@@ -32,6 +32,13 @@ ACCEPTED_STATUS = "Done"
 # Default number of empty future sprint windows to project forward for planning.
 DEFAULT_FUTURE_COUNT = 8
 
+# Sprints run Wednesday → Tuesday (7-day window). The cadence helpers live on the
+# Sprint controller so the board and the doctype stay in lock-step.
+from frappe_agile.frappe_agile.doctype.sprint.sprint import (  # noqa: E402
+	SPRINT_SPAN_DAYS,
+	align_to_sprint_start,
+)
+
 
 @frappe.whitelist()
 def get_roadmap_data(group_by="sprint_prefix", lane=None, sprint_status=None, search=None, future_count=None):
@@ -182,46 +189,32 @@ def get_roadmap_data(group_by="sprint_prefix", lane=None, sprint_status=None, se
 
 
 def _build_future_columns(existing, future_count):
-	"""Project empty sprint windows forward of the last existing window.
+	"""Project empty Wed→Tue sprint windows forward of all existing windows.
 
-	Cadence is inferred from the most common gap between existing windows
-	(defaulting to 7 days). Generation continues until `future_count` windows
-	lie beyond today, so any gap between the last real sprint and today is also
-	filled. Capped to avoid runaway generation.
+	Windows are the standard weekly cadence (Wednesday start, Tuesday end). The
+	first one begins on the first sprint-start weekday after every existing
+	window has ended, so generated columns never overlap real sprints — even an
+	irregular (e.g. two-week) trailing sprint. Generation continues until
+	`future_count` windows lie beyond today, filling any gap up to today as well.
+	Capped to avoid runaway generation.
 	"""
 	if not existing or future_count <= 0:
 		return []
 
-	starts = [getdate(c["start_date"]) for c in existing]
-	gaps = [
-		(starts[i] - starts[i - 1]).days
-		for i in range(1, len(starts))
-		if (starts[i] - starts[i - 1]).days > 0
-	]
-	step = 7
-	if gaps:
-		from collections import Counter
-
-		step = Counter(gaps).most_common(1)[0][0] or 7
-
-	last = existing[-1]
-	last_start = getdate(last["start_date"])
-	length = step - 1
-	if last.get("end_date"):
-		span = (getdate(last["end_date"]) - last_start).days
-		if span > 0:
-			length = span
+	# Start strictly after the latest end_date among existing windows.
+	last_end = max(getdate(c.get("end_date") or c["start_date"]) for c in existing)
+	start = align_to_sprint_start(add_days(last_end, 1))
 
 	today = getdate()
 	future = []
-	i = 1
-	while sum(1 for f in future if getdate(f["start_date"]) > today) < future_count and i <= 104:
-		ws = add_days(last_start, step * i)
+	i = 0
+	while sum(1 for f in future if getdate(f["start_date"]) > today) < future_count and i < 104:
+		ws = add_days(start, 7 * i)
 		future.append(
 			{
 				"key": ws.isoformat(),
 				"start_date": ws,
-				"end_date": add_days(ws, length),
+				"end_date": add_days(ws, SPRINT_SPAN_DAYS),
 				"is_future": True,
 			}
 		)
@@ -347,8 +340,9 @@ def _ensure_sprint_for_window(prefix, window_start, window_end):
 
 	Returns (sprint_name, created_bool).
 	"""
-	ws = getdate(window_start)
-	we = getdate(window_end) if window_end else ws
+	# Snap to the standard Wed→Tue window so auto-created sprints follow cadence.
+	ws = align_to_sprint_start(window_start)
+	we = add_days(ws, SPRINT_SPAN_DAYS)
 
 	existing = frappe.db.get_value("Sprint", {"sprint_prefix": prefix, "start_date": ws}, "name")
 	if existing:

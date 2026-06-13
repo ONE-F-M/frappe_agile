@@ -122,21 +122,21 @@ class RoadmapBoard {
 		this.$filters.find("#rm-group-by").on("change", (e) => {
 			this.filters.group_by = e.target.value;
 			this.filters.lane = "";
-			this.refresh();
+			this.refresh({ scrollToCurrent: true });
 		});
 		this.$filters.find("#rm-status").on("change", (e) => {
 			this.filters.sprint_status = e.target.value;
-			this.refresh();
+			this.refresh({ scrollToCurrent: true });
 		});
 		this.$filters.find("#rm-future").on("change", (e) => {
 			this.filters.future_count = cint(e.target.value);
-			this.refresh();
+			this.refresh({ scrollToCurrent: true });
 		});
 		this.$filters.find("#rm-search").on("input", frappe.utils.debounce((e) => {
 			this.filters.search = e.target.value;
 			this._render_grid(); // search highlights client-side, no server round-trip
 		}, 200));
-		this.$filters.find("#rm-refresh").on("click", () => this.refresh());
+		this.$filters.find("#rm-refresh").on("click", () => this.refresh({ preserveScroll: true }));
 		this.$filters.find("#rm-jump-current").on("click", () => this._scroll_to_current());
 	}
 
@@ -159,11 +159,16 @@ class RoadmapBoard {
 	// ----------------------------------------------------------
 	// Data load
 	// ----------------------------------------------------------
-	refresh() {
+	refresh(opts = {}) {
 		if (this._loading) return;
 		this._loading = true;
 		this._destroy_sortables();
-		this.$grid.html(this._skeleton_html());
+
+		// `scrollToCurrent` recentres on the current sprint (first load / filter
+		// changes). `preserveScroll` keeps the viewport exactly where it is — used
+		// after a drag-move so the board updates in place without jumping.
+		if (opts.scrollToCurrent) this._scrollToCurrentNext = true;
+		if (!opts.preserveScroll) this.$grid.html(this._skeleton_html());
 
 		frappe.call({
 			method: API_GET,
@@ -195,6 +200,11 @@ class RoadmapBoard {
 	// Grid render
 	// ----------------------------------------------------------
 	_render_grid() {
+		// Remember the viewport so re-rendering (search, drag-move) doesn't reset it.
+		const scroller = this.$grid[0];
+		const prevLeft = scroller ? scroller.scrollLeft : 0;
+		const prevTop = scroller ? scroller.scrollTop : 0;
+
 		const data = this.data;
 		if (!data || !data.rows.length || !data.columns.length) {
 			this.$grid.html(`
@@ -256,7 +266,17 @@ class RoadmapBoard {
 		this.$grid.html(html);
 		this._bind_cell_events();
 		this._init_drag();
-		this._scroll_to_current();
+
+		// First load / filter changes recentre on the current sprint; everything
+		// else (search, drag-move) keeps the user's current scroll position.
+		if (this._scrollToCurrentNext || !this._first_render_done) {
+			this._scrollToCurrentNext = false;
+			this._scroll_to_current();
+		} else {
+			this.$grid[0].scrollLeft = prevLeft;
+			this.$grid[0].scrollTop = prevTop;
+		}
+		this._first_render_done = true;
 	}
 
 	_cell_attrs(cell, row, col) {
@@ -324,19 +344,24 @@ class RoadmapBoard {
 		const type_class = `rm-type-${(wi.type || "").toLowerCase().replace(/\s+/g, "-")}`;
 		const highlight = term && (wi.title || "").toLowerCase().includes(term) ? "rm-item-hit" : "";
 		const pts = wi.story_points ? `<span class="rm-item-pts">${wi.story_points}</span>` : "";
-		const handle = this.can_write
+		// When writable, the whole card is draggable (the grip is just a cue);
+		// the title is a plain span so it doesn't intercept the drag, and a small
+		// ↗ icon opens the Work Item without starting a drag.
+		const grip = this.can_write
 			? `<span class="rm-item-drag" title="${__("Drag to another sprint")}">⠿</span>`
 			: "";
+		const drag_class = this.can_write ? "rm-item-draggable" : "";
 
 		return `
-		<div class="rm-item ${acc_class} ${highlight}" data-name="${frappe.utils.escape_html(wi.name)}"
+		<div class="rm-item ${acc_class} ${highlight} ${drag_class}" data-name="${frappe.utils.escape_html(wi.name)}"
 			title="${frappe.utils.escape_html((wi.type || "") + " · " + (wi.status || ""))}">
-			${handle}
+			${grip}
 			<input type="checkbox" class="rm-check" ${checked} disabled />
 			<span class="rm-item-type ${type_class}"></span>
-			<a class="rm-item-title" href="/app/work-item/${encodeURIComponent(wi.name)}" target="_blank"
-				title="${frappe.utils.escape_html(wi.title || "")}">${frappe.utils.escape_html(wi.title || wi.name)}</a>
+			<span class="rm-item-title" title="${frappe.utils.escape_html(wi.title || "")}">${frappe.utils.escape_html(wi.title || wi.name)}</span>
 			${pts}
+			<a class="rm-item-open" href="/app/work-item/${encodeURIComponent(wi.name)}" target="_blank"
+				title="${__("Open work item")}">↗</a>
 		</div>`;
 	}
 
@@ -361,32 +386,46 @@ class RoadmapBoard {
 		if (!this.can_write) return;
 		frappe.require(SORTABLE_ASSET, () => {
 			this._destroy_sortables();
-			this.$grid.find('.rm-items[data-droppable]').each((i, list) => {
-				const droppable = list.getAttribute("data-droppable") === "1";
+			this.$grid.find(".rm-items").each((i, list) => {
+				const cell = list.closest(".rm-cell");
+				const locked = !!cell && cell.dataset.locked === "1";
 				const s = new Sortable(list, {
 					group: {
 						name: "roadmap",
-						pull: true,
-						// allow drop only into non-completed, droppable cells
+						// Items in a Completed sprint are frozen — can't be dragged out.
+						pull: locked ? false : true,
+						// Allow drop only into non-completed, droppable cells.
 						put: (to) => {
-							const cell = to.el.closest(".rm-cell");
-							return cell
-								&& cell.dataset.locked !== "1"
-								&& to.el.getAttribute("data-droppable") === "1";
+							const c = to.el.closest(".rm-cell");
+							return (
+								!!c &&
+								c.dataset.locked !== "1" &&
+								to.el.getAttribute("data-droppable") === "1"
+							);
 						},
 					},
 					sort: false,
 					draggable: ".rm-item",
-					handle: ".rm-item-drag",
+					// Let the open-icon and checkbox handle their own clicks.
+					filter: ".rm-item-open, .rm-check",
+					preventOnFilter: false,
+					// Use SortableJS's own drag engine — native HTML5 DnD is unreliable
+					// inside this scrollable, sticky-header grid (drops snap back).
+					forceFallback: true,
+					fallbackOnBody: true,
+					fallbackTolerance: 4,
 					animation: 150,
 					ghostClass: "rm-drag-ghost",
 					chosenClass: "rm-drag-chosen",
-					filter: ".rm-item-title, .rm-check",
-					preventOnFilter: false,
+					dragClass: "rm-drag-active",
+					scroll: this.$grid[0],
+					scrollSensitivity: 80,
+					onMove: (evt) => {
+						const c = evt.to.closest(".rm-cell");
+						return !!c && c.dataset.locked !== "1";
+					},
 					onEnd: (evt) => this._on_item_moved(evt),
 				});
-				// A non-droppable list can still be a drag source.
-				if (!droppable) s.option("group", { name: "roadmap", pull: true, put: false });
 				this._sortables.push(s);
 			});
 		});
@@ -431,7 +470,7 @@ class RoadmapBoard {
 						indicator: "green",
 					});
 				}
-				this.refresh();
+				this.refresh({ preserveScroll: true });
 			},
 			error: (err) => {
 				frappe.dom.unfreeze();
@@ -439,7 +478,7 @@ class RoadmapBoard {
 					message: __("Move failed: {0}", [(err && err.message) || __("see error log")]),
 					indicator: "red",
 				});
-				this.refresh(); // reload to restore correct positions
+				this.refresh({ preserveScroll: true }); // reload in place to restore positions
 			},
 		});
 	}
