@@ -7,6 +7,8 @@ The Roadmap renders a Kanban-style grid:
   - Rows    = a "lane" (sprint prefix, or linked Project) — each lane runs a
               sequence of sprints over time.
   - Columns = weekly time windows, aligned across lanes by sprint start_date.
+              The axis is extended with empty *future* windows so work can be
+              planned ahead and dragged into upcoming sprints.
   - Cells   = the Sprint that falls in that (lane, window), with its status,
               story-point acceptance %, and the list of work items (each shown
               with a checkbox marking whether the item is accepted / Done).
@@ -14,18 +16,25 @@ The Roadmap renders a Kanban-style grid:
 Acceptance is computed live from the work items rather than from the stored
 `points_accepted` field so the board is always accurate even if that cached
 field is stale.
+
+Work items can be moved between sprints via `move_work_item` (drag & drop on
+the client). Dropping into an empty future slot auto-creates a Draft Sprint for
+that lane/window (sprint-prefix grouping only).
 """
 
 import frappe
 from frappe import _
-from frappe.utils import flt, getdate
+from frappe.utils import add_days, cint, flt, getdate
 
 # A work item is considered "accepted" when it reaches this status.
 ACCEPTED_STATUS = "Done"
 
+# Default number of empty future sprint windows to project forward for planning.
+DEFAULT_FUTURE_COUNT = 8
+
 
 @frappe.whitelist()
-def get_roadmap_data(group_by="sprint_prefix", lane=None, sprint_status=None, search=None):
+def get_roadmap_data(group_by="sprint_prefix", lane=None, sprint_status=None, search=None, future_count=None):
 	"""Return the full roadmap grid.
 
 	Args:
@@ -33,11 +42,14 @@ def get_roadmap_data(group_by="sprint_prefix", lane=None, sprint_status=None, se
 		lane: optional, restrict to a single lane (prefix or project value).
 		sprint_status: optional, restrict to sprints in this status.
 		search: optional, free-text filter on work item title / sprint name.
+		future_count: how many empty future sprint windows to append for planning.
 
 	Returns dict: {columns: [...], rows: [...], cells: {cell_key: {...}}}
 	"""
 	if group_by not in ("sprint_prefix", "project"):
 		group_by = "sprint_prefix"
+
+	future_count = cint(future_count) if future_count not in (None, "") else DEFAULT_FUTURE_COUNT
 
 	sprint_filters = {}
 	if sprint_status:
@@ -107,6 +119,12 @@ def get_roadmap_data(group_by="sprint_prefix", lane=None, sprint_status=None, se
 			win["end_date"] = s.end_date
 
 	columns = sorted(windows.values(), key=lambda w: getdate(w["start_date"]))
+	for col in columns:
+		col["is_future"] = False
+
+	# Extend the axis with upcoming empty windows for forward planning.
+	columns += _build_future_columns(columns, future_count)
+
 	today = getdate()
 	for idx, col in enumerate(columns, start=1):
 		col["seq"] = idx
@@ -161,6 +179,54 @@ def get_roadmap_data(group_by="sprint_prefix", lane=None, sprint_status=None, se
 		"rows": row_list,
 		"cells": cells,
 	}
+
+
+def _build_future_columns(existing, future_count):
+	"""Project empty sprint windows forward of the last existing window.
+
+	Cadence is inferred from the most common gap between existing windows
+	(defaulting to 7 days). Generation continues until `future_count` windows
+	lie beyond today, so any gap between the last real sprint and today is also
+	filled. Capped to avoid runaway generation.
+	"""
+	if not existing or future_count <= 0:
+		return []
+
+	starts = [getdate(c["start_date"]) for c in existing]
+	gaps = [
+		(starts[i] - starts[i - 1]).days
+		for i in range(1, len(starts))
+		if (starts[i] - starts[i - 1]).days > 0
+	]
+	step = 7
+	if gaps:
+		from collections import Counter
+
+		step = Counter(gaps).most_common(1)[0][0] or 7
+
+	last = existing[-1]
+	last_start = getdate(last["start_date"])
+	length = step - 1
+	if last.get("end_date"):
+		span = (getdate(last["end_date"]) - last_start).days
+		if span > 0:
+			length = span
+
+	today = getdate()
+	future = []
+	i = 1
+	while sum(1 for f in future if getdate(f["start_date"]) > today) < future_count and i <= 104:
+		ws = add_days(last_start, step * i)
+		future.append(
+			{
+				"key": ws.isoformat(),
+				"start_date": ws,
+				"end_date": add_days(ws, length),
+				"is_future": True,
+			}
+		)
+		i += 1
+	return future
 
 
 def _build_cell(sprint, items, search_term):
@@ -220,3 +286,89 @@ def _build_cell(sprint, items, search_term):
 		"work_items": work_items,
 		"search_matched": matched,
 	}
+
+
+# ---------------------------------------------------------------------------
+# Drag & drop: move a Work Item between sprints
+# ---------------------------------------------------------------------------
+
+
+@frappe.whitelist()
+def move_work_item(
+	work_item,
+	target_sprint=None,
+	lane=None,
+	group_by="sprint_prefix",
+	window_start=None,
+	window_end=None,
+):
+	"""Move a Work Item into `target_sprint`.
+
+	If `target_sprint` is not given, an empty future slot was targeted: a Draft
+	Sprint is auto-created for the (lane, window). Auto-creation is only possible
+	when grouping by sprint prefix (the prefix names the new Sprint).
+
+	Saving the Work Item runs its normal `on_update`, which keeps the Sprint Work
+	Item child tables in sync, marks the item as brought-forward, recalculates
+	velocity, and blocks assignment into a Completed sprint.
+	"""
+	if not frappe.has_permission("Work Item", "write"):
+		frappe.throw(_("You do not have permission to move Work Items."), frappe.PermissionError)
+
+	created = False
+	if not target_sprint:
+		if group_by != "sprint_prefix" or not lane or not window_start:
+			frappe.throw(
+				_("No sprint exists for this slot and one cannot be auto-created here. "
+				  "Create a Sprint first, then move the item.")
+			)
+		target_sprint, created = _ensure_sprint_for_window(lane, window_start, window_end)
+
+	wi = frappe.get_doc("Work Item", work_item)
+	source_sprint = wi.sprint
+
+	if source_sprint == target_sprint:
+		return {"target_sprint": target_sprint, "source_sprint": source_sprint, "created": False, "unchanged": True}
+
+	wi.sprint = target_sprint
+	wi.save()
+	frappe.db.commit()
+
+	return {
+		"target_sprint": target_sprint,
+		"source_sprint": source_sprint,
+		"created": created,
+		"title": wi.title or wi.name,
+	}
+
+
+def _ensure_sprint_for_window(prefix, window_start, window_end):
+	"""Return an existing Draft/Active sprint for (prefix, window) or create one.
+
+	Returns (sprint_name, created_bool).
+	"""
+	ws = getdate(window_start)
+	we = getdate(window_end) if window_end else ws
+
+	existing = frappe.db.get_value("Sprint", {"sprint_prefix": prefix, "start_date": ws}, "name")
+	if existing:
+		return existing, False
+
+	if not frappe.has_permission("Sprint", "create"):
+		frappe.throw(
+			_("A new Sprint is needed for this slot, but you lack permission to create Sprints."),
+			frappe.PermissionError,
+		)
+
+	doc = frappe.get_doc(
+		{
+			"doctype": "Sprint",
+			"sprint_prefix": prefix,
+			"status": "Draft",
+			"start_date": ws,
+			"end_date": we,
+			"sprint_goal": _("Planned via Roadmap"),
+		}
+	)
+	doc.insert()
+	return doc.name, True
