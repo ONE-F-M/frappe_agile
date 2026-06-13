@@ -56,8 +56,10 @@ def get_roadmap_data(group_by="sprint_prefix", lane=None, sprint_status=None, se
 	if group_by not in ("sprint_prefix", "project"):
 		group_by = "sprint_prefix"
 
-	future_count = cint(future_count) if future_count not in (None, "") else DEFAULT_FUTURE_COUNT
+	frappe.has_permission("Sprint", "read", throw=True)
+	frappe.has_permission("Work Item", "read", throw=True)
 
+	future_count = cint(future_count) if future_count not in (None, "") else DEFAULT_FUTURE_COUNT
 	sprint_filters = {}
 	if sprint_status:
 		sprint_filters["status"] = sprint_status
