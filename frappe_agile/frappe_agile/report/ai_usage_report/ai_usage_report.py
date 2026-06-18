@@ -144,7 +144,7 @@ def get_data(filters):
 		count = metrics["story_count"]
 		points_raw = metrics["story_points"]
 		points = flt(points_raw, 1)
-		combined_feedback = "\n---\n".join(sorted(metrics.get("feedbacks", [])))
+		combined_feedback = "\n\n\n\n".join(sorted(metrics.get("feedbacks", [])))
 		data.append({
 			"combined_labels": combo,
 			"story_count": count,
