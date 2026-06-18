@@ -1,0 +1,10 @@
+{
+	"doctype": "Server Script",
+	"name": "Validate AI Feedback Complete",
+	"script_type": "API",
+	"api_method": "validate_ai_feedback_complete",
+	"module": "Frappe Agile",
+	"disabled": 0,
+	"allow_guest": 0,
+	"script": "missing = []\nlabels = []\nfor row in doc.labels:\n    labels.append(row.label)\nis_manual = \"Manual\" in labels\nif not labels:\n    missing.append(\"Labels\")\nif not is_manual and not doc.ai_tools_feedback:\n    missing.append(\"AI Tools Feedback\")\nif labels and not is_manual and not doc.execution_prompt_count:\n    missing.append(\"Execution Prompt Count (cannot be 0 for non-Manual work items)\")\nresult[\"ai_feedback_complete\"] = len(missing) == 0\nif missing:\n    frappe.msgprint(\"Please add the following before proceeding: \" + \", \".join(missing))"
+}

@@ -20,11 +20,11 @@ def get_columns():
 		{"fieldname": "sprint_start_date", "label": "Start Date", "fieldtype": "Date", "width": 150},
 		{"fieldname": "sprint_end_date", "label": "End Date", "fieldtype": "Date", "width": 150},
 		{"fieldname": "no_of_sprints", "label": "No. of Sprints", "fieldtype": "Int", "width": 120},
-		{"fieldname": "target_points", "label": "Target Points", "fieldtype": "Float", "width": 130},
 		{"fieldname": "expected_velocity", "label": "Expected Velocity", "fieldtype": "Float", "width": 150},
-		{"fieldname": "completed_points", "label": "Completed Points", "fieldtype": "Float", "width": 150},
-		{"fieldname": "accepted_points", "label": "Accepted Points", "fieldtype": "Float", "width": 150},
-		{"fieldname": "completion_rate", "label": "Completion Rate %", "fieldtype": "Percent", "width": 150},
+		{"fieldname": "points_scoped", "label": "Points Scoped", "fieldtype": "Float", "width": 130},
+		{"fieldname": "accepted_points", "label": "Accepted Points", "fieldtype": "Float", "width": 140},
+		{"fieldname": "rejected_points", "label": "Rejected Points", "fieldtype": "Float", "width": 140},
+		{"fieldname": "spillover_points", "label": "Spillover Points", "fieldtype": "Float", "width": 140},
 		{"fieldname": "acceptance_rate", "label": "Acceptance Rate %", "fieldtype": "Percent", "width": 150},
 	]
 
@@ -39,7 +39,7 @@ def get_data(filters):
 	Sprint = frappe.qb.DocType("Sprint")
 	query = (
 		frappe.qb.from_(Sprint)
-		.select(Sprint.name, Sprint.start_date, Sprint.end_date, Sprint.business_analyst, Sprint.target_points)
+		.select(Sprint.name, Sprint.start_date, Sprint.end_date, Sprint.business_analyst)
 		.orderby(Sprint.start_date, order=frappe.qb.desc)
 	)
 
@@ -88,7 +88,7 @@ def get_data(filters):
 	# ------------------------------------------------------------------
 	# 4. Aggregate per (ba, sprint)
 	# ------------------------------------------------------------------
-	# ba -> { sprint -> {completed, accepted} }
+	# ba -> { sprint -> {scoped, accepted, rejected} }
 	ba_sprint_data = {}
 
 	for wi in work_items:
@@ -105,17 +105,21 @@ def get_data(filters):
 			ba_sprint_data[ba] = {}
 		if sprint_name not in ba_sprint_data[ba]:
 			ba_sprint_data[ba][sprint_name] = {
-				"completed_points": 0.0,
+				"scoped_points": 0.0,
 				"accepted_points": 0.0,
+				"rejected_points": 0.0,
 			}
 
 		points = flt(wi.story_points)
 
-		if wi.status in ("Done", "In Staging", "Rejected"):
-			ba_sprint_data[ba][sprint_name]["completed_points"] += points
+		# All work items in the sprint contribute to scoped points
+		ba_sprint_data[ba][sprint_name]["scoped_points"] += points
 
 		if wi.status == "Done":
 			ba_sprint_data[ba][sprint_name]["accepted_points"] += points
+
+		if wi.status == "Rejected":
+			ba_sprint_data[ba][sprint_name]["rejected_points"] += points
 
 	# Also include BAs who had sprints in range but no work items
 	for sprint_doc in sprints:
@@ -126,8 +130,9 @@ def get_data(filters):
 			ba_sprint_data[ba] = {}
 		if sprint_doc.name not in ba_sprint_data[ba]:
 			ba_sprint_data[ba][sprint_doc.name] = {
-				"completed_points": 0.0,
+				"scoped_points": 0.0,
 				"accepted_points": 0.0,
+				"rejected_points": 0.0,
 			}
 
 	if not ba_sprint_data:
@@ -161,23 +166,22 @@ def get_data(filters):
 		# Expected Velocity = ba_velocity × No. of Sprints (for this BA's sprints)
 		expected_velocity = flt(ba_velocity * no_of_sprints, 1)
 
-		# Target Points = sum of sprint.target_points across this BA's sprints
-		target_points = flt(
-			sum(flt(sprint_map[s].target_points) for s in sprint_names_for_ba if s in sprint_map),
-			1
-		)
-
-		# Sum completed and accepted across all sprints — keep raw for rate calculation
-		total_completed_raw = sum(v["completed_points"] for v in sprint_dict.values())
+		# Sum scoped, accepted, and rejected across all sprints
+		total_scoped_raw = sum(v["scoped_points"] for v in sprint_dict.values())
 		total_accepted_raw = sum(v["accepted_points"] for v in sprint_dict.values())
+		total_rejected_raw = sum(v["rejected_points"] for v in sprint_dict.values())
 
-		# Rates are computed from raw (unrounded) values to avoid compounding error
-		completion_rate = (total_completed_raw / expected_velocity * 100) if expected_velocity else 0.0
-		acceptance_rate = (total_accepted_raw / expected_velocity * 100) if expected_velocity else 0.0
+		# Acceptance Rate = (Accepted Points / Points Scoped) × 100
+		acceptance_rate = (total_accepted_raw / total_scoped_raw * 100) if total_scoped_raw else 0.0
+
+		# Spillover Points = Points Scoped - Accepted Points - Rejected Points
+		spillover_raw = total_scoped_raw - total_accepted_raw - total_rejected_raw
 
 		# Round display values after rate calculation
-		total_completed = flt(total_completed_raw, 1)
+		total_scoped = flt(total_scoped_raw, 1)
 		total_accepted = flt(total_accepted_raw, 1)
+		total_rejected = flt(total_rejected_raw, 1)
+		spillover = flt(spillover_raw, 1)
 
 		# Date range across all sprints for this BA
 		sprint_docs = [sprint_map[s] for s in sprint_names_for_ba if s in sprint_map]
@@ -202,11 +206,11 @@ def get_data(filters):
 			"sprint_start_date": earliest_start,
 			"sprint_end_date": latest_end,
 			"no_of_sprints": no_of_sprints,
-			"target_points": target_points,
 			"expected_velocity": expected_velocity,
-			"completed_points": total_completed,
+			"points_scoped": total_scoped,
 			"accepted_points": total_accepted,
-			"completion_rate": flt(completion_rate, 2),
+			"rejected_points": total_rejected,
+			"spillover_points": spillover,
 			"acceptance_rate": flt(acceptance_rate, 2),
 		})
 

@@ -25,55 +25,21 @@ class WorkItem(Document):
 			if frappe.db.exists("Workflow State", self.status):
 				self.workflow_state = self.status
 
-	def _get_old_sprint(self):
-		"""Derive the previous sprint by checking Sprint Work Item child tables.
-
-		Finds Completed sprints that contain this work item in their child table
-		where the child row status is not 'Done'. If multiple sprints match, the most
-		recent one (by start_date) is returned. The currently assigned sprint
-		(self.sprint) is excluded so we only get the *previous* sprint the item was in.
-		"""
-		if self.is_new():
-			return None
-
-		if not frappe.db.table_exists("Sprint Work Item"):
-			return None
-
-		from frappe.query_builder import DocType
-
-		SWI = DocType("Sprint Work Item")
-		Sprint = DocType("Sprint")
-
-		query = (
-			frappe.qb.from_(SWI)
-			.join(Sprint).on(SWI.parent == Sprint.name)
-			.select(Sprint.name)
-			.where(SWI.work_item == self.name)
-			.where(SWI.status != "Done")
-			.where(Sprint.status == "Completed")
-			.orderby(Sprint.start_date, order=frappe.qb.desc)
-			.limit(1)
-		)
-
-		# Exclude the sprint currently being assigned so we only find the
-		# *previous* sprint the work item lived in.
-		if self.sprint:
-			query = query.where(Sprint.name != self.sprint)
-
-		result = query.run(as_dict=True)
-		return result[0].name if result else None
-
 	def on_update(self):
 		"""
 		Keep the Sprint Work Item child table in sync when the sprint
 		assignment changes, then recalculate Sprint velocity.
 		"""
-		old_sprint = self._get_old_sprint()
+		doc_before = self.get_doc_before_save()
+		old_sprint = doc_before.sprint if doc_before else None
 
 		if old_sprint != self.sprint:
-			
+			# Sprint assignment changed — remove from old, add to new
+			if old_sprint:
+				self._remove_from_sprint(old_sprint)
+
 			if self.sprint:
-				# Mark as brought forward if the item previously belonged to a different sprint
+				# Mark as brought forward if moved from a different sprint
 				is_brought_forward = bool(old_sprint and old_sprint != self.sprint)
 				self._add_to_sprint(self.sprint, is_brought_forward=is_brought_forward)
 		elif self.sprint:
