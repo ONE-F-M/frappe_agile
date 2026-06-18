@@ -1,0 +1,10 @@
+{
+	"doctype": "Server Script",
+	"name": "Set PR Reviewer",
+	"script_type": "API",
+	"api_method": "set_pr_reviewer_user",
+	"module": "Frappe Agile",
+	"disabled": 0,
+	"allow_guest": 0,
+	"script": "# Resolve the GitHub reviewer username (from the webhook payload) to a Frappe\n# User via Frappe Agile Settings > Development Team, then store it on the Work Item.\n# Safe to run even when no reviewer is present (e.g. on pull_request:opened).\nif reviewer_github_login:\n    reviewer = frappe.db.get_value(\n        \"Development Team Member\",\n        {\"parent\": \"Frappe Agile Settings\", \"github_username\": reviewer_github_login},\n        \"user\",\n    )\n    if reviewer:\n        frappe.db.set_value(\"Work Item\", context_docname, \"pr_reviewer_user\", reviewer)\n"
+}
