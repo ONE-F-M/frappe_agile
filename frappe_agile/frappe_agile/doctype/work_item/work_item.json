@@ -1,305 +1,323 @@
 {
-	"actions": [],
-	"allow_rename": 1,
-	"autoname": "naming_series:",
-	"creation": "2026-03-25 17:00:00",
-	"doctype": "DocType",
-	"engine": "InnoDB",
-	"field_order": [
-		"basic_information_section",
-		"naming_series",
-		"work_item_type",
-		"priority",
-		"title",
-		"column_break_bnjh",
-		"project",
-		"status",
-		"reporter_user",
-		"process_owner",
-		"is_groomed",
-		"work_item_details_section",
-		"work_item_template",
-		"description",
-		"planning_and_assignment_section",
-		"sprint",
-		"sprint_status",
-		"story_points",
-		"column_break_gxds",
-		"epic",
-		"small_text_yecv",
-		"implementation_details_section",
-		"assignee_user",
-		"pr_required",
-		"planning_prompt_count",
-		"execution_prompt_count",
-		"pr_link",
-		"pr_reviewer_user",
-		"column_break_btot",
-		"ai_tools_feedback",
-		"labels_section",
-		"labels",
-		"section_break_dcoy",
-		"rejection_notes"
-	],
-	"fields": [
-		{
-			"fieldname": "basic_information_section",
-			"fieldtype": "Section Break",
-			"label": "Basic Information"
-		},
-		{
-			"fieldname": "work_item_type",
-			"fieldtype": "Select",
-			"in_list_view": 1,
-			"label": "Work Item Type",
-			"options": "\nEpic\nUser Story\nTask\nBug",
-			"reqd": 1
-		},
-		{
-			"default": "Medium",
-			"fieldname": "priority",
-			"fieldtype": "Select",
-			"in_standard_filter": 1,
-			"label": "Priority",
-			"options": "Highest\nHigh\nMedium\nLow\nLowest"
-		},
-		{
-			"fieldname": "title",
-			"fieldtype": "Small Text",
-			"in_list_view": 1,
-			"label": "Title",
-			"reqd": 1
-		},
-		{
-			"fieldname": "column_break_bnjh",
-			"fieldtype": "Column Break"
-		},
-		{
-			"fieldname": "project",
-			"fieldtype": "Link",
-			"label": "Project",
-			"options": "Project"
-		},
-		{
-			"fieldname": "status",
-			"fieldtype": "Select",
-			"hidden": 1,
-			"in_list_view": 1,
-			"label": "Status",
-			"options": "Draft\nOpen\nIn Progress\nPending Review\nChanges Requested\nIn Staging\nRejected\nDone"
-		},
-		{
-			"fieldname": "assignee_user",
-			"fieldtype": "Link",
-			"label": "Assignee User",
-			"options": "User"
-		},
-		{
-			"default": "__user",
-			"fieldname": "reporter_user",
-			"fieldtype": "Link",
-			"label": "Reporter User",
-			"options": "User",
-			"read_only": 1
-		},
-		{
-			"fieldname": "process_owner",
-			"fieldtype": "Link",
-			"label": "Process Owner",
-			"options": "User"
-		},
-		{
-			"default": "0",
-			"fieldname": "is_groomed",
-			"fieldtype": "Check",
-			"in_list_view": 1,
-			"in_standard_filter": 1,
-			"label": "Is Groomed"
-		},
-		{
-			"fieldname": "work_item_details_section",
-			"fieldtype": "Section Break",
-			"label": "Work Item Details"
-		},
-		{
-			"fieldname": "work_item_template",
-			"fieldtype": "Link",
-			"label": "Work Item Template",
-			"options": "Work Item Template"
-		},
-		{
-			"fieldname": "description",
-			"fieldtype": "Text Editor",
-			"label": "Description"
-		},
-		{
-			"fieldname": "planning_and_assignment_section",
-			"fieldtype": "Section Break",
-			"label": "Planning and Assignment"
-		},
-		{
-			"depends_on": "eval:doc.work_item_type != 'Epic'",
-			"fieldname": "sprint",
-			"fieldtype": "Link",
-			"label": "Sprint",
-			"options": "Sprint"
-		},
-		{
-			"fetch_from": "sprint.status",
-			"fieldname": "sprint_status",
-			"fieldtype": "Data",
-			"label": "Sprint Status",
-			"read_only": 1
-		},
-		{
-			"fieldname": "story_points",
-			"fieldtype": "Float",
-			"in_list_view": 1,
-			"label": "Story Points",
-			"non_negative": 1,
-			"read_only_depends_on": "eval:doc.work_item_type == 'Epic'"
-		},
-		{
-			"fieldname": "column_break_gxds",
-			"fieldtype": "Column Break"
-		},
-		{
-			"depends_on": "eval:doc.work_item_type != 'Epic'",
-			"fieldname": "epic",
-			"fieldtype": "Link",
-			"label": "Epic",
-			"options": "Work Item"
-		},
-		{
-			"fieldname": "implementation_details_section",
-			"fieldtype": "Section Break",
-			"label": "Implementation Details"
-		},
-		{
-			"fieldname": "planning_prompt_count",
-			"fieldtype": "Int",
-			"label": "Planning Prompt Count"
-		},
-		{
-			"fieldname": "execution_prompt_count",
-			"fieldtype": "Int",
-			"label": "Execution Prompt Count"
-		},
-		{
-			"depends_on": "eval:doc.pr_required==1",
-			"fieldname": "pr_link",
-			"fieldtype": "Data",
-			"label": "PR Link",
-			"options": "URL"
-		},
-		{
-			"depends_on": "eval:doc.pr_required==1",
-			"fieldname": "pr_reviewer_user",
-			"fieldtype": "Link",
-			"label": "PR Reviewer User",
-			"options": "User"
-		},
-		{
-			"fieldname": "column_break_btot",
-			"fieldtype": "Column Break"
-		},
-		{
-			"fieldname": "ai_tools_feedback",
-			"fieldtype": "Long Text",
-			"label": "AI Tools Feedback"
-		},
-		{
-			"fieldname": "labels_section",
-			"fieldtype": "Section Break",
-			"label": "Labels"
-		},
-		{
-			"fieldname": "labels",
-			"fieldtype": "Table MultiSelect",
-			"label": "Labels",
-			"options": "Work Item Label"
-		},
-		{
-			"fieldname": "naming_series",
-			"fieldtype": "Select",
-			"label": "Series",
-			"options": "WI-.######"
-		},
-		{
-			"fieldname": "section_break_dcoy",
-			"fieldtype": "Section Break"
-		},
-		{
-			"fieldname": "rejection_notes",
-			"fieldtype": "Table",
-			"label": "Rejection Notes",
-			"options": "Rejection Details",
-			"read_only": 1
-		},
-		{
-			"fetch_from": "epic.title",
-			"fieldname": "small_text_yecv",
-			"fieldtype": "Small Text",
-			"in_list_view": 1,
-			"label": "Epic Title",
-			"read_only": 1
-		},
-		{
-			"default": "0",
-			"fieldname": "pr_required",
-			"fieldtype": "Check",
-			"label": "PR Required"
-		}
-	],
-	"index_web_pages_for_search": 1,
-	"links": [],
-	"modified": "2026-06-05 09:45:55.204520",
-	"modified_by": "Administrator",
-	"module": "Frappe Agile",
-	"name": "Work Item",
-	"naming_rule": "By \"Naming Series\" field",
-	"owner": "Administrator",
-	"permissions": [
-		{
-			"create": 1,
-			"delete": 1,
-			"email": 1,
-			"export": 1,
-			"print": 1,
-			"read": 1,
-			"report": 1,
-			"role": "System Manager",
-			"share": 1,
-			"write": 1
-		},
-		{
-			"create": 1,
-			"delete": 1,
-			"email": 1,
-			"export": 1,
-			"print": 1,
-			"read": 1,
-			"report": 1,
-			"role": "Business Analyst",
-			"select": 1,
-			"share": 1,
-			"write": 1
-		},
-		{
-			"create": 1,
-			"email": 1,
-			"export": 1,
-			"print": 1,
-			"read": 1,
-			"report": 1,
-			"role": "Process Owner",
-			"share": 1,
-			"write": 1
-		}
-	],
-	"row_format": "Dynamic",
-	"sort_field": "modified",
-	"sort_order": "DESC",
-	"states": [],
-	"title_field": "title"
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "naming_series:",
+ "creation": "2026-03-25 17:00:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "basic_information_section",
+  "naming_series",
+  "work_item_type",
+  "priority",
+  "title",
+  "column_break_bnjh",
+  "project",
+  "status",
+  "reporter_user",
+  "process_owner",
+  "is_groomed",
+  "work_item_details_section",
+  "work_item_template",
+  "description",
+  "planning_and_assignment_section",
+  "sprint",
+  "sprint_status",
+  "story_points",
+  "pr_required",
+  "research_required",
+  "column_break_gxds",
+  "epic",
+  "small_text_yecv",
+  "implementation_details_section",
+  "assignee_user",
+  "column_break_xgtd",
+  "pr_reviewer_user",
+  "column_break_cjav",
+  "pr_link",
+  "labels_section",
+  "labels",
+  "planning_prompt_count",
+  "execution_prompt_count",
+  "column_break_nqyd",
+  "ai_tools_feedback",
+  "section_break_dcoy",
+  "rejection_notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "basic_information_section",
+   "fieldtype": "Section Break",
+   "label": "Basic Information"
+  },
+  {
+   "fieldname": "work_item_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Work Item Type",
+   "options": "\nEpic\nUser Story\nTask\nBug",
+   "reqd": 1
+  },
+  {
+   "default": "Medium",
+   "fieldname": "priority",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Priority",
+   "options": "Highest\nHigh\nMedium\nLow\nLowest"
+  },
+  {
+   "fieldname": "title",
+   "fieldtype": "Small Text",
+   "in_list_view": 1,
+   "label": "Title",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_bnjh",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "project",
+   "fieldtype": "Link",
+   "label": "Project",
+   "options": "Project"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "Draft\nOpen\nIn Progress\nPR Created\nPending Review\nChanges Requested\nIn Staging\nRejected\nDone"
+  },
+  {
+   "fieldname": "assignee_user",
+   "fieldtype": "Link",
+   "label": "Assignee User",
+   "options": "User"
+  },
+  {
+   "default": "__user",
+   "fieldname": "reporter_user",
+   "fieldtype": "Link",
+   "label": "Reporter User",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "process_owner",
+   "fieldtype": "Link",
+   "label": "Process Owner",
+   "options": "User"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_groomed",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Is Groomed"
+  },
+  {
+   "fieldname": "work_item_details_section",
+   "fieldtype": "Section Break",
+   "label": "Work Item Details"
+  },
+  {
+   "fieldname": "work_item_template",
+   "fieldtype": "Link",
+   "label": "Work Item Template",
+   "options": "Work Item Template"
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Text Editor",
+   "label": "Description"
+  },
+  {
+   "fieldname": "planning_and_assignment_section",
+   "fieldtype": "Section Break",
+   "label": "Planning and Assignment"
+  },
+  {
+   "depends_on": "eval:doc.work_item_type != 'Epic'",
+   "fieldname": "sprint",
+   "fieldtype": "Link",
+   "label": "Sprint",
+   "options": "Sprint"
+  },
+  {
+   "fetch_from": "sprint.status",
+   "fieldname": "sprint_status",
+   "fieldtype": "Data",
+   "label": "Sprint Status",
+   "read_only": 1
+  },
+  {
+   "fieldname": "story_points",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Story Points",
+   "non_negative": 1,
+   "read_only_depends_on": "eval:doc.work_item_type == 'Epic'"
+  },
+  {
+   "fieldname": "column_break_gxds",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:doc.work_item_type != 'Epic'",
+   "fieldname": "epic",
+   "fieldtype": "Link",
+   "label": "Epic",
+   "options": "Work Item"
+  },
+  {
+   "fieldname": "implementation_details_section",
+   "fieldtype": "Section Break",
+   "label": "Implementation Details"
+  },
+  {
+   "fieldname": "planning_prompt_count",
+   "fieldtype": "Int",
+   "label": "Planning Prompt Count"
+  },
+  {
+   "fieldname": "execution_prompt_count",
+   "fieldtype": "Int",
+   "label": "Execution Prompt Count"
+  },
+  {
+   "depends_on": "eval:doc.pr_required==1",
+   "fieldname": "pr_link",
+   "fieldtype": "Data",
+   "label": "PR Link",
+   "options": "URL"
+  },
+  {
+   "depends_on": "eval:doc.pr_required==1",
+   "fieldname": "pr_reviewer_user",
+   "fieldtype": "Link",
+   "label": "PR Reviewer User",
+   "options": "User"
+  },
+  {
+   "fieldname": "ai_tools_feedback",
+   "fieldtype": "Long Text",
+   "label": "AI Tools Feedback"
+  },
+  {
+   "fieldname": "labels_section",
+   "fieldtype": "Section Break",
+   "label": "AI Feedback"
+  },
+  {
+   "fieldname": "labels",
+   "fieldtype": "Table MultiSelect",
+   "label": "Labels",
+   "options": "Work Item Label"
+  },
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "WI-.######"
+  },
+  {
+   "fieldname": "section_break_dcoy",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "rejection_notes",
+   "fieldtype": "Table",
+   "label": "Rejection Notes",
+   "options": "Rejection Details",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "epic.title",
+   "fieldname": "small_text_yecv",
+   "fieldtype": "Small Text",
+   "in_list_view": 1,
+   "label": "Epic Title",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "pr_required",
+   "fieldtype": "Check",
+   "label": "PR Required"
+  },
+  {
+   "default": "0",
+   "fieldname": "research_required",
+   "fieldtype": "Check",
+   "label": "Research Required"
+  },
+  {
+   "fieldname": "column_break_xgtd",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "column_break_cjav",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "column_break_nqyd",
+   "fieldtype": "Column Break"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-06-15 15:03:39.834124",
+ "modified_by": "Administrator",
+ "module": "Frappe Agile",
+ "name": "Work Item",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Business Analyst",
+   "select": 1,
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Process Owner",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "title",
+ "track_changes": 1
 }
