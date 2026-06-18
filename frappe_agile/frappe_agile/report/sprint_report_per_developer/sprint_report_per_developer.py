@@ -2,7 +2,7 @@
 # For license information, please see license.txt
 
 import frappe
-from frappe.utils import flt
+from frappe.utils import date_diff, flt, getdate
 
 
 def execute(filters=None):
@@ -128,6 +128,9 @@ def get_data(filters):
 	)
 	user_full_name_map = {u.name: u.full_name or u.name for u in users_data}
 
+	# Map developers to their Employee record so leave can be looked up
+	employee_map = get_employee_map(all_users)
+
 	# ------------------------------------------------------------------
 	# 6. Build one row per developer (aggregated across all sprints)
 	# ------------------------------------------------------------------
@@ -143,8 +146,16 @@ def get_data(filters):
 				unique_periods.add((sprint_map[s].start_date, sprint_map[s].end_date))
 		no_of_sprints = len(unique_periods)
 
-		# Target Points = developer_velocity × number of sprints for this developer
-		target_points = flt(developer_velocity * no_of_sprints, 1)
+		# Target Points = the developer's expected velocity, prorated for any leave
+		# taken within each distinct sprint period and summed across them:
+		#   velocity × (work_days − leave_days) / work_days  (per sprint period)
+		employee = employee_map.get(user)
+		prorated_target = 0.0
+		for period_start, period_end in unique_periods:
+			factor, _, _ = get_leave_proration(employee, period_start, period_end)
+			prorated_target += developer_velocity * factor
+
+		target_points = flt(prorated_target, 1)
 
 		# Sum scoped, accepted, and rejected across all sprints
 		total_scoped_raw = sum(v["scoped_points"] for v in sprint_dict.values())
@@ -197,3 +208,97 @@ def get_data(filters):
 	# Sort by developer name
 	data.sort(key=lambda x: x.get("developer") or "")
 	return data
+
+
+def get_employee_map(users):
+	"""Map each developer User to their linked Employee record.
+
+	Where a User is linked to more than one Employee, an Active record is preferred.
+	"""
+	if not users:
+		return {}
+
+	employees = frappe.get_all(
+		"Employee",
+		filters={"user_id": ["in", users]},
+		fields=["name", "user_id", "status"],
+	)
+
+	emp_map = {}
+	for emp in employees:
+		if emp.user_id not in emp_map or emp.status == "Active":
+			emp_map[emp.user_id] = emp.name
+	return emp_map
+
+
+def get_leave_proration(employee, start_date, end_date):
+	"""Return (factor, leave_days, work_days) used to prorate expected velocity.
+
+	    factor = (work_days − leave_days) / work_days
+
+	where:
+	    work_days  = calendar days in the sprint minus the employee's holidays
+	                 (including weekly offs) in that range.
+	    leave_days = approved leave days falling within the sprint, excluding
+	                 holidays (mirrors HRMS leave-day accounting, incl. half days).
+
+	The factor defaults to 1.0 (no proration) when it cannot be determined —
+	no linked Employee, no holiday list, or HRMS not installed.
+	"""
+	if not (employee and start_date and end_date):
+		return 1.0, 0.0, 0.0
+
+	try:
+		from hrms.hr.doctype.leave_application.leave_application import get_number_of_leave_days
+		from hrms.hr.utils import get_holidays_for_employee
+	except ImportError:
+		return 1.0, 0.0, 0.0
+
+	start_date = getdate(start_date)
+	end_date = getdate(end_date)
+
+	calendar_days = date_diff(end_date, start_date) + 1
+	if calendar_days <= 0:
+		return 1.0, 0.0, 0.0
+
+	holidays = get_holidays_for_employee(employee, start_date, end_date, raise_exception=False)
+	work_days = calendar_days - len(holidays)
+	if work_days <= 0:
+		# Entire sprint is holidays for this employee — nothing to prorate against
+		return 1.0, 0.0, 0.0
+
+	# Approved leave applications overlapping the sprint window
+	leave_apps = frappe.get_all(
+		"Leave Application",
+		filters={
+			"employee": employee,
+			"status": "Approved",
+			"docstatus": 1,
+			"from_date": ["<=", end_date],
+			"to_date": [">=", start_date],
+		},
+		fields=["leave_type", "from_date", "to_date", "half_day", "half_day_date"],
+	)
+
+	leave_days = 0.0
+	for la in leave_apps:
+		# Clamp each leave application to the sprint window before counting
+		clamped_from = max(getdate(la.from_date), start_date)
+		clamped_to = min(getdate(la.to_date), end_date)
+		if clamped_to < clamped_from:
+			continue
+		leave_days += flt(
+			get_number_of_leave_days(
+				employee,
+				la.leave_type,
+				clamped_from,
+				clamped_to,
+				la.half_day,
+				la.half_day_date,
+			)
+		)
+
+	# A developer cannot take more leave than there are working days
+	leave_days = min(leave_days, work_days)
+	factor = (work_days - leave_days) / work_days
+	return factor, leave_days, work_days
