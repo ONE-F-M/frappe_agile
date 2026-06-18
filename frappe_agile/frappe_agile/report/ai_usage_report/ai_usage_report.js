@@ -38,5 +38,37 @@ frappe.query_reports["AI Usage Report"] = {
 			"fieldtype": "Link",
 			"options": "Sprint"
 		}
-	]
+	],
+	"formatter": function (value, row, column, data, default_formatter) {
+		if (column.fieldname === "ai_tools_feedback" && value) {
+			let escaped = frappe.utils.escape_html(value);
+			return `<div class="ai-feedback-cell">${escaped}</div>`;
+		}
+		return default_formatter(value, row, column, data);
+	},
+	"get_datatable_options": function (options) {
+		Object.assign(options, {
+			cellHeight: 300
+		});
+		return options;
+	},
+	"onload": function (report) {
+		if (!document.getElementById("ai-usage-report-style")) {
+			let style = document.createElement("style");
+			style.id = "ai-usage-report-style";
+			style.textContent = `
+				.ai-feedback-cell {
+					white-space: pre-line;
+					line-height: 1.5;
+					max-height: 280px;
+					overflow-y: auto;
+					padding-right: 4px;
+				}
+				.dt-cell--col-5 .dt-cell__content {
+					overflow: visible !important;
+				}
+			`;
+			document.head.appendChild(style);
+		}
+	}
 };
