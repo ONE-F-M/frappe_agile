@@ -1,0 +1,10 @@
+{
+	"doctype": "Server Script",
+	"name": "Set PR Link",
+	"script_type": "API",
+	"api_method": "set_pr_link",
+	"module": "Frappe Agile",
+	"disabled": 0,
+	"allow_guest": 0,
+	"script": "if pr_url:\n    frappe.db.set_value(\"Work Item\", context_docname, \"pr_link\", pr_url)\n"
+}

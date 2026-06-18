@@ -4,7 +4,7 @@
 	"script_type": "API",
 	"api_method": "validate_prompt_count",
 	"module": "Frappe Agile",
-	"disabled": 0,
+	"disabled": 1,
 	"allow_guest": 0,
 	"script": "if not planning_prompt_count:\n    frappe.msgprint(\"Please add Planning Prompt Count to proceed.\")\nelif not execution_prompt_count:\n    frappe.msgprint(\"Please add Execution Prompt Count to proceed.\")\n"
 }

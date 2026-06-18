@@ -1,0 +1,10 @@
+{
+	"doctype": "Server Script",
+	"name": "Create Work Items from Technical Research",
+	"script_type": "API",
+	"api_method": "create_work_items_from_technical_research",
+	"module": "Frappe Agile",
+	"disabled": 0,
+	"allow_guest": 0,
+	"script": "# Create Work Items from rows in Technical Research request without notifying user\nwork_items = frappe.form_dict.get(\"work_item\", [])\n\nfor row in work_items:\n    new_work_item = frappe.new_doc(\"Work Item\")\n    new_work_item.work_item_type = row.get(\"work_item_type\")\n    new_work_item.title = row.get(\"title\")\n    new_work_item.description = row.get(\"description\")\n    new_work_item.insert()\n\nfrappe.response[\"message\"] = {\n    \"created_count\": len(work_items),\n    \"status\": \"success\"\n}\n"
+}
