@@ -185,7 +185,7 @@
    "fieldname": "work_item",
    "fieldtype": "Table",
    "label": "Work Item",
-   "mandatory_depends_on": "eval: doc.create_work_items == \"Yes\"",
+   "mandatory_depends_on": "eval: doc.create_work_item == \"Yes\"",
    "options": "Technical Research Work Item"
   }
  ],
@@ -193,7 +193,7 @@
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-06-16 08:15:36.156279",
+ "modified": "2026-06-18 10:03:25.066480",
  "modified_by": "Administrator",
  "module": "Frappe Agile",
  "name": "Technical Research",
@@ -209,6 +209,32 @@
    "read": 1,
    "report": 1,
    "role": "System Manager",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Developer",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Business Analyst",
    "share": 1,
    "submit": 1,
    "write": 1

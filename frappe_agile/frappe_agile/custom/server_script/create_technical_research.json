@@ -6,5 +6,5 @@
 	"module": "Frappe Agile",
 	"disabled": 0,
 	"allow_guest": 0,
-	"script": "from frappe.utils import to_markdown\n\ntr = frappe.new_doc(\"Technical Research\")\ntr.title = doc.title\ntr.assignee = doc.assignee_user\n# description is a Text Editor (HTML); summary is Small Text (plain).\n# Convert HTML to plain text, preserving paragraph/line/list formatting.\ntr.summary = (to_markdown(doc.description) or \"\").strip() if doc.description else \"\"\ntr.insert(ignore_permissions=True)"
+	"script": "from frappe.utils import to_markdown\n\ntechnical_research = frappe.new_doc(\"Technical Research\")\ntechnical_research.title = doc.title\ntechnical_research.assignee = doc.assignee_user\n# description is a Text Editor (HTML); summary is Small Text (plain).\n# Convert HTML to plain text, preserving paragraph/line/list formatting.\ntechnical_research.summary = (to_markdown(doc.description) or \"\").strip() if doc.description else \"\"\ntechnical_research.insert()"
 }
