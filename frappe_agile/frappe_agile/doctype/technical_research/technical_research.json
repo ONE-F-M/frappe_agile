@@ -185,7 +185,7 @@
    "fieldname": "work_item",
    "fieldtype": "Table",
    "label": "Work Item",
-   "mandatory_depends_on": "eval: doc.create_work_item == \"Yes\"",
+   "mandatory_depends_on": "eval: doc.create_work_items == \"Yes\"",
    "options": "Technical Research Work Item"
   }
  ],
