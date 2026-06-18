@@ -1,0 +1,222 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "naming_series:",
+ "creation": "2026-06-16 08:05:28.952232",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "title",
+  "column_break_ogep",
+  "assignee",
+  "column_break_rtro",
+  "company",
+  "section_break_fnng",
+  "confirm_codebase_review",
+  "column_break_gelz",
+  "confirm_testing",
+  "column_break_dvia",
+  "confirm_report_documentation",
+  "report_document_link",
+  "section_break_tych",
+  "create_work_items",
+  "work_item",
+  "section_break_etxw",
+  "summary",
+  "column_break_vnvl",
+  "current_approach",
+  "column_break_nzis",
+  "new_approach",
+  "section_break_jyn5",
+  "naming_series",
+  "column_break_xqvn",
+  "amended_from",
+  "column_break_agst",
+  "workflow_state"
+ ],
+ "fields": [
+  {
+   "fieldname": "section_break_jyn5",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "no_copy": 1,
+   "options": "Technical Research",
+   "print_hide": 1,
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Title",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_ogep",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "assignee",
+   "fieldtype": "Link",
+   "label": "Assignee",
+   "options": "User",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_rtro",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company"
+  },
+  {
+   "fieldname": "section_break_fnng",
+   "fieldtype": "Section Break"
+  },
+  {
+   "default": "0",
+   "description": "Tick this box if you have reviewed the codebase to understand the structure.",
+   "fieldname": "confirm_codebase_review",
+   "fieldtype": "Check",
+   "label": "Confirm Codebase Review"
+  },
+  {
+   "fieldname": "column_break_gelz",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "description": "Tick this box if you have personally tested the product.",
+   "fieldname": "confirm_testing",
+   "fieldtype": "Check",
+   "label": "Confirm Testing"
+  },
+  {
+   "fieldname": "column_break_dvia",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "description": "Tick this box if the research report has been written and filed in the Technical Research folder.",
+   "fieldname": "confirm_report_documentation",
+   "fieldtype": "Check",
+   "label": "Confirm Report Documentation"
+  },
+  {
+   "description": "Input the link to the report documentation file in the shared drive.",
+   "fieldname": "report_document_link",
+   "fieldtype": "Data",
+   "label": "Report Document Link"
+  },
+  {
+   "fieldname": "section_break_tych",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "create_work_items",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Create Work Items",
+   "options": "\nYes\nNo"
+  },
+  {
+   "fieldname": "section_break_etxw",
+   "fieldtype": "Section Break"
+  },
+  {
+   "description": "Describe the architecture or functionality.",
+   "fieldname": "summary",
+   "fieldtype": "Text",
+   "label": "Summary"
+  },
+  {
+   "fieldname": "column_break_vnvl",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Describe what is seen, known or used before now.",
+   "fieldname": "current_approach",
+   "fieldtype": "Text",
+   "label": "Current Approach"
+  },
+  {
+   "fieldname": "column_break_nzis",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Describe what is new, different or added value here.",
+   "fieldname": "new_approach",
+   "fieldtype": "Text",
+   "label": "New Approach"
+  },
+  {
+   "default": "PBR-RSH-.YYYY.-.MM.-.####",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Naming Series",
+   "options": "PBR-RSH-.YYYY.-.MM.-.####",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_xqvn",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "column_break_agst",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "workflow_state",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Workflow State",
+   "options": "Workflow State"
+  },
+  {
+   "depends_on": "eval: doc.create_work_items == \"Yes\"",
+   "fieldname": "work_item",
+   "fieldtype": "Table",
+   "label": "Work Item",
+   "mandatory_depends_on": "eval: doc.create_work_item == \"Yes\"",
+   "options": "Technical Research Work Item"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "is_submittable": 1,
+ "links": [],
+ "modified": "2026-06-16 08:15:36.156279",
+ "modified_by": "Administrator",
+ "module": "Frappe Agile",
+ "name": "Technical Research",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
