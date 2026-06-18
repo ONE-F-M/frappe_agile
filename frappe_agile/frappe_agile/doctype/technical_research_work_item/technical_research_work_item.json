@@ -6,19 +6,42 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
-  "section_break_ifrp"
+  "work_item_type",
+  "title",
+  "description"
  ],
  "fields": [
   {
-   "fieldname": "section_break_ifrp",
-   "fieldtype": "Section Break"
+   "columns": 2,
+   "fieldname": "work_item_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Work Item Type",
+   "options": "\nUser Story\nTask",
+   "reqd": 1
+  },
+  {
+   "columns": 3,
+   "fieldname": "title",
+   "fieldtype": "Small Text",
+   "in_list_view": 1,
+   "label": "Title",
+   "reqd": 1
+  },
+  {
+   "columns": 5,
+   "fieldname": "description",
+   "fieldtype": "Text",
+   "in_list_view": 1,
+   "label": "Description",
+   "reqd": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-06-16 08:13:18.012691",
+ "modified": "2026-06-18 09:58:00.910135",
  "modified_by": "Administrator",
  "module": "Frappe Agile",
  "name": "Technical Research Work Item",
