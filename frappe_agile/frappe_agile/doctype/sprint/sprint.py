@@ -1,7 +1,26 @@
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import add_days, cint, date_diff, flt
+from frappe.utils import add_days, cint, flt, getdate
+
+# --- Sprint cadence -------------------------------------------------------
+# Sprints run Wednesday → Tuesday (a 7-day window) unless explicitly overridden
+# ("stated otherwise"). These constants/helpers are the single source of truth
+# for that cadence and are reused by the Roadmap board.
+SPRINT_START_WEEKDAY = 2  # Monday=0 … Wednesday=2
+SPRINT_SPAN_DAYS = 6  # start + 6 days = the following Tuesday (7-day window)
+
+
+def align_to_sprint_start(d):
+	"""Return the sprint-start weekday (Wednesday) on or after date *d*."""
+	d = getdate(d)
+	return add_days(d, (SPRINT_START_WEEKDAY - d.weekday()) % 7)
+
+
+def default_sprint_window(reference_date=None):
+	"""(start, end) of the standard Wed→Tue window starting on/after *reference_date*."""
+	start = align_to_sprint_start(reference_date or getdate())
+	return start, add_days(start, SPRINT_SPAN_DAYS)
 
 
 class Sprint(Document):
@@ -308,15 +327,14 @@ def validate_work_item_sprint(doc, method=None):
 
 
 def _build_new_sprint_dates(source_doc):
-	"""Derive start_date and end_date for a new sprint from the source sprint.
+	"""Derive Wed→Tue start/end for the next sprint after *source_doc*.
 
-	start_date = source end_date + 1 day
-	end_date   = start_date + same duration as the source sprint
+	The next sprint begins on the first sprint-start weekday (Wednesday) after the
+	source sprint ends and runs the standard 7-day window (through Tuesday),
+	regardless of the source sprint's own length.
 	"""
-	duration = date_diff(source_doc.end_date, source_doc.start_date)
-	new_start = add_days(source_doc.end_date, 1)
-	new_end = add_days(new_start, duration)
-	return new_start, new_end
+	new_start = align_to_sprint_start(add_days(source_doc.end_date, 1))
+	return new_start, add_days(new_start, SPRINT_SPAN_DAYS)
 
 
 def _make_new_sprint(source_doc, extra_fields=None):

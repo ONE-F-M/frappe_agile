@@ -21,9 +21,10 @@ def get_columns():
 		{"fieldname": "sprint_end_date", "label": "Sprint End Date", "fieldtype": "Date", "width": 150},
 		{"fieldname": "no_of_sprints", "label": "No. of Sprints", "fieldtype": "Int", "width": 120},
 		{"fieldname": "target_points", "label": "Target Points", "fieldtype": "Float", "width": 130},
-		{"fieldname": "completed_points", "label": "Completed Points", "fieldtype": "Float", "width": 150},
-		{"fieldname": "accepted_points", "label": "Accepted Points", "fieldtype": "Float", "width": 150},
-		{"fieldname": "completion_rate", "label": "Completion Rate %", "fieldtype": "Percent", "width": 150},
+		{"fieldname": "points_scoped", "label": "Points Scoped", "fieldtype": "Float", "width": 130},
+		{"fieldname": "accepted_points", "label": "Accepted Points", "fieldtype": "Float", "width": 140},
+		{"fieldname": "rejected_points", "label": "Rejected Points", "fieldtype": "Float", "width": 140},
+		{"fieldname": "spillover_points", "label": "Spillover Points", "fieldtype": "Float", "width": 140},
 		{"fieldname": "acceptance_rate", "label": "Acceptance Rate %", "fieldtype": "Percent", "width": 150},
 	]
 
@@ -81,7 +82,7 @@ def get_data(filters):
 	# ------------------------------------------------------------------
 	# 4. Aggregate per (developer, sprint)
 	# ------------------------------------------------------------------
-	# developer -> { sprint -> {completed, accepted, total} }
+	# developer -> { sprint -> {scoped, accepted, rejected} }
 	dev_sprint_data = {}
 
 	for wi in work_items:
@@ -98,17 +99,21 @@ def get_data(filters):
 			dev_sprint_data[user] = {}
 		if sprint_name not in dev_sprint_data[user]:
 			dev_sprint_data[user][sprint_name] = {
-				"completed_points": 0.0,
+				"scoped_points": 0.0,
 				"accepted_points": 0.0,
+				"rejected_points": 0.0,
 			}
 
 		points = flt(wi.story_points)
 
-		if wi.status in ("Done", "In Staging", "Rejected"):
-			dev_sprint_data[user][sprint_name]["completed_points"] += points
+		# All work items in the sprint contribute to scoped points
+		dev_sprint_data[user][sprint_name]["scoped_points"] += points
 
 		if wi.status == "Done":
 			dev_sprint_data[user][sprint_name]["accepted_points"] += points
+
+		if wi.status == "Rejected":
+			dev_sprint_data[user][sprint_name]["rejected_points"] += points
 
 	if not dev_sprint_data:
 		return []
@@ -141,17 +146,22 @@ def get_data(filters):
 		# Target Points = developer_velocity × number of sprints for this developer
 		target_points = flt(developer_velocity * no_of_sprints, 1)
 
-		# Sum completed and accepted across all sprints — keep raw for rate calculation
-		total_completed_raw = sum(v["completed_points"] for v in sprint_dict.values())
+		# Sum scoped, accepted, and rejected across all sprints
+		total_scoped_raw = sum(v["scoped_points"] for v in sprint_dict.values())
 		total_accepted_raw = sum(v["accepted_points"] for v in sprint_dict.values())
+		total_rejected_raw = sum(v["rejected_points"] for v in sprint_dict.values())
 
-		# Rates are computed from raw (unrounded) values to avoid compounding error
-		completion_rate = (total_completed_raw / target_points * 100) if target_points else 0.0
-		acceptance_rate = (total_accepted_raw / target_points * 100) if target_points else 0.0
+		# Acceptance Rate = (Accepted Points / Points Scoped) × 100
+		acceptance_rate = (total_accepted_raw / total_scoped_raw * 100) if total_scoped_raw else 0.0
+
+		# Spillover Points = Points Scoped - Accepted Points - Rejected Points
+		spillover_raw = total_scoped_raw - total_accepted_raw - total_rejected_raw
 
 		# Round display values after rate calculation
-		total_completed = flt(total_completed_raw, 1)
+		total_scoped = flt(total_scoped_raw, 1)
 		total_accepted = flt(total_accepted_raw, 1)
+		total_rejected = flt(total_rejected_raw, 1)
+		spillover = flt(spillover_raw, 1)
 
 		# Date range across all sprints for this developer
 		sprint_docs = [sprint_map[s] for s in sprint_names_for_dev if s in sprint_map]
@@ -177,9 +187,10 @@ def get_data(filters):
 			"sprint_end_date": latest_end,
 			"no_of_sprints": no_of_sprints,
 			"target_points": target_points,
-			"completed_points": total_completed,
+			"points_scoped": total_scoped,
 			"accepted_points": total_accepted,
-			"completion_rate": flt(completion_rate, 2),
+			"rejected_points": total_rejected,
+			"spillover_points": spillover,
 			"acceptance_rate": flt(acceptance_rate, 2),
 		})
 

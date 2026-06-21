@@ -1,0 +1,10 @@
+{
+	"doctype": "Server Script",
+	"name": "Notify User of Created Work Items",
+	"script_type": "API",
+	"api_method": "notify_user_of_created_work_items",
+	"module": "Frappe Agile",
+	"disabled": 0,
+	"allow_guest": 0,
+	"script": "# Notify user of the number of work items successfully created via screen message\n\n# Read workflow variables from the Processa engine\nwork_items_created = frappe.form_dict.get(\"work_items_created\", [])\n\n# Count the work items\nwork_item_count = len(work_items_created) if work_items_created else 0\n\n# Build a friendly notification message\nif work_item_count > 0:\n    message = f\"Success! {work_item_count} work item(s) have been created from this technical research.\"\nelse:\n    message = \"No work items were created from this technical research.\"\n\n# Print message to screen and return for workflow\nfrappe.msgprint(message)\n\nfrappe.response[\"message\"] = {\n    \"notification_displayed\": True,\n    \"work_items_count\": work_item_count,\n    \"message\": message\n}\n"
+}

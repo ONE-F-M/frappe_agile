@@ -9,7 +9,7 @@ This is a **thin, generic router** with zero business logic.  It receives
 GitHub webhook events, verifies the HMAC signature, extracts the linked
 Work Item, derives a convention-based BPMN message name from the event
 data, and delivers it to the active BPMN process instance via
-``one_bpmn.api.send_message``.
+``one_bpmn.api.instance_api.send_message``.
 
 All business logic (state transitions, assignments, notifications) lives
 in the BPMN process diagram — not here.
@@ -293,7 +293,7 @@ def _deliver_bpmn_message(wi_name: str, message_name: str, payload: dict):
 	original_user = frappe.session.user
 	try:
 		frappe.set_user("Administrator")
-		from one_bpmn.api import send_message
+		from one_bpmn.api.instance_api import send_message
 
 		result = send_message(
 			message_name=message_name,

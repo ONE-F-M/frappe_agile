@@ -18,6 +18,12 @@ SERVER_SCRIPT_FILES = [
 	"validate_pr_link.json",
 	"validate_pr_reviewer.json",
 	"validate_prompt_count.json",
+	"validate_ai_feedback_complete.json",
+	"create_technical_research.json",
+	"set_pr_link.json",
+	"set_pr_reviewer.json",
+	"create_work_items_from_technical_research.json",
+	"notify_user_of_created_work_items.json",
 ]
 
 
