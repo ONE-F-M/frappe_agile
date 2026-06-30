@@ -12,6 +12,7 @@ class WorkItem(Document):
 
 	def validate(self):
 		self._validate_epic_story_points()
+		self._validate_sprint_required()
 		self._validate_sprint_project()
 		self._validate_sprint_status()
 
@@ -134,17 +135,31 @@ class WorkItem(Document):
 				title=_("Invalid Story Points"),
 			)
 
+	def _validate_sprint_required(self):
+		""" Every Work Item must live on a Sprint so the roadmap stays complete.
+			Epics are containers, not schedulable work, so they are exempt.
+		"""
+		if self.work_item_type == "Epic":
+			return
+
+		if not self.sprint:
+			frappe.throw(
+				_("Every Work Item must be assigned to an Active or Draft Sprint. Items are not allowed in the backlog."),
+				title=_("Sprint Required"),
+			)
+
 	def _validate_sprint_status(self):
-		"""Ensure the Work Item cannot be linked to a Completed Sprint, 
-		and cannot be modified if it already belongs to a Completed Sprint."""
-		
-		# 1. Prevent moving to or saving against a currently Completed sprint
+		"""Ensure the Work Item can only be linked to an Active or Draft Sprint."""
+
+		# Only allow assigning to Active or Draft sprints (e.g. block Completed)
 		if self.sprint:
 			sprint_status = frappe.db.get_value("Sprint", self.sprint, "status")
-			if sprint_status == "Completed":
+			if sprint_status not in ("Active", "Draft"):
 				frappe.throw(
-					_("Cannot assign or update Work Item against Sprint <b>{0}</b> because it is already Completed.").format(self.sprint),
-					title=_("Sprint Completed")
+					_("Cannot assign or update Work Item against Sprint <b>{0}</b> because it is <b>{1}</b>. Work Items can only be assigned to Active or Draft Sprints.").format(
+						self.sprint, sprint_status
+					),
+					title=_("Invalid Sprint Status"),
 				)
 		
 
