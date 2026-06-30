@@ -389,12 +389,14 @@ def get_or_create_target_sprint(sprint_name: str) -> str:
 
 
 @frappe.whitelist()
-def handle_incomplete_items(sprint: str) -> str:
+def handle_incomplete_items(sprint: str) -> str | None:
 	"""Carry all not-Done Work Items of *sprint* forward to the next sprint.
 
 	Called when a sprint is being completed. Incomplete items are never left in
 	a backlog — they always move to the next sprint (reused if it already exists,
-	otherwise created). Returns the target sprint name so the UI can route to it.
+	otherwise created).
+
+	Returns the target sprint name, or None when there is nothing to carry forward.
 	"""
 	# Snapshot the current velocity before any items are moved away.
 	# Normalize with flt() to avoid restoring NULL into a Float field.
