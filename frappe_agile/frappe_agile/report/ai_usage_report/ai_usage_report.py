@@ -65,7 +65,7 @@ def get_data(filters):
 		.select(SWI.work_item.as_("name"), SWI.story_points)
 		.where(SWI.parent.isin(sprint_names))
 		.where(SWI.parenttype == "Sprint")
-		.where(SWI.work_item_type.isin(["User Story", "Task"]))
+		.where(SWI.work_item_type.isin(["User Story", "Task", "Bug"]))
 	).run(as_dict=True)
 
 	if not wi_rows:

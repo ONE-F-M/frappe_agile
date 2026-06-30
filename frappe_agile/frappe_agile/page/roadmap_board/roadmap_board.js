@@ -14,6 +14,7 @@
 
 const API_GET = "frappe_agile.frappe_agile.page.roadmap_board.roadmap_board.get_roadmap_data";
 const API_MOVE = "frappe_agile.frappe_agile.page.roadmap_board.roadmap_board.move_work_item";
+const API_CREATE_MISSING = "frappe_agile.frappe_agile.page.roadmap_board.roadmap_board.create_missing_sprints";
 const SORTABLE_ASSET = "/assets/frappe_agile/js/vendor/sortable.min.js";
 const MAX_ITEMS_VISIBLE = 6; // collapse longer item lists behind a "+N more"
 
@@ -48,6 +49,7 @@ class RoadmapBoard {
 		this._loading = false;
 		this._sortables = [];
 		this.can_write = frappe.model.can_write("Work Item");
+		this.can_create_sprint = frappe.model.can_create("Sprint");
 
 		this._build_ui();
 		this.refresh();
@@ -110,6 +112,9 @@ class RoadmapBoard {
 					placeholder="${__("Type to highlight matches…")}" />
 			</div>
 			<div class="rm-filters-actions">
+				<button class="btn btn-default btn-xs" id="rm-create-missing" title="${__("Create Draft sprints for upcoming windows that have none")}">
+					<i class="fa fa-plus"></i> ${__("Create Missing Sprint(s)")}
+				</button>
 				<button class="btn btn-default btn-xs" id="rm-jump-current" title="${__("Scroll to current sprint")}">
 					<i class="fa fa-crosshairs"></i> ${__("Today")}
 				</button>
@@ -138,6 +143,9 @@ class RoadmapBoard {
 		}, 200));
 		this.$filters.find("#rm-refresh").on("click", () => this.refresh({ preserveScroll: true }));
 		this.$filters.find("#rm-jump-current").on("click", () => this._scroll_to_current());
+		this.$filters.find("#rm-create-missing").on("click", () => this._on_create_missing());
+		this.$create_missing = this.$filters.find("#rm-create-missing");
+		this.$create_missing.hide(); // shown only when upcoming sprints are missing
 	}
 
 	_render_legend() {
@@ -277,6 +285,52 @@ class RoadmapBoard {
 			this.$grid[0].scrollTop = prevTop;
 		}
 		this._first_render_done = true;
+		this._update_create_missing_button();
+	}
+
+	// Show the "Create Missing Sprints" button only when grouping by prefix and
+	// at least one upcoming window has no sprint for some lane.
+	_update_create_missing_button() {
+		if (!this.$create_missing) return;
+		const missing = (this.data && this.data.missing_count) || 0;
+		const show = this.can_create_sprint && this.filters.group_by === "sprint_prefix" && missing > 0;
+		this.$create_missing.toggle(show);
+	}
+
+	_on_create_missing() {
+		frappe.confirm(
+			__("Create Draft sprints for every missing upcoming window across all tracks?"),
+			() => {
+				frappe.dom.freeze(__("Creating sprints…"));
+				frappe.call({
+					method: API_CREATE_MISSING,
+					args: {
+						group_by: this.filters.group_by,
+						lane: this.filters.lane || undefined,
+						sprint_status: this.filters.sprint_status || undefined,
+						future_count: this.filters.future_count,
+					},
+					callback: (r) => {
+						frappe.dom.unfreeze();
+						const n = (r && r.message && r.message.created_count) || 0;
+						frappe.show_alert({
+							message: n
+								? __("Created {0} sprint(s)", [n])
+								: __("No missing sprints to create"),
+							indicator: n ? "green" : "blue",
+						});
+						this.refresh({ preserveScroll: true });
+					},
+					error: (err) => {
+						frappe.dom.unfreeze();
+						frappe.show_alert({
+							message: __("Failed to create sprints: {0}", [(err && err.message) || __("see error log")]),
+							indicator: "red",
+						});
+					},
+				});
+			}
+		);
 	}
 
 	_cell_attrs(cell, row, col) {
