@@ -67,22 +67,30 @@ frappe.ui.form.on("Sprint", {
 						});
 						d.show();
 					} else {
-						// Scenario B: Some work items are not Done — they always carry
-						// forward to the next sprint (no backlog). Simple confirmation.
+						// Scenario B: Some work items are not Done — ask where to move them
 						let d = new frappe.ui.Dialog({
 							title: __("Incomplete Work Items"),
 							fields: [
 								{
 									fieldtype: "HTML",
-									options: `<p><b>${frm.doc.name}</b> ${__("has")} <b>${incomplete.length}</b> ${__("incomplete work item(s). They will be moved to the next sprint.")}</p>`
+									options: `<p><b>${frm.doc.name}</b> ${__("has")} <b>${incomplete.length}</b> ${__("incomplete work item(s). Where should they go?")}</p>`
+								},
+								{
+									fieldname: "move_to",
+									fieldtype: "Select",
+									label: __("Move incomplete items to"),
+									options: "Move to Backlog\nMove to New Sprint",
+									default: "Move to Backlog",
+									reqd: 1
 								}
 							],
 							primary_action_label: __("Confirm & Complete"),
-							primary_action: function () {
+							primary_action: function (values) {
 								frappe.call({
 									method: "frappe_agile.frappe_agile.doctype.sprint.sprint.handle_incomplete_items",
 									args: {
-										sprint: frm.doc.name
+										sprint: frm.doc.name,
+										action: values.move_to
 									},
 									callback: function (r) {
 										d.hide();
