@@ -31,9 +31,9 @@ frappe.ui.form.on("Work Item", {
 			};
 		});
 
-		// Filter sprint to only active sprints, scoped to the selected project
+		// Filter sprint to only Active/Draft sprints, scoped to the selected project
 		frm.set_query("sprint", function () {
-			let filters = { status: "Active" };
+			let filters = { status: ["in", ["Active", "Draft"]] };
 			if (frm.doc.project) {
 				filters.project = frm.doc.project;
 			}
