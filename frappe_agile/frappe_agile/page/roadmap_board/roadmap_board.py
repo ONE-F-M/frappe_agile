@@ -199,6 +199,60 @@ def get_roadmap_data(group_by="sprint_prefix", lane=None, sprint_status=None, se
 	}
 
 
+# Work item types that may sit in the backlog. Epics are containers, not
+# schedulable work, so they are never listed here.
+BACKLOG_TYPES = ("Task", "User Story", "Bug")
+
+
+@frappe.whitelist()
+def get_unassigned_work_items(limit=200):
+	"""Return Work Items not attached to any Sprint, newest-modified first.
+
+	These populate the Roadmap's backlog panel so a Business Analyst can drag
+	each one onto a sprint. Only schedulable types (Task / User Story / Bug)
+	are listed and the order is reverse-chronological by ``modified`` — the
+	last edited item shows first, per the roadmap spec.
+	"""
+	frappe.has_permission("Work Item", "read", throw=True)
+
+	rows = frappe.get_list(
+		"Work Item",
+		filters={
+			"sprint": ["is", "not set"],
+			"work_item_type": ["in", list(BACKLOG_TYPES)],
+		},
+		fields=[
+			"name",
+			"title",
+			"work_item_type",
+			"status",
+			"story_points",
+			"project",
+			"epic",
+			"assignee_user",
+			"modified",
+		],
+		order_by="modified desc",
+		limit_page_length=cint(limit) or 0,
+	)
+
+	return [
+		{
+			"name": wi.name,
+			"title": wi.title or wi.name,
+			"type": wi.work_item_type,
+			"status": wi.status,
+			"story_points": flt(wi.story_points),
+			"project": wi.project,
+			"epic": wi.epic,
+			"assignee_user": wi.assignee_user,
+			"accepted": wi.status == ACCEPTED_STATUS,
+			"modified": wi.modified,
+		}
+		for wi in rows
+	]
+
+
 def _build_future_columns(existing, future_count):
 	"""Project empty Wed→Tue sprint windows forward of all existing windows.
 
