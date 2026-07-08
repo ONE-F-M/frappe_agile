@@ -425,12 +425,18 @@ def _missing_upcoming_windows(prefixes, future_count):
 
 
 @frappe.whitelist()
-def create_missing_sprints(group_by="sprint_prefix", lane=None, sprint_status=None, future_count=None):
+def create_missing_sprints(group_by="sprint_prefix", lane=None, sprint_status=None, future_count=None, lanes=None):
 	"""Create Draft sprints for every upcoming window that has no sprint yet.
 
 	For each prefix lane shown on the board, a Draft Sprint is created for each
 	upcoming window (within the Plan-ahead range) that does not already have one.
 	New sprints inherit the prefix's latest Business Analyst.
+
+	Args:
+		lanes: optional JSON list of sprint prefixes to restrict creation to.
+			When given, only those tracks are filled (the Business Analyst
+			selected a subset of projects on the board); otherwise every track
+			on the board is filled.
 
 	Only supported when grouping by sprint prefix — the prefix names the sprint.
 	Returns {"created": [names], "created_count": n}.
@@ -443,6 +449,13 @@ def create_missing_sprints(group_by="sprint_prefix", lane=None, sprint_status=No
 	future_count = cint(future_count) if future_count not in (None, "") else DEFAULT_FUTURE_COUNT
 
 	prefixes = _board_prefixes(lane, sprint_status)
+
+	# Restrict to the tracks the user selected, if any. Intersecting with the
+	# board prefixes keeps a stale/forged selection from creating off-board tracks.
+	selected = _parse_lane_selection(lanes)
+	if selected is not None:
+		prefixes = [p for p in prefixes if p in selected]
+
 	missing = _missing_upcoming_windows(prefixes, future_count)
 	if not missing:
 		return {"created": [], "created_count": 0}
@@ -469,6 +482,20 @@ def create_missing_sprints(group_by="sprint_prefix", lane=None, sprint_status=No
 
 	frappe.db.commit()
 	return {"created": created, "created_count": len(created)}
+
+
+def _parse_lane_selection(lanes):
+	"""Normalise the client's lane selection into a set of prefixes, or None.
+
+	Returns None when no selection was made (create for all tracks) and a set of
+	trimmed, non-empty prefixes otherwise. An empty selection also returns an
+	empty set so nothing is created — the caller distinguishes it from None.
+	"""
+	if lanes in (None, ""):
+		return None
+	if isinstance(lanes, str):
+		lanes = frappe.parse_json(lanes)
+	return {(p or "").strip() for p in (lanes or []) if (p or "").strip()}
 
 
 def _board_prefixes(lane=None, sprint_status=None):
