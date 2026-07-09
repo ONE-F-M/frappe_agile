@@ -212,15 +212,25 @@ def get_unassigned_work_items(limit=200):
 	each one onto a sprint. Only schedulable types (Task / User Story / Bug)
 	are listed and the order is reverse-chronological by ``modified`` — the
 	last edited item shows first, per the roadmap spec.
+
+	When a Backlog Status is configured in Frappe Agile Settings, the panel is
+	further narrowed to unsprinted items in that status; left blank, unsprinted
+	items of every status are shown.
 	"""
 	frappe.has_permission("Work Item", "read", throw=True)
 
+	filters = {
+		"sprint": ["is", "not set"],
+		"work_item_type": ["in", list(BACKLOG_TYPES)],
+	}
+
+	backlog_status = frappe.db.get_single_value("Frappe Agile Settings", "backlog_status")
+	if backlog_status:
+		filters["status"] = backlog_status
+
 	rows = frappe.get_list(
 		"Work Item",
-		filters={
-			"sprint": ["is", "not set"],
-			"work_item_type": ["in", list(BACKLOG_TYPES)],
-		},
+		filters=filters,
 		fields=[
 			"name",
 			"title",
