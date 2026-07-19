@@ -14,7 +14,6 @@
 
 const API_GET = "frappe_agile.frappe_agile.page.roadmap_board.roadmap_board.get_roadmap_data";
 const API_MOVE = "frappe_agile.frappe_agile.page.roadmap_board.roadmap_board.move_work_item";
-const API_CREATE_MISSING = "frappe_agile.frappe_agile.page.roadmap_board.roadmap_board.create_missing_sprints";
 const SORTABLE_ASSET = "/assets/frappe_agile/js/vendor/sortable.min.js";
 const MAX_ITEMS_VISIBLE = 6; // collapse longer item lists behind a "+N more"
 
@@ -53,7 +52,6 @@ class RoadmapBoard {
 		this._selecting = false;
 		this.selected_lanes = new Set();
 		this.can_write = frappe.model.can_write("Work Item");
-		this.can_create_sprint = frappe.model.can_create("Sprint");
 
 		this._build_ui();
 		this.refresh();

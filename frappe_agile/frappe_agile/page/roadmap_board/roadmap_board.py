@@ -182,20 +182,11 @@ def get_roadmap_data(group_by="sprint_prefix", lane=None, sprint_status=None, se
 		row_list.append(r)
 	row_list.sort(key=lambda r: r["label"].lower())
 
-	# How many upcoming windows still need a sprint (prefix grouping only) — drives
-	# the "Create Missing Sprints" button. Computed the same way as the creator so
-	# the count converges to zero once they are created.
-	missing_count = 0
-	if group_by == "sprint_prefix":
-		prefixes = sorted({(s.sprint_prefix or "").strip() for s in sprints if (s.sprint_prefix or "").strip()})
-		missing_count = len(_missing_upcoming_windows(prefixes, future_count))
-
 	return {
 		"group_by": group_by,
 		"columns": columns,
 		"rows": row_list,
 		"cells": cells,
-		"missing_count": missing_count,
 	}
 
 
