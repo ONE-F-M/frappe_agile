@@ -9,9 +9,7 @@
   "development_team_section",
   "development_team",
   "ba_velocity",
-  "developer_velocity",
-  "roadmap_section",
-  "backlog_status"
+  "developer_velocity"
  ],
  "fields": [
   {
@@ -47,17 +45,6 @@
    "fieldname": "developer_velocity",
    "fieldtype": "Float",
    "label": "Developer Velocity"
-  },
-  {
-   "fieldname": "roadmap_section",
-   "fieldtype": "Section Break",
-   "label": "Roadmap"
-  },
-  {
-   "description": "Optional. When set, the Roadmap backlog panel shows only unsprinted Work Items whose Status equals this value. Must be one of the Work Item Status options. Leave blank to show unsprinted Work Items of every status.",
-   "fieldname": "backlog_status",
-   "fieldtype": "Data",
-   "label": "Backlog Status"
   }
  ],
  "issingle": 1,
