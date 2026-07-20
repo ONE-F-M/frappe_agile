@@ -47,6 +47,10 @@ class RoadmapBoard {
 		};
 		this._loading = false;
 		this._sortables = [];
+		// Selection mode: clicking "Create Missing Sprint(s)" reveals per-track
+		// checkboxes; the picked prefixes are created on Confirm.
+		this._selecting = false;
+		this.selected_lanes = new Set();
 		this.can_write = frappe.model.can_write("Work Item");
 
 		this._build_ui();
@@ -110,6 +114,16 @@ class RoadmapBoard {
 					placeholder="${__("Type to highlight matches…")}" />
 			</div>
 			<div class="rm-filters-actions">
+				<span class="rm-select-hint">${__("Tick the tracks to create sprints for, then Confirm")}</span>
+				<button class="btn btn-default btn-xs" id="rm-create-missing" title="${__("Create Draft sprints for upcoming windows that have none")}">
+					<i class="fa fa-plus"></i> ${__("Create Missing Sprint(s)")}
+				</button>
+				<button class="btn btn-primary btn-xs" id="rm-confirm-create" title="${__("Create sprints for the ticked tracks")}">
+					<i class="fa fa-check"></i> <span class="rm-confirm-label">${__("Confirm")}</span>
+				</button>
+				<button class="btn btn-default btn-xs" id="rm-cancel-create">
+					${__("Cancel")}
+				</button>
 				<button class="btn btn-default btn-xs" id="rm-jump-current" title="${__("Scroll to current sprint")}">
 					<i class="fa fa-crosshairs"></i> ${__("Today")}
 				</button>
@@ -122,7 +136,7 @@ class RoadmapBoard {
 		this.$filters.find("#rm-group-by").on("change", (e) => {
 			this.filters.group_by = e.target.value;
 			this.filters.lane = "";
-			this.refresh({ scrollToCurrent: true });
+			this.refresh({ scrollToCurrent: true }); // refresh() resets selection mode
 		});
 		this.$filters.find("#rm-status").on("change", (e) => {
 			this.filters.sprint_status = e.target.value;
@@ -138,6 +152,17 @@ class RoadmapBoard {
 		}, 200));
 		this.$filters.find("#rm-refresh").on("click", () => this.refresh({ preserveScroll: true }));
 		this.$filters.find("#rm-jump-current").on("click", () => this._scroll_to_current());
+		this.$filters.find("#rm-create-missing").on("click", () => this._enter_selection_mode());
+		this.$filters.find("#rm-confirm-create").on("click", () => this._on_create_missing());
+		this.$filters.find("#rm-cancel-create").on("click", () => this._exit_selection_mode());
+
+		this.$create_missing = this.$filters.find("#rm-create-missing");
+		this.$confirm_create = this.$filters.find("#rm-confirm-create");
+		this.$cancel_create = this.$filters.find("#rm-cancel-create");
+		this.$select_hint = this.$filters.find(".rm-select-hint");
+		// The create controls are all hidden until data says a track is missing a
+		// sprint; confirm/cancel/hint appear only while in selection mode.
+		this._update_create_controls();
 	}
 
 	_render_legend() {
@@ -163,6 +188,10 @@ class RoadmapBoard {
 		if (this._loading) return;
 		this._loading = true;
 		this._destroy_sortables();
+
+		// A reload always leaves selection mode — the grid is about to be rebuilt.
+		this._selecting = false;
+		this.selected_lanes.clear();
 
 		// `scrollToCurrent` recentres on the current sprint (first load / filter
 		// changes). `preserveScroll` keeps the viewport exactly where it is — used
@@ -240,13 +269,29 @@ class RoadmapBoard {
 				</div>`;
 		});
 
+		// While in selection mode, lane heads carry a checkbox so a Business
+		// Analyst can pick which tracks "Create Missing Sprint(s)" fills. Drop any
+		// remembered selection for lanes no longer on the board.
+		const lane_selectable = this._selecting && this.can_create_sprint && this.filters.group_by === "sprint_prefix";
+		const lane_keys = new Set(data.rows.map((r) => r.key));
+		this.selected_lanes.forEach((k) => {
+			if (!lane_keys.has(k)) this.selected_lanes.delete(k);
+		});
+
 		// --- Body rows ---
 		data.rows.forEach((row) => {
 			const proj = row.projects && row.projects.length
 				? frappe.utils.escape_html(row.projects.join(", "))
 				: __("No linked project");
+			const select = lane_selectable
+				? `<input type="checkbox" class="rm-lane-select"
+						data-lane="${frappe.utils.escape_html(row.key)}"
+						${this.selected_lanes.has(row.key) ? "checked" : ""}
+						title="${__("Include this track when creating missing sprints")}" />`
+				: "";
 			html += `
 				<div class="rm-lanehead">
+					${select}
 					<div class="rm-lane-bar"></div>
 					<div class="rm-lane-text">
 						<div class="rm-lane-title">${frappe.utils.escape_html(row.label)}</div>
@@ -277,6 +322,87 @@ class RoadmapBoard {
 			this.$grid[0].scrollTop = prevTop;
 		}
 		this._first_render_done = true;
+		this._update_create_controls();
+	}
+
+	// Enter selection mode: reveal per-track checkboxes and swap the entry button
+	// for Confirm / Cancel. Re-renders the grid so lane heads get their checkboxes.
+	_enter_selection_mode() {
+		this._selecting = true;
+		this.selected_lanes.clear();
+		this._render_grid();
+	}
+
+	_exit_selection_mode() {
+		this._selecting = false;
+		this.selected_lanes.clear();
+		this._render_grid();
+	}
+
+	// Drive the create controls from the current data + selection state:
+	//   - all hidden unless grouping by prefix and some track is missing a sprint;
+	//   - "Create Missing Sprint(s)" shows when idle, Confirm/Cancel + hint while
+	//     selecting; Confirm stays disabled until at least one track is ticked.
+	_update_create_controls() {
+		if (!this.$create_missing) return;
+		const missing = (this.data && this.data.missing_count) || 0;
+		const available = this.can_create_sprint && this.filters.group_by === "sprint_prefix" && missing > 0;
+
+		if (!available) this._selecting = false;
+		const selecting = available && this._selecting;
+
+		this.$create_missing.toggle(available && !selecting);
+		this.$confirm_create.toggle(selecting);
+		this.$cancel_create.toggle(selecting);
+		this.$select_hint.toggle(selecting);
+
+		if (selecting) {
+			const n = this.selected_lanes.size;
+			this.$confirm_create
+				.prop("disabled", n === 0)
+				.find(".rm-confirm-label")
+				.text(n ? __("Confirm — {0} track(s)", [n]) : __("Confirm"));
+		}
+	}
+
+	_on_create_missing() {
+		const selected = [...this.selected_lanes];
+		if (!selected.length) return; // Confirm is disabled without a selection
+
+		frappe.confirm(
+			__("Create Draft sprints for every missing upcoming window across the {0} selected track(s)?", [selected.length]),
+			() => {
+				frappe.dom.freeze(__("Creating sprints…"));
+				frappe.call({
+					method: API_CREATE_MISSING,
+					args: {
+						group_by: this.filters.group_by,
+						lane: this.filters.lane || undefined,
+						sprint_status: this.filters.sprint_status || undefined,
+						future_count: this.filters.future_count,
+						lanes: JSON.stringify(selected),
+					},
+					callback: (r) => {
+						frappe.dom.unfreeze();
+						const n = (r && r.message && r.message.created_count) || 0;
+						frappe.show_alert({
+							message: n
+								? __("Created {0} sprint(s)", [n])
+								: __("No missing sprints to create"),
+							indicator: n ? "green" : "blue",
+						});
+						this.refresh({ preserveScroll: true });
+					},
+					error: (err) => {
+						frappe.dom.unfreeze();
+						frappe.show_alert({
+							message: __("Failed to create sprints: {0}", [(err && err.message) || __("see error log")]),
+							indicator: "red",
+						});
+					},
+				});
+			}
+		);
 	}
 
 	_cell_attrs(cell, row, col) {
@@ -371,6 +497,13 @@ class RoadmapBoard {
 	}
 
 	_bind_cell_events() {
+		this.$grid.find(".rm-lane-select").on("change", (e) => {
+			const lane = $(e.currentTarget).data("lane");
+			if (e.currentTarget.checked) this.selected_lanes.add(lane);
+			else this.selected_lanes.delete(lane);
+			this._update_create_controls();
+		});
+
 		this.$grid.find(".rm-more").on("click", (e) => {
 			e.preventDefault();
 			e.stopPropagation();

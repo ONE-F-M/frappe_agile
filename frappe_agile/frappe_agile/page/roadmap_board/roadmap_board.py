@@ -368,3 +368,140 @@ def _ensure_sprint_for_window(prefix, window_start, window_end):
 	)
 	doc.insert()
 	return doc.name, True
+
+
+def _latest_business_analyst(prefix):
+	"""Business Analyst of the most recent sprint (by start_date) for a prefix."""
+	rows = frappe.get_all(
+		"Sprint",
+		filters={"sprint_prefix": prefix, "business_analyst": ["is", "set"]},
+		fields=["business_analyst"],
+		order_by="start_date desc",
+		limit=1,
+	)
+	return rows[0].business_analyst if rows else None
+
+
+def _missing_upcoming_windows(prefixes, future_count):
+	"""Return [(prefix, window_start, window_end)] that need a Draft sprint.
+
+	The target for each prefix is the next ``future_count`` standard Wed→Tue
+	windows strictly after today. A window is "missing" when no sprint of that
+	prefix already starts on it. This is idempotent: once the target windows are
+	filled, the result is empty (so the create button can hide).
+	"""
+	prefixes = [p for p in (prefixes or []) if p]
+	if not prefixes or future_count <= 0:
+		return []
+
+	today = getdate()
+	# First upcoming window: the standard sprint-start weekday strictly after today.
+	first_start = align_to_sprint_start(add_days(today, 1))
+	target_starts = [add_days(first_start, 7 * i) for i in range(future_count)]
+
+	# One query for all existing (prefix, start_date) pairs in the target range.
+	existing_rows = frappe.get_all(
+		"Sprint",
+		filters={"sprint_prefix": ["in", prefixes], "start_date": ["in", target_starts]},
+		fields=["sprint_prefix", "start_date"],
+	)
+	existing = {(r.sprint_prefix, getdate(r.start_date)) for r in existing_rows}
+
+	missing = []
+	for prefix in prefixes:
+		for ws in target_starts:
+			if (prefix, getdate(ws)) not in existing:
+				missing.append((prefix, ws, add_days(ws, SPRINT_SPAN_DAYS)))
+	return missing
+
+
+@frappe.whitelist()
+def create_missing_sprints(group_by="sprint_prefix", lane=None, sprint_status=None, future_count=None, lanes=None):
+	"""Create Draft sprints for every upcoming window that has no sprint yet.
+
+	For each prefix lane shown on the board, a Draft Sprint is created for each
+	upcoming window (within the Plan-ahead range) that does not already have one.
+	New sprints inherit the prefix's latest Business Analyst.
+
+	Args:
+		lanes: optional JSON list of sprint prefixes to restrict creation to.
+			When given, only those tracks are filled (the Business Analyst
+			selected a subset of projects on the board); otherwise every track
+			on the board is filled.
+
+	Only supported when grouping by sprint prefix — the prefix names the sprint.
+	Returns {"created": [names], "created_count": n}.
+	"""
+	if group_by != "sprint_prefix":
+		frappe.throw(_("Missing sprints can only be created when grouping by Sprint Prefix / Track."))
+
+	frappe.has_permission("Sprint", "create", throw=True)
+
+	future_count = cint(future_count) if future_count not in (None, "") else DEFAULT_FUTURE_COUNT
+
+	prefixes = _board_prefixes(lane, sprint_status)
+
+	# Restrict to the tracks the user selected, if any. Intersecting with the
+	# board prefixes keeps a stale/forged selection from creating off-board tracks.
+	selected = _parse_lane_selection(lanes)
+	if selected is not None:
+		prefixes = [p for p in prefixes if p in selected]
+
+	missing = _missing_upcoming_windows(prefixes, future_count)
+	if not missing:
+		return {"created": [], "created_count": 0}
+
+	ba_by_prefix = {}
+	created = []
+	for prefix, ws, we in missing:
+		if prefix not in ba_by_prefix:
+			ba_by_prefix[prefix] = _latest_business_analyst(prefix)
+
+		doc = frappe.get_doc(
+			{
+				"doctype": "Sprint",
+				"sprint_prefix": prefix,
+				"status": "Draft",
+				"start_date": ws,
+				"end_date": we,
+				"sprint_goal": _("Planned via Roadmap"),
+				"business_analyst": ba_by_prefix[prefix],
+			}
+		)
+		doc.insert()
+		created.append(doc.name)
+
+	frappe.db.commit()
+	return {"created": created, "created_count": len(created)}
+
+
+def _parse_lane_selection(lanes):
+	"""Normalise the client's lane selection into a set of prefixes, or None.
+
+	Returns None when no selection was made (create for all tracks) and a set of
+	trimmed, non-empty prefixes otherwise. An empty selection also returns an
+	empty set so nothing is created — the caller distinguishes it from None.
+	"""
+	if lanes in (None, ""):
+		return None
+	if isinstance(lanes, str):
+		lanes = frappe.parse_json(lanes)
+	return {(p or "").strip() for p in (lanes or []) if (p or "").strip()}
+
+
+def _board_prefixes(lane=None, sprint_status=None):
+	"""Distinct, non-empty sprint prefixes shown on the board for the filters."""
+	sprint_filters = {}
+	if sprint_status:
+		sprint_filters["status"] = sprint_status
+	if lane:
+		sprint_filters["sprint_prefix"] = lane
+
+	rows = frappe.get_all(
+		"Sprint",
+		filters=sprint_filters,
+		fields=["sprint_prefix"],
+		distinct=True,
+		limit_page_length=0,
+	)
+	return sorted({(r.sprint_prefix or "").strip() for r in rows if (r.sprint_prefix or "").strip()})

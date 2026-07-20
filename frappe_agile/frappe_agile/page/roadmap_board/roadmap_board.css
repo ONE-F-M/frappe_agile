@@ -49,6 +49,14 @@
 	gap: 8px;
 }
 
+/* Inline prompt shown while picking tracks for "Create Missing Sprint(s)". */
+.rm-select-hint {
+	align-self: center;
+	font-size: 11px;
+	font-style: italic;
+	color: var(--text-muted, #6b7280);
+}
+
 /* ---------------- Legend ---------------- */
 .rm-legend {
 	display: flex;
@@ -126,6 +134,7 @@
 	align-items: flex-start;
 }
 
+.rm-lane-select { margin: 3px 0 0 0; flex: 0 0 auto; cursor: pointer; }
 .rm-lane-bar { width: 4px; align-self: stretch; min-height: 32px; border-radius: 3px; background: #ef4444; flex: 0 0 auto; }
 .rm-lane-title { font-weight: 700; font-size: 14px; color: var(--text-color, #1f2937); word-break: break-word; }
 .rm-lane-sub { font-size: 11px; color: var(--text-muted, #9ca3af); margin-top: 2px; }
