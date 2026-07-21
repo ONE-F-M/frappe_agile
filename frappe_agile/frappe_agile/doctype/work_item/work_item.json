@@ -102,8 +102,7 @@
    "fieldname": "reporter_user",
    "fieldtype": "Link",
    "label": "Reporter User",
-   "options": "User",
-   "read_only": 1
+   "options": "User"
   },
   {
    "fieldname": "process_owner",
@@ -271,7 +270,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-06-15 15:03:39.834124",
+ "modified": "2026-07-21 10:41:05.121006",
  "modified_by": "Administrator",
  "module": "Frappe Agile",
  "name": "Work Item",
