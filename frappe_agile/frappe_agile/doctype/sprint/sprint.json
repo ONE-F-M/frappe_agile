@@ -39,10 +39,12 @@
    "label": "Naming"
   },
   {
+   "fetch_from": "project.custom_sprint_prefix",
    "fieldname": "sprint_prefix",
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Sprint Prefix",
+   "read_only": 1,
    "reqd": 1
   },
   {
@@ -53,7 +55,8 @@
    "fieldname": "project",
    "fieldtype": "Link",
    "label": "Project",
-   "options": "Project"
+   "options": "Project",
+   "reqd": 1
   },
   {
    "fieldname": "sprint_schedule_section",
@@ -102,9 +105,9 @@
    "fieldname": "points_brought_forward",
    "fieldtype": "Float",
    "label": "Points Brought Forward",
+   "non_negative": 1,
    "precision": "1",
-   "read_only": 1,
-   "non_negative": 1
+   "read_only": 1
   },
   {
    "fieldname": "column_break_shlg",
@@ -155,9 +158,9 @@
    "fieldname": "points_carried_forward",
    "fieldtype": "Float",
    "label": "Points Carried Forward",
+   "non_negative": 1,
    "precision": "1",
-   "read_only": 1,
-   "non_negative": 1
+   "read_only": 1
   },
   {
    "fieldname": "work_items_section",
@@ -184,8 +187,8 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-05-10 18:59:16.360983",
- "modified_by": "c.akeru@one-fm.com",
+ "modified": "2026-07-23 20:27:17.910195",
+ "modified_by": "Administrator",
  "module": "Frappe Agile",
  "name": "Sprint",
  "naming_rule": "By script",
