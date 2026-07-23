@@ -64,6 +64,7 @@ class RoadmapBoard {
 		this._selecting = false;
 		this.selected_lanes = new Set();
 		this.can_write = frappe.model.can_write("Work Item");
+		this.can_create_wi = frappe.model.can_create("Work Item");
 		this.can_create_sprint = frappe.model.can_create("Sprint");
 
 		this._build_ui();
@@ -488,11 +489,23 @@ class RoadmapBoard {
 				</button>`;
 		}
 
+		// A "+" next to the sprint name opens a new tab to create a Work Item with
+		// this sprint prefilled. Hidden without create rights or on a Completed
+		// (locked) sprint, which cannot accept new work items.
+		const add_wi = this.can_create_wi && !locked
+			? `<a class="rm-add-wi" href="/app/work-item/new?sprint=${encodeURIComponent(cell.sprint)}"
+					target="_blank" rel="noopener"
+					title="${__("Create a work item in this sprint")}"><i class="fa fa-plus"></i></a>`
+			: "";
+
 		return `
 		<div class="rm-cell ${matched} ${locked ? "rm-locked" : ""}" ${this._cell_attrs(cell, row, col)}>
 			<div class="rm-cell-head">
-				<a class="rm-sprint-name" href="/app/sprint/${encodeURIComponent(cell.sprint)}"
-					title="${__("Open sprint")}">${frappe.utils.escape_html(cell.sprint)}</a>
+				<div class="rm-cell-head-name">
+					<a class="rm-sprint-name" href="/app/sprint/${encodeURIComponent(cell.sprint)}"
+						title="${__("Open sprint")}">${frappe.utils.escape_html(cell.sprint)}</a>
+					${add_wi}
+				</div>
 				<span class="rm-badge ${status_class}">${frappe.utils.escape_html(cell.status || "—")}</span>
 			</div>
 			<div class="rm-items" data-droppable="1">${items_html}</div>
