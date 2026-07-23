@@ -168,11 +168,21 @@
 .rm-cell-empty:hover .rm-empty-hint { opacity: 1; }
 
 .rm-cell-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 8px; }
+.rm-cell-head-name { display: flex; align-items: center; gap: 4px; min-width: 0; flex: 1 1 auto; }
 
 .rm-sprint-name {
 	font-size: 12px; font-weight: 600; color: var(--text-color, #374151);
-	white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+	white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
 }
+
+/* "+" quick-add: create a Work Item in this sprint (opens in a new tab) */
+.rm-add-wi {
+	flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+	width: 16px; height: 16px; border-radius: 4px; font-size: 10px;
+	color: #94a3b8; text-decoration: none; opacity: 0; transition: opacity 0.12s, background 0.12s, color 0.12s;
+}
+.rm-cell:hover .rm-add-wi { opacity: 1; }
+.rm-add-wi:hover { background: #dbeafe; color: #2563eb; }
 
 .rm-badge { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
 
