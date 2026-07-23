@@ -51,6 +51,9 @@ class RoadmapBoard {
 		// checkboxes; the picked prefixes are created on Confirm.
 		this._selecting = false;
 		this.selected_lanes = new Set();
+		// Epics render collapsed by default; remember which ones the user expanded
+		// (keyed by `sprint::epic`) so an in-place refresh keeps them open.
+		this._expanded_epics = new Set();
 		this.can_write = frappe.model.can_write("Work Item");
 		this.can_create_wi = frappe.model.can_create("Work Item");
 		this.can_create_sprint = frappe.model.can_create("Sprint");
@@ -429,13 +432,21 @@ class RoadmapBoard {
 			: "";
 		const locked = cell.status === "Completed";
 
-		const items = cell.work_items || [];
-		const visible = items.slice(0, MAX_ITEMS_VISIBLE);
-		const hidden = items.length - visible.length;
+		const { loose, epics } = this._group_items(cell.work_items || []);
 
-		let items_html = visible.map((wi) => this._item_html(wi, term)).join("");
+		// Work items that belong to an Epic are grouped under a collapsible purple
+		// header (collapsed by default). Loose items — those without an epic — stay
+		// in a flat list below, which also serves as the cell's drop zone so a fully
+		// grouped cell can still receive drag-drops without expanding an epic first.
+		const epics_html = epics
+			.map((g) => this._epic_group_html(g, cell.sprint, term))
+			.join("");
+
+		const visible = loose.slice(0, MAX_ITEMS_VISIBLE);
+		const hidden = loose.length - visible.length;
+		let loose_html = visible.map((wi) => this._item_html(wi, term)).join("");
 		if (hidden > 0) {
-			items_html += `
+			loose_html += `
 				<button class="rm-more" data-sprint="${frappe.utils.escape_html(cell.sprint)}">
 					+${hidden} ${__("more")}
 				</button>`;
@@ -460,7 +471,8 @@ class RoadmapBoard {
 				</div>
 				<span class="rm-badge ${status_class}">${frappe.utils.escape_html(cell.status || "—")}</span>
 			</div>
-			<div class="rm-items" data-droppable="1">${items_html}</div>
+			${epics.length ? `<div class="rm-epics">${epics_html}</div>` : ""}
+			<div class="rm-items rm-loose" data-droppable="1">${loose_html}</div>
 			<div class="rm-cell-foot">
 				<div class="rm-points"><strong>${cell.total_points}</strong> ${__("SP")}</div>
 				<div class="rm-pct ${pct_class}">${pct}%</div>
@@ -480,6 +492,58 @@ class RoadmapBoard {
 		<div class="rm-cell rm-cell-empty ${col.is_future ? "rm-cell-future" : ""}" ${this._cell_attrs(null, row, col)}>
 			<div class="rm-items" data-droppable="${can_plan ? "1" : "0"}"></div>
 			${hint}
+		</div>`;
+	}
+
+	// Split a cell's work items into loose items (no epic) and epic groups. Order
+	// within each bucket follows the server order (story points desc); groups are
+	// ordered by combined points desc so the heaviest epic surfaces first.
+	_group_items(items) {
+		const loose = [];
+		const by_epic = new Map();
+		(items || []).forEach((wi) => {
+			if (!wi.epic) {
+				loose.push(wi);
+				return;
+			}
+			let g = by_epic.get(wi.epic);
+			if (!g) {
+				g = { epic: wi.epic, title: wi.epic_title || wi.epic, items: [], points: 0 };
+				by_epic.set(wi.epic, g);
+			}
+			g.items.push(wi);
+			g.points += flt(wi.story_points);
+		});
+		const epics = [...by_epic.values()].sort(
+			(a, b) => b.points - a.points || a.title.localeCompare(b.title)
+		);
+		return { loose, epics };
+	}
+
+	// Render one collapsible epic group. Collapsed by default; expanded when the
+	// user has toggled it open (remembered across refreshes) or when a search term
+	// matches one of its items, so hits are never hidden inside a closed epic.
+	_epic_group_html(group, sprint, term) {
+		const key = `${sprint}::${group.epic}`;
+		const has_hit = !!term && group.items.some((wi) => (wi.title || "").toLowerCase().includes(term));
+		const expanded = this._expanded_epics.has(key) || has_hit;
+		const pts = flt(group.points, 1);
+		const items_html = group.items.map((wi) => this._item_html(wi, term)).join("");
+
+		return `
+		<div class="rm-epic ${expanded ? "" : "rm-epic-collapsed"}"
+			data-epic="${frappe.utils.escape_html(group.epic)}" data-key="${frappe.utils.escape_html(key)}">
+			<div class="rm-epic-head" role="button" tabindex="0"
+				title="${__("Show / hide work items in this epic")}">
+				<i class="fa fa-caret-right rm-epic-caret"></i>
+				<span class="rm-item-type rm-type-epic"></span>
+				<span class="rm-epic-name" title="${frappe.utils.escape_html(group.title)}">${frappe.utils.escape_html(group.title)}</span>
+				<span class="rm-epic-count" title="${__("Work items in this sprint")}">${group.items.length}</span>
+				<span class="rm-epic-pts" title="${__("Combined story points in this sprint")}">${pts} ${__("SP")}</span>
+				<a class="rm-item-open rm-epic-open" href="/app/work-item/${encodeURIComponent(group.epic)}"
+					target="_blank" rel="noopener" title="${__("Open epic")}">↗</a>
+			</div>
+			<div class="rm-epic-items rm-items" data-droppable="1">${items_html}</div>
 		</div>`;
 	}
 
@@ -525,9 +589,30 @@ class RoadmapBoard {
 			const cell = this._find_cell_by_sprint(sprint);
 			if (!cell) return;
 			const term = (this.filters.search || "").trim().toLowerCase();
-			const $items = $(e.currentTarget).closest(".rm-items");
-			$items.html(cell.work_items.map((wi) => this._item_html(wi, term)).join(""));
+			const { loose } = this._group_items(cell.work_items || []);
+			const $items = $(e.currentTarget).closest(".rm-loose");
+			$items.html(loose.map((wi) => this._item_html(wi, term)).join(""));
 			this._init_drag(); // re-init sortable to include newly shown items
+		});
+
+		// Toggle an epic group open/closed (click or keyboard). The open-epic ↗ link
+		// inside the header opens the epic instead and must not toggle.
+		const toggle_epic = (head) => {
+			const $group = $(head).closest(".rm-epic");
+			const key = $group.data("key");
+			const collapsed = $group.toggleClass("rm-epic-collapsed").hasClass("rm-epic-collapsed");
+			if (collapsed) this._expanded_epics.delete(key);
+			else this._expanded_epics.add(key);
+		};
+		this.$grid.find(".rm-epic-head").on("click", (e) => {
+			if ($(e.target).closest(".rm-epic-open").length) return;
+			toggle_epic(e.currentTarget);
+		});
+		this.$grid.find(".rm-epic-head").on("keydown", (e) => {
+			if (e.key === "Enter" || e.key === " ") {
+				e.preventDefault();
+				toggle_epic(e.currentTarget);
+			}
 		});
 	}
 

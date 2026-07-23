@@ -109,6 +109,10 @@ def get_roadmap_data(group_by="sprint_prefix", lane=None, sprint_status=None, se
 
 	search_term = (search or "").strip().lower()
 
+	# Resolve the title of every Epic referenced by a work item so cells can group
+	# their items under a readable epic name (the `epic` field only stores the id).
+	epic_titles = _epic_titles([wi.epic for wi in work_items])
+
 	items_by_sprint = {}
 	for wi in work_items:
 		items_by_sprint.setdefault(wi.sprint, []).append(wi)
@@ -168,7 +172,7 @@ def get_roadmap_data(group_by="sprint_prefix", lane=None, sprint_status=None, se
 		cell_key = f"{lane_key}::{col_key}"
 
 		sprint_items = items_by_sprint.get(s.name, [])
-		cell = _build_cell(s, sprint_items, search_term)
+		cell = _build_cell(s, sprint_items, search_term, epic_titles)
 
 		# Two sprints may collide in one (lane, window); keep the richer one.
 		existing = cells.get(cell_key)
@@ -224,8 +228,26 @@ def _build_future_columns(existing, future_count):
 	return future
 
 
-def _build_cell(sprint, items, search_term):
+def _epic_titles(epic_ids):
+	"""Map {epic_name: title} for the given Epic work-item ids (blank/None ignored).
+
+	Cells group their work items under the parent Epic; the ``epic`` field only
+	stores the Epic's id, so its human title is fetched here in one query.
+	"""
+	names = sorted({e for e in epic_ids if e})
+	if not names:
+		return {}
+	rows = frappe.get_all(
+		"Work Item",
+		filters={"name": ["in", names]},
+		fields=["name", "title"],
+	)
+	return {r.name: (r.title or r.name) for r in rows}
+
+
+def _build_cell(sprint, items, search_term, epic_titles=None):
 	"""Assemble a single sprint cell payload."""
+	epic_titles = epic_titles or {}
 	total_points = 0.0
 	accepted_points = 0.0
 	work_items = []
@@ -245,6 +267,7 @@ def _build_cell(sprint, items, search_term):
 				"status": wi.status,
 				"story_points": pts,
 				"epic": wi.epic,
+				"epic_title": epic_titles.get(wi.epic) if wi.epic else None,
 				"assignee_user": wi.assignee_user,
 				"accepted": is_accepted,
 			}

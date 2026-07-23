@@ -245,6 +245,80 @@
 .rm-locked .rm-item-drag { display: none; } /* completed sprints: items frozen in place */
 .rm-locked .rm-item-draggable { cursor: default; }
 
+/* ---------------- Epic groups (collapsible, purple) ---------------- */
+.rm-epics { display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; }
+
+.rm-epic {
+	border: 1px solid #ede9fe;
+	border-left: 3px solid #8b5cf6;   /* purple accent — matches the Epic type dot */
+	border-radius: 6px;
+	background: #faf5ff;
+	overflow: hidden;
+}
+
+.rm-epic-head {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 6px;
+	cursor: pointer;
+	font-size: 12px;
+	color: #6d28d9;
+	user-select: none;
+}
+.rm-epic-head:hover { background: #f3e8ff; }
+.rm-epic-head:focus-visible { outline: 2px solid #8b5cf6; outline-offset: -2px; }
+
+/* Caret points down when open, right when collapsed. */
+.rm-epic-caret {
+	flex: 0 0 auto;
+	width: 10px;
+	font-size: 12px;
+	color: #8b5cf6;
+	transition: transform 0.15s ease;
+	transform: rotate(90deg);
+}
+.rm-epic-collapsed .rm-epic-caret { transform: rotate(0deg); }
+
+.rm-epic .rm-item-type { flex: 0 0 auto; }
+.rm-epic-name {
+	flex: 1 1 auto;
+	font-weight: 700;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.rm-epic-count {
+	flex: 0 0 auto;
+	min-width: 16px;
+	text-align: center;
+	font-size: 10px;
+	font-weight: 700;
+	padding: 0 5px;
+	border-radius: 999px;
+	background: #ede9fe;
+	color: #6d28d9;
+}
+.rm-epic-pts {
+	flex: 0 0 auto;
+	font-size: 10px;
+	font-weight: 700;
+	padding: 0 6px;
+	border-radius: 4px;
+	background: #8b5cf6;
+	color: #fff;
+}
+.rm-epic-open { flex: 0 0 auto; opacity: 0; }
+.rm-epic-head:hover .rm-epic-open { opacity: 1; }
+.rm-epic-open:hover { color: #6d28d9; }
+
+/* Item list inside an epic — tighter than a loose cell list. */
+.rm-epic-items { margin: 0; padding: 2px 6px 6px 8px; min-height: 0; }
+.rm-epic-collapsed .rm-epic-items { display: none; }
+
+/* Loose (no-epic) list doubles as the cell drop zone; keep a little breathing room. */
+.rm-loose { margin-bottom: 8px; }
+
 /* ---------------- Cell footer + progress ---------------- */
 .rm-cell-foot { display: flex; align-items: center; justify-content: space-between; font-size: 12px; margin-bottom: 5px; }
 .rm-points { color: var(--text-muted, #6b7280); }
@@ -274,3 +348,10 @@
 [data-theme="dark"] .rm-colhead.rm-current { background: #1e293b; }
 [data-theme="dark"] .rm-item:hover { background: rgba(255,255,255,0.05); }
 [data-theme="dark"] .rm-item-hit { background: #422006; }
+/* Epic groups in dark mode: muted purple surface, brighter text/accents. */
+[data-theme="dark"] .rm-epic { background: rgba(139,92,246,0.10); border-color: rgba(139,92,246,0.30); border-left-color: #a78bfa; }
+[data-theme="dark"] .rm-epic-head { color: #c4b5fd; }
+[data-theme="dark"] .rm-epic-head:hover { background: rgba(139,92,246,0.18); }
+[data-theme="dark"] .rm-epic-caret { color: #a78bfa; }
+[data-theme="dark"] .rm-epic-count { background: rgba(139,92,246,0.28); color: #ddd6fe; }
+[data-theme="dark"] .rm-epic-pts { background: #7c3aed; color: #f5f3ff; }
