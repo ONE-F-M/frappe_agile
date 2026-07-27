@@ -4,9 +4,11 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils import today, add_days, flt
 
-
-# Prefixes used by tests — any Sprint / Work Item using these is test data.
-TEST_PREFIXES = ["TEST", "ALPHA", "BETA"]
+from frappe_agile.tests.fixtures import (
+	TEST_PREFIXES,
+	delete_test_projects,
+	ensure_test_project,
+)
 
 
 class TestSprint(FrappeTestCase):
@@ -45,15 +47,17 @@ class TestSprint(FrappeTestCase):
 		frappe.db.delete("Work Item", {"title": ("like", "Test WI%")})
 		frappe.db.delete("Work Item", {"title": ("like", "WI %")})
 
-		# Delete test sprints
+		# Delete test sprints, then the Projects that owned their prefixes.
 		frappe.db.delete("Sprint", {"sprint_prefix": ("in", TEST_PREFIXES)})
+		delete_test_projects()
 
 	def _make_sprint(self, prefix="TEST", status="Draft", project=None, sprint_goal="Test Sprint Goal"):
+		# Sprint.project is mandatory and sprint_prefix is fetched from it, so the
+		# prefix is expressed by giving the sprint a Project that owns it.
 		sprint = frappe.get_doc({
 			"doctype": "Sprint",
-			"sprint_prefix": prefix,
 			"status": status,
-			"project": project,
+			"project": project or ensure_test_project(prefix),
 			"start_date": today(),
 			"end_date": add_days(today(), 14),
 			"sprint_goal": sprint_goal,
