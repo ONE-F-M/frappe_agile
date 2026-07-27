@@ -56,8 +56,7 @@ class RoadmapBoardTestCase(FrappeTestCase):
             frappe.db.delete("Work Item", {"sprint": ("in", sprints)})
             frappe.db.delete("Sprint", {"name": ("in", sprints)})
         frappe.db.delete("Work Item", {"title": ("like", "_Test Roadmap%")})
-        delete_test_projects()
-        frappe.db.delete("Project", {"name": NO_PREFIX_PROJECT})
+        delete_test_projects(extra_projects=[NO_PREFIX_PROJECT])
 
     def _cleanup_and_commit(self):
         self._cleanup()

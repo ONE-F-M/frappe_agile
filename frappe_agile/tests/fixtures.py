@@ -44,9 +44,28 @@ def ensure_test_project(prefix):
     return name
 
 
-def delete_test_projects():
+def test_project_names():
+    return [test_project_name(p) for p in TEST_PREFIXES]
+
+
+def delete_test_work_items(extra_projects=None):
+    """Delete Work Items belonging to the test Projects.
+
+    Cleaning up by Project rather than by title pattern is what makes this
+    complete. `handle_incomplete_items` moves items to the Backlog (sprint = "")
+    and commits unconditionally, so those rows survive both the rollback and any
+    cleanup that finds work items via their sprint — but they keep the Project
+    fetched from the sprint they came from, which still identifies them.
+    """
+    projects = test_project_names() + list(extra_projects or [])
+    frappe.db.delete("Work Item", {"project": ("in", projects)})
+
+
+def delete_test_projects(extra_projects=None):
     """Remove the Projects created by ensure_test_project.
 
-    Call after the Sprints referencing them are gone.
+    Call after the Sprints and Work Items referencing them are gone, otherwise
+    those rows are left holding a dangling link.
     """
-    frappe.db.delete("Project", {"name": ("in", [test_project_name(p) for p in TEST_PREFIXES])})
+    delete_test_work_items(extra_projects)
+    frappe.db.delete("Project", {"name": ("in", test_project_names() + list(extra_projects or []))})
