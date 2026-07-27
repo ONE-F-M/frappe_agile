@@ -275,9 +275,10 @@ class RoadmapBoard {
 		});
 
 		// While in selection mode, lane heads carry a checkbox so a Business
-		// Analyst can pick which tracks "Create Missing Sprint(s)" fills. Drop any
-		// remembered selection for lanes no longer on the board.
-		const lane_selectable = this._selecting && this.can_create_sprint && this.filters.group_by === "sprint_prefix";
+		// Analyst can pick which projects "Create Missing Sprint(s)" fills. Drop any
+		// remembered selection for lanes no longer on the board. Project grouping
+		// only — a Sprint needs a Project, which a prefix lane does not identify.
+		const lane_selectable = this._selecting && this.can_create_sprint && this.filters.group_by === "project";
 		const lane_keys = new Set(data.rows.map((r) => r.key));
 		this.selected_lanes.forEach((k) => {
 			if (!lane_keys.has(k)) this.selected_lanes.delete(k);
@@ -345,13 +346,15 @@ class RoadmapBoard {
 	}
 
 	// Drive the create controls from the current data + selection state:
-	//   - all hidden unless grouping by prefix and some track is missing a sprint;
+	//   - all hidden unless grouping by project and some project is missing a
+	//     sprint (a Sprint must belong to a Project, so creation is only offered
+	//     where the lane names one);
 	//   - "Create Missing Sprint(s)" shows when idle, Confirm/Cancel + hint while
-	//     selecting; Confirm stays disabled until at least one track is ticked.
+	//     selecting; Confirm stays disabled until at least one project is ticked.
 	_update_create_controls() {
 		if (!this.$create_missing) return;
 		const missing = (this.data && this.data.missing_count) || 0;
-		const available = this.can_create_sprint && this.filters.group_by === "sprint_prefix" && missing > 0;
+		const available = this.can_create_sprint && this.filters.group_by === "project" && missing > 0;
 
 		if (!available) this._selecting = false;
 		const selecting = available && this._selecting;
@@ -484,7 +487,9 @@ class RoadmapBoard {
 	}
 
 	_empty_cell_html(row, col) {
-		const can_plan = this.can_write && this.filters.group_by === "sprint_prefix";
+		// Dropping into an empty slot auto-creates the Sprint, which needs a
+		// Project — so the drop affordance is offered under project grouping only.
+		const can_plan = this.can_write && this.filters.group_by === "project";
 		const hint = can_plan
 			? `<div class="rm-empty-hint">${col.is_future ? __("Drop to plan here") : __("Drop here")}</div>`
 			: "";
@@ -685,6 +690,19 @@ class RoadmapBoard {
 		const lane = toCell.dataset.lane || "";
 		const window_start = toCell.dataset.windowStart || "";
 		const window_end = toCell.dataset.windowEnd || "";
+
+		// An empty slot means the Sprint has to be created, which needs a Project
+		// — only the project lane names one. Refuse here rather than round-trip to
+		// a server error, so the card snaps straight back instead of appearing to
+		// have moved.
+		if (!target_sprint && this.filters.group_by !== "project") {
+			frappe.show_alert({
+				message: __("Switch Group rows by to Project to plan work into a new sprint."),
+				indicator: "orange",
+			});
+			this.refresh({ preserveScroll: true });
+			return;
+		}
 
 		frappe.dom.freeze(__("Moving work item…"));
 		frappe.call({
