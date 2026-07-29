@@ -13,7 +13,6 @@ class WorkItem(Document):
 	def validate(self):
 		self._validate_epic_story_points()
 		self._validate_sprint_required()
-		self._validate_sprint_project()
 		self._validate_sprint_status()
 
 
@@ -161,22 +160,6 @@ class WorkItem(Document):
 					),
 					title=_("Invalid Sprint Status"),
 				)
-		
-
-	def _validate_sprint_project(self):
-		"""Ensure the Work Item's project matches the Sprint's project."""
-		if not self.sprint or not self.project:
-			return
-
-		sprint_project = frappe.db.get_value("Sprint", self.sprint, "project")
-		if sprint_project and sprint_project != self.project:
-			frappe.throw(
-				_(
-					"Work Item Project <b>{0}</b> does not match Sprint Project <b>{1}</b>. "
-					"A Work Item can only be assigned to a Sprint that belongs to the same project."
-				).format(self.project, sprint_project),
-				title=_("Project Mismatch"),
-			)
 
 
 # ---------------------------------------------------------------------------
