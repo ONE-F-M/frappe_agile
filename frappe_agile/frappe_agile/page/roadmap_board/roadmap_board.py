@@ -186,85 +186,12 @@ def get_roadmap_data(group_by="sprint_prefix", lane=None, sprint_status=None, se
 		row_list.append(r)
 	row_list.sort(key=lambda r: r["label"].lower())
 
-	# How many upcoming windows still need a sprint (prefix grouping only) — drives
-	# the "Create Missing Sprints" button. Computed the same way as the creator so
-	# the count converges to zero once they are created.
-	missing_count = 0
-	if group_by == "sprint_prefix":
-		prefixes = sorted({(s.sprint_prefix or "").strip() for s in sprints if (s.sprint_prefix or "").strip()})
-		missing_count = len(_missing_upcoming_windows(prefixes, future_count))
-
 	return {
 		"group_by": group_by,
 		"columns": columns,
 		"rows": row_list,
 		"cells": cells,
-		"missing_count": missing_count,
 	}
-
-
-# Work item types that may sit in the backlog. Epics are containers, not
-# schedulable work, so they are never listed here.
-BACKLOG_TYPES = ("Task", "User Story", "Bug")
-
-
-@frappe.whitelist()
-def get_unassigned_work_items(limit=200):
-	"""Return Work Items not attached to any Sprint, newest-modified first.
-
-	These populate the Roadmap's backlog panel so a Business Analyst can drag
-	each one onto a sprint. Only schedulable types (Task / User Story / Bug)
-	are listed and the order is reverse-chronological by ``modified`` — the
-	last edited item shows first, per the roadmap spec.
-
-	When a Backlog Status is configured in Frappe Agile Settings, the panel is
-	further narrowed to unsprinted items in that status; left blank, unsprinted
-	items of every status are shown.
-	"""
-	frappe.has_permission("Work Item", "read", throw=True)
-
-	filters = {
-		"sprint": ["is", "not set"],
-		"work_item_type": ["in", list(BACKLOG_TYPES)],
-	}
-
-	backlog_status = frappe.db.get_single_value("Frappe Agile Settings", "backlog_status")
-	if backlog_status:
-		filters["status"] = backlog_status
-
-	rows = frappe.get_list(
-		"Work Item",
-		filters=filters,
-		fields=[
-			"name",
-			"title",
-			"work_item_type",
-			"status",
-			"story_points",
-			"project",
-			"epic",
-			"assignee_user",
-			"modified",
-		],
-		order_by="modified desc",
-		limit_page_length=cint(limit) or 0,
-	)
-
-	return [
-		{
-			"name": wi.name,
-			"title": wi.title or wi.name,
-			"type": wi.work_item_type,
-			"status": wi.status,
-			"story_points": flt(wi.story_points),
-			"project": wi.project,
-			"epic": wi.epic,
-			"assignee_user": wi.assignee_user,
-			"accepted": wi.status == ACCEPTED_STATUS,
-			"modified": wi.modified,
-		}
-		for wi in rows
-	]
 
 
 def _build_future_columns(existing, future_count):
