@@ -11,9 +11,14 @@
 //
 // Work items can be dragged between sprints (and into empty future slots, which
 // auto-create a Draft sprint). The checkbox is an acceptance indicator only.
+//
+// A Backlog panel on the left lists Work Items not yet on any sprint (newest
+// first); items can be dragged from it straight onto a sprint cell.
 
 const API_GET = "frappe_agile.frappe_agile.page.roadmap_board.roadmap_board.get_roadmap_data";
 const API_MOVE = "frappe_agile.frappe_agile.page.roadmap_board.roadmap_board.move_work_item";
+const API_CREATE_MISSING = "frappe_agile.frappe_agile.page.roadmap_board.roadmap_board.create_missing_sprints";
+const API_BACKLOG = "frappe_agile.frappe_agile.page.roadmap_board.roadmap_board.get_unassigned_work_items";
 const SORTABLE_ASSET = "/assets/frappe_agile/js/vendor/sortable.min.js";
 const MAX_ITEMS_VISIBLE = 6; // collapse longer item lists behind a "+N more"
 
@@ -47,6 +52,13 @@ class RoadmapBoard {
 		};
 		this._loading = false;
 		this._sortables = [];
+		// Backlog (left panel) state + its own Sortable instance, kept separate
+		// from the grid sortables so a grid-only re-render doesn't drop it.
+		this.backlog = [];
+		this._backlog_sortable = null;
+		// The backlog is a collapsible left drawer; remember the user's choice so
+		// the roadmap keeps the full width when they leave it closed.
+		this._backlog_open = this._read_backlog_pref();
 		// Selection mode: clicking "Create Missing Sprint(s)" reveals per-track
 		// checkboxes; the picked prefixes are created on Confirm.
 		this._selecting = false;
@@ -72,8 +84,24 @@ class RoadmapBoard {
 			<div class="rm-wrapper">
 				<div class="rm-filters" id="rm-filters"></div>
 				<div class="rm-legend" id="rm-legend"></div>
-				<div class="rm-grid-scroll" id="rm-grid-scroll">
-					${this._skeleton_html()}
+				<div class="rm-main" id="rm-main">
+					<aside class="rm-backlog" id="rm-backlog">
+						<div class="rm-backlog-head">
+							<div class="rm-backlog-title">
+								<i class="fa fa-inbox"></i> ${__("Backlog")}
+								<span class="rm-backlog-count" id="rm-backlog-count">0</span>
+								<button class="rm-backlog-collapse" id="rm-backlog-collapse"
+									title="${__("Hide backlog")}"><i class="fa fa-angle-double-left"></i></button>
+							</div>
+							<div class="rm-backlog-sub">${__("Unassigned — drag onto a sprint")}</div>
+						</div>
+						<div class="rm-backlog-list" id="rm-backlog-list" data-droppable="0">
+							${this._backlog_skeleton_html()}
+						</div>
+					</aside>
+					<div class="rm-grid-scroll" id="rm-grid-scroll">
+						${this._skeleton_html()}
+					</div>
 				</div>
 			</div>
 		`);
@@ -81,9 +109,18 @@ class RoadmapBoard {
 		this.$filters = $body.find("#rm-filters");
 		this.$legend = $body.find("#rm-legend");
 		this.$grid = $body.find("#rm-grid-scroll");
+		this.$main = $body.find("#rm-main");
+		this.$backlog = $body.find("#rm-backlog");
+		this.$backlog_list = $body.find("#rm-backlog-list");
+		this.$backlog_count = $body.find("#rm-backlog-count");
+
+		$body.find("#rm-backlog-collapse").on("click", () => this._toggle_backlog());
 
 		this._render_filters();
 		this._render_legend();
+
+		// Apply the remembered open/closed state (also syncs the toggle button).
+		this._apply_backlog_state();
 	}
 
 	_render_filters() {
@@ -119,6 +156,10 @@ class RoadmapBoard {
 					placeholder="${__("Type to highlight matches…")}" />
 			</div>
 			<div class="rm-filters-actions">
+				<button class="btn btn-default btn-xs" id="rm-backlog-toggle" title="${__("Show / hide the backlog")}">
+					<i class="fa fa-columns"></i> ${__("Backlog")}
+					<span class="rm-backlog-toggle-count" id="rm-backlog-toggle-count">0</span>
+				</button>
 				<span class="rm-select-hint">${__("Tick the tracks to create sprints for, then Confirm")}</span>
 				<button class="btn btn-default btn-xs" id="rm-create-missing" title="${__("Create Draft sprints for upcoming windows that have none")}">
 					<i class="fa fa-plus"></i> ${__("Create Missing Sprint(s)")}
@@ -154,12 +195,16 @@ class RoadmapBoard {
 		this.$filters.find("#rm-search").on("input", frappe.utils.debounce((e) => {
 			this.filters.search = e.target.value;
 			this._render_grid(); // search highlights client-side, no server round-trip
+			this._render_backlog();
 		}, 200));
 		this.$filters.find("#rm-refresh").on("click", () => this.refresh({ preserveScroll: true }));
 		this.$filters.find("#rm-jump-current").on("click", () => this._scroll_to_current());
 		this.$filters.find("#rm-create-missing").on("click", () => this._enter_selection_mode());
 		this.$filters.find("#rm-confirm-create").on("click", () => this._on_create_missing());
 		this.$filters.find("#rm-cancel-create").on("click", () => this._exit_selection_mode());
+		this.$filters.find("#rm-backlog-toggle").on("click", () => this._toggle_backlog());
+		this.$backlog_toggle = this.$filters.find("#rm-backlog-toggle");
+		this.$backlog_toggle_count = this.$filters.find("#rm-backlog-toggle-count");
 
 		this.$create_missing = this.$filters.find("#rm-create-missing");
 		this.$confirm_create = this.$filters.find("#rm-confirm-create");
@@ -203,6 +248,9 @@ class RoadmapBoard {
 		// after a drag-move so the board updates in place without jumping.
 		if (opts.scrollToCurrent) this._scrollToCurrentNext = true;
 		if (!opts.preserveScroll) this.$grid.html(this._skeleton_html());
+
+		// Backlog loads independently of the sprint grid (its own query + render).
+		this._load_backlog();
 
 		frappe.call({
 			method: API_GET,
@@ -622,6 +670,146 @@ class RoadmapBoard {
 	}
 
 	// ----------------------------------------------------------
+	// Backlog panel (unassigned work items)
+	// ----------------------------------------------------------
+	_read_backlog_pref() {
+		try {
+			return (localStorage.getItem("roadmap_backlog_open") ?? "1") === "1";
+		} catch (e) {
+			return true;
+		}
+	}
+
+	_toggle_backlog() {
+		this._backlog_open = !this._backlog_open;
+		try {
+			localStorage.setItem("roadmap_backlog_open", this._backlog_open ? "1" : "0");
+		} catch (e) { /* ignore */ }
+		this._apply_backlog_state();
+	}
+
+	// Collapse/expand the left drawer. Collapsing zeroes its width so the grid
+	// reflows to the full middle; the toggle button reflects the current state.
+	_apply_backlog_state() {
+		const open = this._backlog_open;
+		if (this.$main) this.$main.toggleClass("rm-bl-collapsed", !open);
+		if (this.$backlog_toggle) {
+			this.$backlog_toggle
+				.toggleClass("rm-active", open)
+				.attr("aria-pressed", open ? "true" : "false")
+				.attr("title", open ? __("Hide the backlog") : __("Show the backlog"));
+		}
+	}
+
+	_load_backlog() {
+		frappe.call({
+			method: API_BACKLOG,
+			callback: (r) => {
+				this.backlog = (r && r.message) || [];
+				this._render_backlog();
+			},
+			error: () => {
+				this.backlog = [];
+				this._render_backlog();
+			},
+		});
+	}
+
+	_render_backlog() {
+		if (!this.$backlog_list) return;
+		const items = this.backlog || [];
+		this.$backlog_count.text(items.length);
+		if (this.$backlog_toggle_count) this.$backlog_toggle_count.text(items.length);
+
+		// Tear down the previous instance before the list HTML is replaced.
+		if (this._backlog_sortable) {
+			try { this._backlog_sortable.destroy(); } catch (e) { /* ignore */ }
+			this._backlog_sortable = null;
+		}
+
+		if (!items.length) {
+			this.$backlog_list.html(`
+				<div class="rm-backlog-empty">
+					<div class="rm-backlog-empty-icon">🎉</div>
+					<p>${__("No unassigned work items")}</p>
+				</div>`);
+			return;
+		}
+
+		const term = (this.filters.search || "").trim().toLowerCase();
+		this.$backlog_list.html(items.map((wi) => this._backlog_item_html(wi, term)).join(""));
+		this._init_backlog_drag();
+	}
+
+	_backlog_item_html(wi, term) {
+		const type = wi.type || "";
+		const slug = type.toLowerCase().replace(/\s+/g, "-");
+		const hit = term && (wi.title || "").toLowerCase().includes(term) ? "rm-item-hit" : "";
+		const pts = wi.story_points
+			? `<span class="rm-item-pts">${wi.story_points} ${__("SP")}</span>`
+			: "";
+		// prettyDate → short plain text ("3h", "2d"); comment_when returns HTML.
+		const when = wi.modified ? frappe.datetime.prettyDate(wi.modified, true) : "";
+		const grip = this.can_write
+			? `<span class="rm-item-drag" title="${__("Drag onto a sprint")}">⠿</span>`
+			: "";
+		const drag_class = this.can_write ? "rm-item-draggable" : "";
+
+		return `
+		<div class="rm-item rm-bl-item ${drag_class} ${hit}" data-name="${frappe.utils.escape_html(wi.name)}"
+			title="${frappe.utils.escape_html(type + " · " + (wi.status || ""))}">
+			${grip}
+			<span class="rm-item-type rm-type-${slug}"></span>
+			<div class="rm-bl-body">
+				<div class="rm-bl-title">${frappe.utils.escape_html(wi.title || wi.name)}</div>
+				<div class="rm-bl-meta">
+					<span class="rm-typebadge rm-typebadge-${slug}">${frappe.utils.escape_html(type)}</span>
+					${pts}
+					<span class="rm-bl-when">${frappe.utils.escape_html(when)}</span>
+				</div>
+			</div>
+			<a class="rm-item-open" href="/app/work-item/${encodeURIComponent(wi.name)}" target="_blank"
+				title="${__("Open work item")}">↗</a>
+		</div>`;
+	}
+
+	// Backlog gets its own Sortable (same "roadmap" group as the cells so items
+	// can be dragged straight onto a sprint) but can never receive drops.
+	_init_backlog_drag() {
+		if (!this.can_write) return;
+		frappe.require(SORTABLE_ASSET, () => {
+			const list = this.$backlog_list[0];
+			if (!list || this._backlog_sortable) return;
+			this._backlog_sortable = new Sortable(list, {
+				group: { name: "roadmap", pull: true, put: false },
+				sort: false,
+				draggable: ".rm-item",
+				filter: ".rm-item-open",
+				preventOnFilter: false,
+				forceFallback: true,
+				fallbackOnBody: true,
+				fallbackTolerance: 4,
+				// No reflow animation: the backlog can hold hundreds of items and
+				// animating every sibling on each move makes the drag stutter.
+				animation: 0,
+				ghostClass: "rm-drag-ghost",
+				chosenClass: "rm-drag-chosen",
+				dragClass: "rm-drag-active",
+				// Auto-detect scroll parents so both the tall backlog list and the
+				// grid scroll while dragging across them.
+				scroll: true,
+				scrollSensitivity: 80,
+				onMove: (evt) => {
+					const c = evt.to.closest(".rm-cell");
+					// Over a cell → allow unless it's a Completed (locked) sprint.
+					return !c || c.dataset.locked !== "1";
+				},
+				onEnd: (evt) => this._on_item_moved(evt),
+			});
+		});
+	}
+
+	// ----------------------------------------------------------
 	// Drag & drop
 	// ----------------------------------------------------------
 	_init_drag() {
@@ -772,5 +960,9 @@ class RoadmapBoard {
 
 	_skeleton_html() {
 		return `<div class="rm-skeleton">${Array(8).fill('<div class="rm-skel-card"></div>').join("")}</div>`;
+	}
+
+	_backlog_skeleton_html() {
+		return `<div class="rm-backlog-skeleton">${Array(5).fill('<div class="rm-skel-line"></div>').join("")}</div>`;
 	}
 }
