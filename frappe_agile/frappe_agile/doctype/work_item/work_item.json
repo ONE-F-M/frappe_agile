@@ -78,10 +78,12 @@
    "fieldtype": "Column Break"
   },
   {
+   "fetch_from": "sprint.project",
    "fieldname": "project",
    "fieldtype": "Link",
    "label": "Project",
-   "options": "Project"
+   "options": "Project",
+   "read_only": 1
   },
   {
    "fieldname": "status",
@@ -269,7 +271,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-21 10:41:05.121006",
+ "modified": "2026-07-23 20:33:58.868780",
  "modified_by": "Administrator",
  "module": "Frappe Agile",
  "name": "Work Item",
