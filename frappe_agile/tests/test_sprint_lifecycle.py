@@ -7,9 +7,11 @@ from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_days, flt, today
 
 from frappe_agile.frappe_agile.doctype.sprint.sprint import handle_incomplete_items
-
-
-TEST_PREFIXES = ["TEST", "ALPHA", "BETA"]
+from frappe_agile.tests.fixtures import (
+	TEST_PREFIXES,
+	delete_test_projects,
+	ensure_test_project,
+)
 
 
 class TestSprintLifecycle(FrappeTestCase):
@@ -36,15 +38,19 @@ class TestSprintLifecycle(FrappeTestCase):
 
 		frappe.db.delete("Work Item", {"title": ("like", "Test Sprint Lifecycle%")})
 		frappe.db.delete("Sprint", {"sprint_prefix": ("in", TEST_PREFIXES)})
+		delete_test_projects()
 
-	def _make_sprint(self, prefix="TEST", status="Draft"):
+	def _make_sprint(self, prefix="TEST", status="Draft", sprint_goal="Test Sprint Goal"):
+		# sprint_prefix is read-only and fetched from project.custom_sprint_prefix,
+		# so the prefix is set by owning Project rather than directly.
 		sprint = frappe.get_doc(
 			{
 				"doctype": "Sprint",
-				"sprint_prefix": prefix,
+				"project": ensure_test_project(prefix),
 				"status": status,
 				"start_date": today(),
 				"end_date": add_days(today(), 14),
+				"sprint_goal": sprint_goal,
 			}
 		)
 		sprint.insert(ignore_permissions=True)
