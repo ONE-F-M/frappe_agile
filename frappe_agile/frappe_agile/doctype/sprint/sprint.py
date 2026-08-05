@@ -10,6 +10,10 @@ from frappe.utils import add_days, cint, flt, getdate
 SPRINT_START_WEEKDAY = 2  # Monday=0 … Wednesday=2
 SPRINT_SPAN_DAYS = 6  # start + 6 days = the following Tuesday (7-day window)
 
+# Extra names to try past the ones already taken when the naming-series counter
+# has fallen behind. Bounded by real data plus this, so naming can never spin.
+NAMING_SKIP_HEADROOM = 100
+
 
 def align_to_sprint_start(d):
 	"""Return the sprint-start weekday (Wednesday) on or after date *d*."""
@@ -25,10 +29,39 @@ def default_sprint_window(reference_date=None):
 
 class Sprint(Document):
 	def autoname(self):
-		if not self.name and self.sprint_prefix:
-			self.sprint_prefix = self.sprint_prefix.strip()
-			from frappe.model.naming import make_autoname
-			self.name = make_autoname(f"{self.sprint_prefix}-.###")
+		"""Name the sprint `<prefix>-###`, skipping numbers already in use.
+
+		`make_autoname` trusts the stored series counter, which can lag the sprints
+		that actually exist — a site restore, a bulk import or a rename all leave it
+		behind. It then hands back a name that is already taken and the insert dies
+		with "Sprint <name> already exists", which took out the Roadmap's
+		"Create Missing Sprint(s)" for the whole project. Draw again until the name
+		is free so the counter walks itself back into sync.
+		"""
+		if self.name or not self.sprint_prefix:
+			return
+
+		from frappe.model.naming import make_autoname
+
+		self.sprint_prefix = self.sprint_prefix.strip()
+		series = f"{self.sprint_prefix}-.###"
+
+		# One query up front; the loop then only pays for the counter increment.
+		taken = set(frappe.get_all("Sprint", filters={"sprint_prefix": self.sprint_prefix}, pluck="name"))
+		for _attempt in range(len(taken) + NAMING_SKIP_HEADROOM):
+			candidate = make_autoname(series)
+			# `taken` covers this prefix; the exists() check also catches a sprint
+			# renamed into this number range under a different prefix.
+			if candidate not in taken and not frappe.db.exists("Sprint", candidate):
+				self.name = candidate
+				return
+
+		frappe.throw(
+			_("Could not generate a free Sprint name for prefix <b>{0}</b> — every candidate is already taken.").format(
+				self.sprint_prefix
+			),
+			title=_("Sprint Naming Failed"),
+		)
 
 	def _is_transitioning_to_completed(self):
 		"""True only when an existing Sprint is being moved to Completed.

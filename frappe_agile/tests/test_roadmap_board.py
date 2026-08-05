@@ -242,6 +242,47 @@ class TestRoadmapBoard(FrappeTestCase):
 			frappe.db.exists("Sprint", {"project": self.projects["COMPLETED"]})
 		)
 
+	def test_create_missing_sprints_survives_a_stale_naming_counter(self):
+		"""Regression: a lagging series counter used to abort the whole project.
+
+		Sprints restored/imported under forced names leave `tabSeries` behind, so
+		`make_autoname` returns a name that already exists and the insert died with
+		"Sprint LCR-001 already exists". Naming must skip past the taken numbers.
+		"""
+		from frappe.model.naming import NamingSeries
+
+		project = self.projects["OPEN"]
+		prefix = PROJECTS["OPEN"][3]
+		counter = NamingSeries(f"{prefix}-.###")
+
+		# Existing sprints occupying <prefix>-001 … -003 …
+		counter.update_counter(0)  # teardown clears the sprints but not the counter
+		start = align_to_sprint_start(getdate())
+		for i in range(3):
+			doc = frappe.get_doc(
+				{
+					"doctype": "Sprint",
+					"project": project,
+					"sprint_prefix": prefix,
+					"status": "Draft",
+					"start_date": add_days(start, -7 * (i + 1)),
+					"end_date": add_days(start, -7 * (i + 1) + SPRINT_SPAN_DAYS),
+					"sprint_goal": "Occupies a number",
+				}
+			)
+			doc.insert(ignore_permissions=True)
+
+		# … while the counter is rewound to zero, exactly as an import leaves it.
+		counter.update_counter(0)
+		self.assertTrue(frappe.db.exists("Sprint", f"{prefix}-001"))
+
+		result = create_missing_sprints(future_count=2, lanes=json.dumps([project]))
+
+		self.assertEqual(result["created_count"], 2)
+		self.assertEqual(len(set(result["created"])), 2, "generated names must be distinct")
+		for name in result["created"]:
+			self.assertNotIn(name, (f"{prefix}-001", f"{prefix}-002", f"{prefix}-003"))
+
 	def test_create_missing_sprints_is_idempotent(self):
 		lanes = json.dumps([self.projects["OPEN"]])
 		self.assertEqual(create_missing_sprints(future_count=2, lanes=lanes)["created_count"], 2)
