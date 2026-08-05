@@ -3,14 +3,16 @@
 
 // Roadmap Board
 // A Kanban-style roadmap grid:
-//   rows    = lanes (sprint prefix, or linked Project)
+//   rows    = one lane per active SCRUM Project (always — there is no other
+//             grouping); projects with no sprints yet still get a lane
 //   columns = weekly time windows, aligned across lanes, extended with empty
 //             future windows for forward planning
-//   cells   = the sprint in that lane/window, with status, story-point
+//   cells   = the sprint in that project/window, with status, story-point
 //             acceptance %, and its work items (checkbox = accepted/Done)
 //
 // Work items can be dragged between sprints (and into empty future slots, which
-// auto-create a Draft sprint). The checkbox is an acceptance indicator only.
+// auto-create a Draft sprint named from the project's Sprint Prefix). The
+// checkbox is an acceptance indicator only.
 //
 // A Backlog panel on the left lists Work Items not yet on any sprint (newest
 // first); items can be dragged from it straight onto a sprint cell.
@@ -21,6 +23,8 @@ const API_CREATE_MISSING = "frappe_agile.frappe_agile.page.roadmap_board.roadmap
 const API_BACKLOG = "frappe_agile.frappe_agile.page.roadmap_board.roadmap_board.get_unassigned_work_items";
 const SORTABLE_ASSET = "/assets/frappe_agile/js/vendor/sortable.min.js";
 const MAX_ITEMS_VISIBLE = 6; // collapse longer item lists behind a "+N more"
+// Project.status options — the values the Project Status multi-select offers.
+const PROJECT_STATUSES = ["Open", "Completed", "Cancelled"];
 
 frappe.pages["roadmap-board"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({
@@ -44,7 +48,9 @@ class RoadmapBoard {
 		this.wrapper = wrapper;
 
 		this.filters = {
-			group_by: "sprint_prefix",
+			// Multi-select of Project statuses; empty = every status (the board is
+			// already restricted to active SCRUM projects server-side).
+			project_status: [],
 			lane: "",
 			sprint_status: "",
 			search: "",
@@ -59,8 +65,8 @@ class RoadmapBoard {
 		// The backlog is a collapsible left drawer; remember the user's choice so
 		// the roadmap keeps the full width when they leave it closed.
 		this._backlog_open = this._read_backlog_pref();
-		// Selection mode: clicking "Create Missing Sprint(s)" reveals per-track
-		// checkboxes; the picked prefixes are created on Confirm.
+		// Selection mode: clicking "Create Missing Sprint(s)" reveals per-project
+		// checkboxes; sprints for the picked projects are created on Confirm.
 		this._selecting = false;
 		this.selected_lanes = new Set();
 		// Epics render collapsed by default; remember which ones the user expanded
@@ -126,11 +132,8 @@ class RoadmapBoard {
 	_render_filters() {
 		this.$filters.html(`
 			<div class="rm-filter-group">
-				<span class="rm-filter-label">${__("Group rows by")}</span>
-				<select id="rm-group-by" class="form-control input-xs">
-					<option value="sprint_prefix">${__("Sprint Prefix / Track")}</option>
-					<option value="project">${__("Project")}</option>
-				</select>
+				<span class="rm-filter-label">${__("Project Status")}</span>
+				<div id="rm-project-status" class="rm-multiselect"></div>
 			</div>
 			<div class="rm-filter-group">
 				<span class="rm-filter-label">${__("Sprint Status")}</span>
@@ -160,11 +163,11 @@ class RoadmapBoard {
 					<i class="fa fa-columns"></i> ${__("Backlog")}
 					<span class="rm-backlog-toggle-count" id="rm-backlog-toggle-count">0</span>
 				</button>
-				<span class="rm-select-hint">${__("Tick the tracks to create sprints for, then Confirm")}</span>
+				<span class="rm-select-hint">${__("Tick the projects to create sprints for, then Confirm")}</span>
 				<button class="btn btn-default btn-xs" id="rm-create-missing" title="${__("Create Draft sprints for upcoming windows that have none")}">
 					<i class="fa fa-plus"></i> ${__("Create Missing Sprint(s)")}
 				</button>
-				<button class="btn btn-primary btn-xs" id="rm-confirm-create" title="${__("Create sprints for the ticked tracks")}">
+				<button class="btn btn-primary btn-xs" id="rm-confirm-create" title="${__("Create sprints for the ticked projects")}">
 					<i class="fa fa-check"></i> <span class="rm-confirm-label">${__("Confirm")}</span>
 				</button>
 				<button class="btn btn-default btn-xs" id="rm-cancel-create">
@@ -179,11 +182,7 @@ class RoadmapBoard {
 			</div>
 		`);
 
-		this.$filters.find("#rm-group-by").on("change", (e) => {
-			this.filters.group_by = e.target.value;
-			this.filters.lane = "";
-			this.refresh({ scrollToCurrent: true }); // refresh() resets selection mode
-		});
+		this._make_project_status_filter();
 		this.$filters.find("#rm-status").on("change", (e) => {
 			this.filters.sprint_status = e.target.value;
 			this.refresh({ scrollToCurrent: true });
@@ -210,9 +209,34 @@ class RoadmapBoard {
 		this.$confirm_create = this.$filters.find("#rm-confirm-create");
 		this.$cancel_create = this.$filters.find("#rm-cancel-create");
 		this.$select_hint = this.$filters.find(".rm-select-hint");
-		// The create controls are all hidden until data says a track is missing a
+		// The create controls are all hidden until data says a project is missing a
 		// sprint; confirm/cancel/hint appear only while in selection mode.
 		this._update_create_controls();
+	}
+
+	// Project Status is a multi-select: the board is always restricted to active
+	// SCRUM projects, and this narrows that set by Project.status. Nothing ticked
+	// means "every status", which is the state the page loads in.
+	_make_project_status_filter() {
+		const mount = this.$filters.find("#rm-project-status")[0];
+		if (!mount) return;
+
+		this.project_status_control = frappe.ui.form.make_control({
+			parent: mount,
+			only_input: true,
+			render_input: true,
+			df: {
+				fieldtype: "MultiSelectList",
+				fieldname: "project_status",
+				placeholder: __("All Statuses"),
+				get_data: () =>
+					PROJECT_STATUSES.map((s) => ({ value: s, label: __(s), description: "" })),
+				change: () => {
+					this.filters.project_status = this.project_status_control.get_value() || [];
+					this.refresh({ scrollToCurrent: true }); // refresh() resets selection mode
+				},
+			},
+		});
 	}
 
 	_render_legend() {
@@ -255,7 +279,7 @@ class RoadmapBoard {
 		frappe.call({
 			method: API_GET,
 			args: {
-				group_by: this.filters.group_by,
+				project_status: JSON.stringify(this.filters.project_status || []),
 				lane: this.filters.lane || undefined,
 				sprint_status: this.filters.sprint_status || undefined,
 				search: this.filters.search || undefined,
@@ -292,7 +316,7 @@ class RoadmapBoard {
 			this.$grid.html(`
 				<div class="rm-empty">
 					<div class="rm-empty-icon">🗺️</div>
-					<p>${__("No sprints found for the current filters.")}</p>
+					<p>${__("No active SCRUM projects match the current filters.")}</p>
 				</div>
 			`);
 			return;
@@ -323,9 +347,9 @@ class RoadmapBoard {
 		});
 
 		// While in selection mode, lane heads carry a checkbox so a Business
-		// Analyst can pick which tracks "Create Missing Sprint(s)" fills. Drop any
+		// Analyst can pick which projects "Create Missing Sprint(s)" fills. Drop any
 		// remembered selection for lanes no longer on the board.
-		const lane_selectable = this._selecting && this.can_create_sprint && this.filters.group_by === "sprint_prefix";
+		const lane_selectable = this._selecting && this.can_create_sprint;
 		const lane_keys = new Set(data.rows.map((r) => r.key));
 		this.selected_lanes.forEach((k) => {
 			if (!lane_keys.has(k)) this.selected_lanes.delete(k);
@@ -333,22 +357,27 @@ class RoadmapBoard {
 
 		// --- Body rows ---
 		data.rows.forEach((row) => {
-			const proj = row.projects && row.projects.length
-				? frappe.utils.escape_html(row.projects.join(", "))
-				: __("No linked project");
-			const select = lane_selectable
+			// Sub-line carries the project's Sprint Prefix (what new sprints are named
+			// from) and its status. Without a prefix nothing can be planned into the
+			// lane, so say that instead of leaving it blank.
+			const sub = row.prefix
+				? `${frappe.utils.escape_html(row.prefix)} · ${frappe.utils.escape_html(row.project_status || "")}`
+				: `<span class="rm-lane-warn">${__("No Sprint Prefix")}</span>`;
+			// A prefix-less project can never receive an auto-created sprint.
+			const select = lane_selectable && row.prefix
 				? `<input type="checkbox" class="rm-lane-select"
 						data-lane="${frappe.utils.escape_html(row.key)}"
 						${this.selected_lanes.has(row.key) ? "checked" : ""}
-						title="${__("Include this track when creating missing sprints")}" />`
+						title="${__("Include this project when creating missing sprints")}" />`
 				: "";
 			html += `
 				<div class="rm-lanehead">
 					${select}
 					<div class="rm-lane-bar"></div>
 					<div class="rm-lane-text">
-						<div class="rm-lane-title">${frappe.utils.escape_html(row.label)}</div>
-						<div class="rm-lane-sub">${proj}</div>
+						<a class="rm-lane-title" href="/app/project/${encodeURIComponent(row.key)}"
+							title="${__("Open project")}">${frappe.utils.escape_html(row.label)}</a>
+						<div class="rm-lane-sub">${sub}</div>
 					</div>
 				</div>`;
 
@@ -378,7 +407,7 @@ class RoadmapBoard {
 		this._update_create_controls();
 	}
 
-	// Enter selection mode: reveal per-track checkboxes and swap the entry button
+	// Enter selection mode: reveal per-project checkboxes and swap the entry button
 	// for Confirm / Cancel. Re-renders the grid so lane heads get their checkboxes.
 	_enter_selection_mode() {
 		this._selecting = true;
@@ -393,13 +422,13 @@ class RoadmapBoard {
 	}
 
 	// Drive the create controls from the current data + selection state:
-	//   - all hidden unless grouping by prefix and some track is missing a sprint;
+	//   - all hidden unless some project on the board is missing a sprint;
 	//   - "Create Missing Sprint(s)" shows when idle, Confirm/Cancel + hint while
-	//     selecting; Confirm stays disabled until at least one track is ticked.
+	//     selecting; Confirm stays disabled until at least one project is ticked.
 	_update_create_controls() {
 		if (!this.$create_missing) return;
 		const missing = (this.data && this.data.missing_count) || 0;
-		const available = this.can_create_sprint && this.filters.group_by === "sprint_prefix" && missing > 0;
+		const available = this.can_create_sprint && missing > 0;
 
 		if (!available) this._selecting = false;
 		const selecting = available && this._selecting;
@@ -414,7 +443,7 @@ class RoadmapBoard {
 			this.$confirm_create
 				.prop("disabled", n === 0)
 				.find(".rm-confirm-label")
-				.text(n ? __("Confirm — {0} track(s)", [n]) : __("Confirm"));
+				.text(n ? __("Confirm — {0} project(s)", [n]) : __("Confirm"));
 		}
 	}
 
@@ -423,15 +452,14 @@ class RoadmapBoard {
 		if (!selected.length) return; // Confirm is disabled without a selection
 
 		frappe.confirm(
-			__("Create Draft sprints for every missing upcoming window across the {0} selected track(s)?", [selected.length]),
+			__("Create Draft sprints for every missing upcoming window across the {0} selected project(s)?", [selected.length]),
 			() => {
 				frappe.dom.freeze(__("Creating sprints…"));
 				frappe.call({
 					method: API_CREATE_MISSING,
 					args: {
-						group_by: this.filters.group_by,
+						project_status: JSON.stringify(this.filters.project_status || []),
 						lane: this.filters.lane || undefined,
-						sprint_status: this.filters.sprint_status || undefined,
 						future_count: this.filters.future_count,
 						lanes: JSON.stringify(selected),
 					},
@@ -532,7 +560,9 @@ class RoadmapBoard {
 	}
 
 	_empty_cell_html(row, col) {
-		const can_plan = this.can_write && this.filters.group_by === "sprint_prefix";
+		// Dropping here auto-creates a sprint named from the project's prefix, so a
+		// prefix-less project can be looked at but not planned into.
+		const can_plan = this.can_write && !!row.prefix;
 		const hint = can_plan
 			? `<div class="rm-empty-hint">${col.is_future ? __("Drop to plan here") : __("Drop here")}</div>`
 			: "";
@@ -881,7 +911,6 @@ class RoadmapBoard {
 				work_item,
 				target_sprint: target_sprint || undefined,
 				lane,
-				group_by: this.filters.group_by,
 				window_start,
 				window_end,
 			},

@@ -49,7 +49,19 @@
 	gap: 8px;
 }
 
-/* Inline prompt shown while picking tracks for "Create Missing Sprint(s)". */
+/* Host for the framework MultiSelectList control (Project Status filter) so it
+   lines up with the plain <select> filters beside it. */
+.rm-multiselect { min-width: 170px; }
+.rm-multiselect .multiselect-list { width: 100%; }
+/* Match the plain <select> filters beside it, which sit at --input-height. */
+.rm-multiselect .multiselect-list > .form-control {
+	height: var(--input-height, 28px);
+	display: flex;
+	align-items: center;
+}
+.rm-multiselect .dropdown-menu { min-width: 200px; }
+
+/* Inline prompt shown while picking projects for "Create Missing Sprint(s)". */
 .rm-select-hint {
 	align-self: center;
 	font-size: 11px;
@@ -291,8 +303,17 @@
 
 .rm-lane-select { margin: 3px 0 0 0; flex: 0 0 auto; cursor: pointer; }
 .rm-lane-bar { width: 4px; align-self: stretch; min-height: 32px; border-radius: 3px; background: #ef4444; flex: 0 0 auto; }
-.rm-lane-title { font-weight: 700; font-size: 14px; color: var(--text-color, #1f2937); word-break: break-word; }
+.rm-lane-title {
+	display: block;
+	font-weight: 700;
+	font-size: 14px;
+	color: var(--text-color, #1f2937);
+	word-break: break-word;
+}
+.rm-lane-title:hover { color: var(--primary, #2490ef); text-decoration: none; }
 .rm-lane-sub { font-size: 11px; color: var(--text-muted, #9ca3af); margin-top: 2px; }
+/* A project with no Sprint Prefix can be viewed but not planned into. */
+.rm-lane-warn { color: var(--orange-500, #cb7b00); font-weight: 600; }
 
 /* ---------------- Cells ---------------- */
 .rm-cell {
