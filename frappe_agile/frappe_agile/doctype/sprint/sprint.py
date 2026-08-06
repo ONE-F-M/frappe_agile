@@ -365,34 +365,48 @@ def _make_new_sprint(source_doc, extra_fields=None):
 	return new_sprint.name
 
 
+def _find_next_existing_sprint(source_doc):
+	"""Return the sprint that already follows *source_doc*, or None.
+
+	"The next sprint already exists" is deliberately not tied to the exact
+	Wed→Tue window: a sprint the team planned by hand, or one whose window no
+	longer lines up because *source_doc* ran long or short, is still the next
+	sprint. Any non-Completed Sprint of the same prefix that starts once
+	*source_doc* has finished qualifies, and the earliest one wins.
+
+	Matching on the computed window alone used to miss those and create a second
+	Sprint for a week that was already planned.
+	"""
+	candidates = frappe.get_all(
+		"Sprint",
+		filters={
+			"sprint_prefix": source_doc.sprint_prefix,
+			"start_date": [">=", add_days(source_doc.end_date, 1)],
+			"status": ["!=", "Completed"],
+			"name": ["!=", source_doc.name],
+		},
+		pluck="name",
+		order_by="start_date asc, creation asc",
+		limit=1,
+	)
+	return candidates[0] if candidates else None
+
+
 @frappe.whitelist()
 def get_or_create_target_sprint(sprint_name: str) -> str:
 	"""Return the sprint that should receive carry-forward items from *sprint_name*.
 
-	The target is the next standard Wed→Tue window (by date) for the same prefix:
-	  - If a non-Completed Sprint already exists for that window, reuse it
-	    (no new Sprint is created).
-	  - Otherwise a new Draft Sprint is created for that window via the naming
-	    series (never with an explicit name, so the series counter stays in sync).
+	  - If a non-Completed Sprint is already scheduled after this one for the same
+	    prefix, reuse it (no new Sprint is created).
+	  - Otherwise a new Draft Sprint is created for the next standard Wed→Tue
+	    window via the naming series (never with an explicit name, so the series
+	    counter stays in sync).
 	"""
 	doc = frappe.get_doc("Sprint", sprint_name)
-	next_start, _next_end = _build_new_sprint_dates(doc)
 
-	# Reuse a sprint already scheduled for the next week (Draft or Active)
-	existing = frappe.get_all(
-		"Sprint",
-		filters={
-			"sprint_prefix": doc.sprint_prefix,
-			"start_date": next_start,
-			"status": ["!=", "Completed"],
-			"name": ["!=", doc.name],
-		},
-		pluck="name",
-		order_by="creation asc",
-		limit=1,
-	)
+	existing = _find_next_existing_sprint(doc)
 	if existing:
-		return existing[0]
+		return existing
 
 	return _make_new_sprint(doc)
 
@@ -453,6 +467,17 @@ def handle_incomplete_items(sprint: str) -> str | None:
 			pluck="work_item",
 		)
 	)
+	# A row that was already planned into the reused sprint still represents work
+	# spilling out of the sprint being closed, so flag it — otherwise the target's
+	# brought-forward totals undercount exactly the items that carried over.
+	if already_present:
+		frappe.db.set_value(
+			"Sprint Work Item",
+			{"parent": target_sprint, "work_item": ["in", list(already_present)]},
+			"is_brought_forward",
+			1,
+			update_modified=False,
+		)
 	for wi in work_items:
 		if wi.name in already_present:
 			continue

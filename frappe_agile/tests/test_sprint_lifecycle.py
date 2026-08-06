@@ -11,6 +11,10 @@ from frappe_agile.frappe_agile.doctype.sprint.sprint import handle_incomplete_it
 
 TEST_PREFIXES = ["TEST", "ALPHA", "BETA"]
 
+# Each test prefix gets its own Project, since Sprint.sprint_prefix is fetched
+# read-only from Project.custom_sprint_prefix.
+TEST_PROJECT_PREFIX = "_Test Agile Lifecycle "
+
 
 class TestSprintLifecycle(FrappeTestCase):
 	def setUp(self):
@@ -37,14 +41,42 @@ class TestSprintLifecycle(FrappeTestCase):
 		frappe.db.delete("Work Item", {"title": ("like", "Test Sprint Lifecycle%")})
 		frappe.db.delete("Sprint", {"sprint_prefix": ("in", TEST_PREFIXES)})
 
-	def _make_sprint(self, prefix="TEST", status="Draft"):
+	def _test_project(self, prefix):
+		"""Get-or-create the Project that test Sprints of *prefix* hang off.
+
+		`project` is mandatory on Sprint, and `sprint_prefix` is a read-only
+		`fetch_from` of `project.custom_sprint_prefix`, so the prefix a Sprint
+		ends up with comes from its Project — hence one Project per test prefix.
+		Not torn down: a rollback would pull it out from under sprints committed
+		by handle_incomplete_items().
+		"""
+		project_name = f"{TEST_PROJECT_PREFIX}{prefix}"
+		existing = frappe.db.get_value("Project", {"project_name": project_name}, "name")
+		if existing:
+			frappe.db.set_value("Project", existing, "custom_sprint_prefix", prefix)
+			return existing
+
+		project = frappe.get_doc(
+			{
+				"doctype": "Project",
+				"project_name": project_name,
+				"custom_sprint_prefix": prefix,
+			}
+		)
+		project.insert(ignore_permissions=True)
+		frappe.db.commit()
+		return project.name
+
+	def _make_sprint(self, prefix="TEST", status="Draft", start_date=None, end_date=None):
+		start = start_date or today()
 		sprint = frappe.get_doc(
 			{
 				"doctype": "Sprint",
 				"sprint_prefix": prefix,
+				"project": self._test_project(prefix),
 				"status": status,
-				"start_date": today(),
-				"end_date": add_days(today(), 14),
+				"start_date": start,
+				"end_date": end_date or add_days(start, 14),
 				"sprint_goal": "Test Sprint Goal",
 			}
 		)
@@ -142,3 +174,27 @@ class TestSprintLifecycle(FrappeTestCase):
 		sprint.reload()
 		remaining_scope = sum(row.story_points for row in sprint.work_items if row.status != "Done")
 		self.assertEqual(flt(remaining_scope, 2), 8.0)
+
+	def test_11_closing_reuses_an_already_planned_next_sprint(self):
+		"""Closing a sprint moves items into the next sprint if one already exists."""
+		sprint = self._make_sprint(prefix="TEST", status="Active")
+		planned = self._make_sprint(
+			prefix="TEST",
+			status="Draft",
+			start_date=add_days(sprint.end_date, 1),
+			end_date=add_days(sprint.end_date, 7),
+		)
+		before = frappe.db.count("Sprint", {"sprint_prefix": "TEST"})
+
+		self._make_work_item("Test Sprint Lifecycle Reuse 1", sprint.name, 2)
+		self._make_work_item("Test Sprint Lifecycle Reuse 2", sprint.name, 6)
+
+		target = handle_incomplete_items(sprint.name)
+
+		self.assertEqual(target, planned.name)
+		self.assertEqual(
+			frappe.db.count("Sprint", {"sprint_prefix": "TEST"}),
+			before,
+			"Closing must not create a second sprint for a week already planned",
+		)
+		self.assertEqual(flt(frappe.db.get_value("Sprint", planned.name, "expected_velocity"), 2), 8.0)
