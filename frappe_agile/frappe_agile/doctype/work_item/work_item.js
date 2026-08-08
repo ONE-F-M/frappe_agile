@@ -31,11 +31,9 @@ frappe.ui.form.on("Work Item", {
 			};
 		});
 
-		// Filter sprint to only Active/Draft sprints (not scoped to the project —
-		// a Work Item may be assigned to a Sprint from any project)
-		frm.set_query("sprint", function () {
-			return { filters: { status: ["in", ["Active", "Draft"]] } };
-		});
+		// Sprint is deliberately unfiltered — every Sprint is offered regardless of
+		// status or project. _validate_sprint_status() in work_item.py is the single
+		// source of truth for which Sprints a Work Item may actually be saved against.
 
 		// Filter Assignee User and PR Reviewer User to Development Team members
 		frappe.call({
