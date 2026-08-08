@@ -7,9 +7,11 @@ from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_days, flt, today
 
 from frappe_agile.frappe_agile.doctype.sprint.sprint import handle_incomplete_items
-
-
-TEST_PREFIXES = ["TEST", "ALPHA", "BETA"]
+from frappe_agile.tests.fixtures import (
+	TEST_PREFIXES,
+	delete_test_projects,
+	ensure_test_project,
+)
 
 
 class TestSprintLifecycle(FrappeTestCase):
@@ -36,16 +38,19 @@ class TestSprintLifecycle(FrappeTestCase):
 
 		frappe.db.delete("Work Item", {"title": ("like", "Test Sprint Lifecycle%")})
 		frappe.db.delete("Sprint", {"sprint_prefix": ("in", TEST_PREFIXES)})
+		delete_test_projects()
 
-	def _make_sprint(self, prefix="TEST", status="Draft"):
+	def _make_sprint(self, prefix="TEST", status="Draft", sprint_goal="Test Sprint Goal"):
+		# sprint_prefix is read-only and fetched from project.custom_sprint_prefix,
+		# so the prefix is set by owning Project rather than directly.
 		sprint = frappe.get_doc(
 			{
 				"doctype": "Sprint",
-				"sprint_prefix": prefix,
+				"project": ensure_test_project(prefix),
 				"status": status,
 				"start_date": today(),
 				"end_date": add_days(today(), 14),
-				"sprint_goal": "Test Sprint Goal",
+				"sprint_goal": sprint_goal,
 			}
 		)
 		sprint.insert(ignore_permissions=True)
@@ -112,7 +117,7 @@ class TestSprintLifecycle(FrappeTestCase):
 		self._make_work_item("Test Sprint Lifecycle Complete 2", sprint.name, 3)
 		sprint.reload()
 		self.assertEqual(flt(sprint.expected_velocity, 2), 8.0)
-		handle_incomplete_items(sprint.name)
+		handle_incomplete_items(sprint.name, "Move to Backlog")
 		sprint.reload()
 		sprint.status = "Completed"
 		sprint.save(ignore_permissions=True)
@@ -123,7 +128,7 @@ class TestSprintLifecycle(FrappeTestCase):
 		sprint = self._make_sprint(prefix="TEST", status="Active")
 		self._make_work_item("Test Sprint Lifecycle Move 1", sprint.name, 2)
 		self._make_work_item("Test Sprint Lifecycle Move 2", sprint.name, 6)
-		new_sprint_name = handle_incomplete_items(sprint.name)
+		new_sprint_name = handle_incomplete_items(sprint.name, "Move to New Sprint")
 		self.assertTrue(new_sprint_name)
 		new_velocity = frappe.db.get_value("Sprint", new_sprint_name, "expected_velocity")
 		self.assertEqual(flt(new_velocity, 2), 8.0)
