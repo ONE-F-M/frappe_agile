@@ -149,7 +149,6 @@ doc_events = {
 		# Keep the status field in sync with the workflow_state (workflow is authoritative)
 		"validate": [
 			"frappe_agile.frappe_agile.doctype.work_item.work_item.sync_status_from_workflow",
-			"frappe_agile.frappe_agile.doctype.sprint.sprint.validate_work_item_sprint",
 		],
 		# Recalculate Sprint.expected_velocity whenever a Work Item changes sprint or story_points
 		"on_update": "frappe_agile.frappe_agile.doctype.sprint.sprint.update_sprint_velocity",
