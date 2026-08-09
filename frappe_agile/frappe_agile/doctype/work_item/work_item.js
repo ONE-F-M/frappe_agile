@@ -31,13 +31,10 @@ frappe.ui.form.on("Work Item", {
 			};
 		});
 
-		// Filter sprint to only active sprints, scoped to the selected project
+		// Filter sprint to only Active/Draft sprints (not scoped to the project —
+		// a Work Item may be assigned to a Sprint from any project)
 		frm.set_query("sprint", function () {
-			let filters = { status: "Active" };
-			if (frm.doc.project) {
-				filters.project = frm.doc.project;
-			}
-			return { filters: filters };
+			return { filters: { status: ["in", ["Active", "Draft"]] } };
 		});
 
 		// Filter Assignee User and PR Reviewer User to Development Team members
@@ -142,11 +139,6 @@ frappe.ui.form.on("Work Item", {
 				);
 			});
 		}
-	},
-
-	project: function (frm) {
-		// Clear sprint when project changes (avoid mismatched sprint)
-		frm.set_value("sprint", null);
 	},
 
 	work_item_type: function (frm) {

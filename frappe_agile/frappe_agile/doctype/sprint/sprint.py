@@ -302,30 +302,6 @@ def update_sprint_velocity(doc, method=None):
 		_recalculate_accepted_points(sprint_name)
 
 
-def validate_work_item_sprint(doc, method=None):
-	"""
-	Ensure a Work Item can only be assigned to a Sprint whose Project
-	matches the Work Item's Project.
-	"""
-	if not doc.sprint:
-		return
-
-	sprint_project = frappe.db.get_value("Sprint", doc.sprint, "project")
-
-	# If either the Sprint or the Work Item has no project set, skip the check
-	if not sprint_project or not doc.project:
-		return
-
-	if doc.project != sprint_project:
-		frappe.throw(
-			msg=_(
-				"Work Item project <b>{0}</b> does not match Sprint <b>{1}</b> project <b>{2}</b>. "
-				"A Work Item can only be assigned to a Sprint in the same Project."
-			).format(doc.project, doc.sprint, sprint_project),
-			title=_("Project Mismatch"),
-		)
-
-
 def _build_new_sprint_dates(source_doc):
 	"""Derive Wed→Tue start/end for the next sprint after *source_doc*.
 
