@@ -2,11 +2,15 @@
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
-from frappe.utils import today, add_days, flt
+from frappe.utils import today, add_days, flt, getdate
 
 
 # Prefixes used by tests — any Sprint / Work Item using these is test data.
 TEST_PREFIXES = ["TEST", "ALPHA", "BETA"]
+
+# Each test prefix gets its own Project, since Sprint.sprint_prefix is fetched
+# read-only from Project.custom_sprint_prefix.
+TEST_PROJECT_PREFIX = "_Test Agile Sprint "
 
 
 class TestSprint(FrappeTestCase):
@@ -48,14 +52,48 @@ class TestSprint(FrappeTestCase):
 		# Delete test sprints
 		frappe.db.delete("Sprint", {"sprint_prefix": ("in", TEST_PREFIXES)})
 
-	def _make_sprint(self, prefix="TEST", status="Draft", project=None, sprint_goal="Test Sprint Goal"):
+	def _test_project(self, prefix):
+		"""Get-or-create the Project that test Sprints of *prefix* hang off.
+
+		`project` is mandatory on Sprint, and `sprint_prefix` is a read-only
+		`fetch_from` of `project.custom_sprint_prefix` — so the prefix a Sprint
+		ends up with is decided by its Project, not by what the caller passes.
+		That means one Project per test prefix. Created once and reused; these
+		are deliberately not torn down, since a rollback would pull them out
+		from under sprints committed by handle_incomplete_items().
+		"""
+		project_name = f"{TEST_PROJECT_PREFIX}{prefix}"
+		existing = frappe.db.get_value("Project", {"project_name": project_name}, "name")
+		if existing:
+			frappe.db.set_value("Project", existing, "custom_sprint_prefix", prefix)
+			return existing
+
+		project = frappe.get_doc({
+			"doctype": "Project",
+			"project_name": project_name,
+			"custom_sprint_prefix": prefix,
+		})
+		project.insert(ignore_permissions=True)
+		frappe.db.commit()
+		return project.name
+
+	def _make_sprint(
+		self,
+		prefix="TEST",
+		status="Draft",
+		project=None,
+		sprint_goal="Test Sprint Goal",
+		start_date=None,
+		end_date=None,
+	):
+		start = start_date or today()
 		sprint = frappe.get_doc({
 			"doctype": "Sprint",
 			"sprint_prefix": prefix,
 			"status": status,
-			"project": project,
-			"start_date": today(),
-			"end_date": add_days(today(), 14),
+			"project": project or self._test_project(prefix),
+			"start_date": start,
+			"end_date": end_date or add_days(start, 14),
 			"sprint_goal": sprint_goal,
 		})
 		sprint.insert(ignore_permissions=True)
@@ -499,6 +537,186 @@ class TestSprint(FrappeTestCase):
 		# At completion, only wi1 was Done → accepted = 5.0
 		sprint.reload()
 		self.assertEqual(flt(sprint.points_accepted, 1), 5.0)
+
+	# --- Reusing vs creating the next sprint on close ----------------------
+
+	def _sprint_count(self, prefix="TEST"):
+		return frappe.db.count("Sprint", {"sprint_prefix": prefix})
+
+	def test_creates_next_sprint_when_none_exists(self):
+		"""With no sprint scheduled after this one, closing creates exactly one."""
+		from frappe_agile.frappe_agile.doctype.sprint.sprint import handle_incomplete_items
+
+		sprint = self._make_sprint(prefix="TEST", status="Active")
+		self._make_work_item("Test WI Create 1", sprint.name, story_points=3)
+		self.assertEqual(self._sprint_count(), 1)
+
+		target = handle_incomplete_items(sprint.name)
+
+		self.assertIsNotNone(target)
+		self.assertNotEqual(target, sprint.name)
+		self.assertEqual(self._sprint_count(), 2, "Exactly one new sprint should be created")
+		self.assertEqual(frappe.db.get_value("Sprint", target, "status"), "Draft")
+
+	def test_reuses_existing_next_sprint(self):
+		"""A sprint already scheduled for the following window is reused, not duplicated."""
+		from frappe_agile.frappe_agile.doctype.sprint.sprint import handle_incomplete_items
+
+		sprint = self._make_sprint(prefix="TEST", status="Active")
+		next_sprint = self._make_sprint(
+			prefix="TEST",
+			status="Draft",
+			start_date=add_days(sprint.end_date, 1),
+			end_date=add_days(sprint.end_date, 7),
+			sprint_goal="Already Planned",
+		)
+		wi = self._make_work_item("Test WI Reuse 1", sprint.name, story_points=5)
+		self.assertEqual(self._sprint_count(), 2)
+
+		target = handle_incomplete_items(sprint.name)
+
+		self.assertEqual(target, next_sprint.name, "The existing next sprint should be reused")
+		self.assertEqual(self._sprint_count(), 2, "No extra sprint should be created")
+		self.assertEqual(frappe.db.get_value("Work Item", wi.name, "sprint"), next_sprint.name)
+		# The planned sprint keeps its own goal — reuse must not overwrite it
+		self.assertEqual(frappe.db.get_value("Sprint", next_sprint.name, "sprint_goal"), "Already Planned")
+
+	def test_reuses_existing_next_sprint_off_cadence(self):
+		"""Reuse must not depend on the next sprint matching the computed Wed→Tue window.
+
+		Regression: matching on the exact computed start date missed a sprint the
+		team had planned on any other day and silently created a duplicate.
+		"""
+		from frappe_agile.frappe_agile.doctype.sprint.sprint import (
+			_build_new_sprint_dates,
+			handle_incomplete_items,
+		)
+
+		sprint = self._make_sprint(prefix="TEST", status="Active")
+
+		# Deliberately start the planned sprint on a day that is NOT the window
+		# the cadence helper would compute.
+		computed_start, _computed_end = _build_new_sprint_dates(sprint)
+		off_cadence_start = add_days(sprint.end_date, 1)
+		if getdate(off_cadence_start) == getdate(computed_start):
+			off_cadence_start = add_days(off_cadence_start, 1)
+		self.assertNotEqual(getdate(off_cadence_start), getdate(computed_start))
+
+		next_sprint = self._make_sprint(
+			prefix="TEST",
+			status="Draft",
+			start_date=off_cadence_start,
+			end_date=add_days(off_cadence_start, 6),
+		)
+		self._make_work_item("Test WI Offcadence 1", sprint.name, story_points=2)
+
+		target = handle_incomplete_items(sprint.name)
+
+		self.assertEqual(target, next_sprint.name)
+		self.assertEqual(self._sprint_count(), 2, "Off-cadence next sprint must not be duplicated")
+
+	def test_ignores_completed_sprint_when_finding_next(self):
+		"""A Completed sprint after this one is not a valid carry-forward target."""
+		from frappe_agile.frappe_agile.doctype.sprint.sprint import handle_incomplete_items
+
+		sprint = self._make_sprint(prefix="TEST", status="Active")
+		done_next = self._make_sprint(
+			prefix="TEST",
+			status="Completed",
+			start_date=add_days(sprint.end_date, 1),
+			end_date=add_days(sprint.end_date, 7),
+		)
+		self._make_work_item("Test WI Skip Completed 1", sprint.name, story_points=1)
+
+		target = handle_incomplete_items(sprint.name)
+
+		self.assertNotEqual(target, done_next.name, "Items must never move into a Completed sprint")
+		self.assertEqual(self._sprint_count(), 3, "A fresh sprint should be created instead")
+
+	def test_picks_earliest_of_several_future_sprints(self):
+		"""When several sprints are planned ahead, the soonest one receives the items."""
+		from frappe_agile.frappe_agile.doctype.sprint.sprint import handle_incomplete_items
+
+		sprint = self._make_sprint(prefix="TEST", status="Active")
+		# Insert the later sprint first, so creation order cannot be what decides it.
+		self._make_sprint(
+			prefix="TEST",
+			status="Draft",
+			start_date=add_days(sprint.end_date, 15),
+			end_date=add_days(sprint.end_date, 21),
+		)
+		soonest = self._make_sprint(
+			prefix="TEST",
+			status="Draft",
+			start_date=add_days(sprint.end_date, 1),
+			end_date=add_days(sprint.end_date, 7),
+		)
+		self._make_work_item("Test WI Earliest 1", sprint.name, story_points=3)
+
+		target = handle_incomplete_items(sprint.name)
+
+		self.assertEqual(target, soonest.name)
+		self.assertEqual(self._sprint_count(), 3, "No extra sprint should be created")
+
+	def test_reuse_does_not_cross_prefixes(self):
+		"""A sprint belonging to another prefix is never reused as the target."""
+		from frappe_agile.frappe_agile.doctype.sprint.sprint import handle_incomplete_items
+
+		sprint = self._make_sprint(prefix="TEST", status="Active")
+		other = self._make_sprint(
+			prefix="ALPHA",
+			status="Draft",
+			start_date=add_days(sprint.end_date, 1),
+			end_date=add_days(sprint.end_date, 7),
+		)
+		self._make_work_item("Test WI Other Prefix 1", sprint.name, story_points=2)
+
+		target = handle_incomplete_items(sprint.name)
+
+		self.assertNotEqual(target, other.name)
+		self.assertEqual(frappe.db.get_value("Sprint", target, "sprint_prefix"), "TEST")
+
+	def test_reused_sprint_flags_preplanned_row_as_brought_forward(self):
+		"""An item already listed on the reused sprint still counts as brought forward."""
+		from frappe_agile.frappe_agile.doctype.sprint.sprint import handle_incomplete_items
+
+		sprint = self._make_sprint(prefix="TEST", status="Active")
+		next_sprint = self._make_sprint(
+			prefix="TEST",
+			status="Draft",
+			start_date=add_days(sprint.end_date, 1),
+			end_date=add_days(sprint.end_date, 7),
+		)
+		wi = self._make_work_item("Test WI Preplanned 1", sprint.name, story_points=4)
+
+		# Pre-plan the same work item onto the next sprint's child table.
+		frappe.get_doc({
+			"doctype": "Sprint Work Item",
+			"parent": next_sprint.name,
+			"parentfield": "work_items",
+			"parenttype": "Sprint",
+			"work_item": wi.name,
+			"work_item_type": wi.work_item_type,
+			"title": wi.title,
+			"status": wi.status,
+			"story_points": wi.story_points,
+			"is_brought_forward": 0,
+		}).insert(ignore_permissions=True)
+
+		target = handle_incomplete_items(sprint.name)
+		self.assertEqual(target, next_sprint.name)
+
+		rows = frappe.get_all(
+			"Sprint Work Item",
+			filters={"parent": next_sprint.name, "work_item": wi.name},
+			fields=["is_brought_forward"],
+		)
+		self.assertEqual(len(rows), 1, "The pre-planned row must not be duplicated")
+		self.assertEqual(rows[0].is_brought_forward, 1)
+
+		next_sprint.reload()
+		self.assertEqual(next_sprint.stories_brought_forward, 1)
+		self.assertEqual(flt(next_sprint.points_brought_forward, 1), 4.0)
 
 	def tearDown(self):
 		# Explicit cleanup for data committed by handle_incomplete_items
