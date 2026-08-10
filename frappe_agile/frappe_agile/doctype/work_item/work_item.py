@@ -12,7 +12,6 @@ class WorkItem(Document):
 
 	def validate(self):
 		self._validate_epic_story_points()
-		self._validate_sprint_required()
 		self._validate_sprint_status()
 
 
