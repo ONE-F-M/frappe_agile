@@ -15,12 +15,17 @@ The Roadmap renders a Kanban-style grid:
               story-point acceptance %, and the list of work items (each shown
               with a checkbox marking whether the item is accepted / Done).
 
-"Active SCRUM Project" is a hard restriction — Project Type "SCRUM Project" and
-Is Active "Yes". On top of that the user narrows the board with a single
-multi-select **Projects** filter offering the three Project statuses (Open /
-Completed / Cancelled) followed by the SCRUM projects themselves. The two halves
-arrive as separate arguments (`project_status` and `lane`) and AND together;
-leaving either empty means "no restriction on that axis".
+Board membership is a hard restriction the user cannot widen — Project Type
+"SCRUM Project", Is Active "Yes", and Show in Roadmap "Yes" (one_fm's
+`custom_show_in_roadmap`, WI-002045). A SCRUM project is therefore off the board
+until someone opts it in; blank does not count as Yes.
+
+Within that set the user narrows with a single multi-select **Projects** filter
+offering the three Project statuses (Open / Completed / Cancelled) followed by
+the projects themselves. The two halves arrive as separate arguments
+(`project_status` and `lane`) and AND together; leaving either empty means "no
+restriction on that axis". Ticking statuses also narrows which projects the
+filter lists, so the two halves stay consistent with each other.
 
 Acceptance is computed live from the work items rather than from the stored
 `points_accepted` field so the board is always accurate even if that cached
@@ -43,6 +48,13 @@ DEFAULT_FUTURE_COUNT = 8
 
 # Only projects of this type, and only while they are active, appear on the board.
 SCRUM_PROJECT_TYPE = "SCRUM Project"
+
+# On top of that, a project has to be opted in. The flag is one_fm's Project
+# custom field "Show in Roadmap" (WI-002045), a Select of blank / Yes / No: only
+# "Yes" earns a lane, so a project stays off the board until someone puts it
+# there. Blank is not treated as Yes — an uncurated project is not on the board.
+ROADMAP_FLAG_FIELD = "custom_show_in_roadmap"
+ROADMAP_FLAG_ON = "Yes"
 
 # The Project statuses the multi-select filter may narrow the board to.
 PROJECT_STATUSES = ("Open", "Completed", "Cancelled")
@@ -301,15 +313,20 @@ def get_scrum_projects():
 def _scrum_projects(project_status=None, lane=None):
 	"""Active SCRUM Projects the current user may read, in display order.
 
-	These are the Roadmap's rows. "Active SCRUM Project" is fixed (Project Type
-	"SCRUM Project" + Is Active "Yes"); `project_status` and `lane` are the two
-	halves of the user-facing Projects multi-select narrowing that set further —
-	by status and by named project respectively. They AND together.
+	These are the Roadmap's rows. Membership of the board is fixed and not
+	user-controllable: Project Type "SCRUM Project", Is Active "Yes", and Show in
+	Roadmap "Yes". `project_status` and `lane` are the two halves of the
+	user-facing Projects multi-select narrowing that set further — by status and
+	by named project respectively. They AND together.
 	`frappe.get_list` keeps the result permission-scoped.
 	"""
 	frappe.has_permission("Project", "read", throw=True)
 
-	filters = {"project_type": SCRUM_PROJECT_TYPE, "is_active": "Yes"}
+	filters = {
+		"project_type": SCRUM_PROJECT_TYPE,
+		"is_active": "Yes",
+		ROADMAP_FLAG_FIELD: ROADMAP_FLAG_ON,
+	}
 
 	statuses = _parse_status_selection(project_status)
 	if statuses:
@@ -580,16 +597,28 @@ def _ensure_sprint_for_window(project, window_start, window_end):
 
 
 def _sprint_prefix_for_project(project):
-	"""Sprint Prefix of an active SCRUM Project, or throw explaining why not."""
+	"""Sprint Prefix of a project that belongs on the board, or throw saying why not.
+
+	Re-checks board membership rather than trusting the caller: `lane` arrives from
+	the client, so a project that has no lane must not be plannable by naming it
+	in a request.
+	"""
 	row = frappe.db.get_value(
 		"Project",
 		project,
-		["project_type", "is_active", "custom_sprint_prefix"],
+		["project_type", "is_active", "custom_sprint_prefix", ROADMAP_FLAG_FIELD],
 		as_dict=True,
 	)
-	if not row or row.project_type != SCRUM_PROJECT_TYPE or row.is_active != "Yes":
+	if (
+		not row
+		or row.project_type != SCRUM_PROJECT_TYPE
+		or row.is_active != "Yes"
+		or row.get(ROADMAP_FLAG_FIELD) != ROADMAP_FLAG_ON
+	):
 		frappe.throw(
-			_("{0} is not an active SCRUM Project, so sprints cannot be planned for it here.").format(project)
+			_("{0} is not an active SCRUM Project shown in the Roadmap, so sprints cannot be planned for it here.").format(
+				project
+			)
 		)
 
 	prefix = (row.custom_sprint_prefix or "").strip()
