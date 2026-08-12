@@ -16,9 +16,11 @@ The Roadmap renders a Kanban-style grid:
               with a checkbox marking whether the item is accepted / Done).
 
 "Active SCRUM Project" is a hard restriction — Project Type "SCRUM Project" and
-Is Active "Yes". On top of that the user narrows the board with a multi-select
-**Project Status** filter (Open / Completed / Cancelled); leaving it empty shows
-every status.
+Is Active "Yes". On top of that the user narrows the board with a single
+multi-select **Projects** filter offering the three Project statuses (Open /
+Completed / Cancelled) followed by the SCRUM projects themselves. The two halves
+arrive as separate arguments (`project_status` and `lane`) and AND together;
+leaving either empty means "no restriction on that axis".
 
 Acceptance is computed live from the work items rather than from the stored
 `points_accepted` field so the board is always accurate even if that cached
@@ -61,7 +63,8 @@ def get_roadmap_data(project_status=None, lane=None, sprint_status=None, search=
 	Args:
 		project_status: optional multi-select of Project statuses (list or JSON
 			list of "Open" / "Completed" / "Cancelled"). Empty = every status.
-		lane: optional, restrict to a single Project.
+		lane: optional, restrict to these Projects — a single name, a list, or a
+			JSON list. Empty = every project on the board.
 		sprint_status: optional, restrict to sprints in this status.
 		search: optional, free-text filter on work item title / sprint name.
 		future_count: how many empty future sprint windows to append for planning.
@@ -281,12 +284,27 @@ def get_unassigned_work_items(limit=200):
 	]
 
 
+@frappe.whitelist()
+def get_scrum_projects():
+	"""The active SCRUM Projects the current user may read — the board's lanes.
+
+	Feeds the client's Projects filter, which lists these below the three Project
+	statuses. Deliberately the same source as the board rows, so what can be
+	picked and what can be shown never drift apart.
+	"""
+	return [
+		{"name": p.name, "label": p.project_name or p.name, "status": p.status}
+		for p in _scrum_projects()
+	]
+
+
 def _scrum_projects(project_status=None, lane=None):
 	"""Active SCRUM Projects the current user may read, in display order.
 
 	These are the Roadmap's rows. "Active SCRUM Project" is fixed (Project Type
-	"SCRUM Project" + Is Active "Yes"); `project_status` is the user-facing
-	multi-select narrowing that set further, and `lane` pins a single project.
+	"SCRUM Project" + Is Active "Yes"); `project_status` and `lane` are the two
+	halves of the user-facing Projects multi-select narrowing that set further —
+	by status and by named project respectively. They AND together.
 	`frappe.get_list` keeps the result permission-scoped.
 	"""
 	frappe.has_permission("Project", "read", throw=True)
@@ -296,8 +314,10 @@ def _scrum_projects(project_status=None, lane=None):
 	statuses = _parse_status_selection(project_status)
 	if statuses:
 		filters["status"] = ["in", statuses]
-	if lane:
-		filters["name"] = lane
+
+	lanes = _parse_lane_filter(lane)
+	if lanes:
+		filters["name"] = ["in", lanes]
 
 	return frappe.get_list(
 		"Project",
@@ -306,6 +326,23 @@ def _scrum_projects(project_status=None, lane=None):
 		order_by="project_name asc, name asc",
 		limit_page_length=0,
 	)
+
+
+def _parse_lane_filter(lane):
+	"""Normalise the Projects half of the filter into a list of names, or None.
+
+	Accepts a single project name, a list, or a JSON-encoded list. Empty in every
+	form returns None, meaning "no restriction" — unlike `_parse_lane_selection`,
+	where an empty selection deliberately means "nothing". Names the user may not
+	read are dropped by `frappe.get_list`, so no validation is needed here.
+	"""
+	if lane in (None, ""):
+		return None
+	if isinstance(lane, str):
+		lane = lane.strip()
+		lane = frappe.parse_json(lane) if lane.startswith("[") else [lane]
+	names = [n for n in ((p or "").strip() for p in (lane or [])) if n]
+	return names or None
 
 
 def _parse_status_selection(project_status):
@@ -625,6 +662,7 @@ def create_missing_sprints(project_status=None, lane=None, future_count=None, la
 	project's latest Business Analyst.
 
 	Args:
+		lane: the board's Projects filter — which projects are on screen at all.
 		lanes: optional JSON list of Projects to restrict creation to. When
 			given, only those projects are filled (the Business Analyst selected
 			a subset on the board); otherwise every project on the board is.

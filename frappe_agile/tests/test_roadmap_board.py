@@ -1,7 +1,9 @@
 """Roadmap board tests — the row axis is always the active SCRUM Project.
 
 Covers the WI-001819 behaviour: "Group rows by" is gone, the board only ever
-shows active SCRUM projects, and a Project Status multi-select narrows that set.
+shows active SCRUM projects, and a Project Status multi-select narrows that set;
+plus WI-002020, where that same multi-select also lists the SCRUM projects so a
+lane can be picked by name (the `lane` argument, which AND-s with the statuses).
 """
 
 from __future__ import annotations
@@ -15,6 +17,7 @@ from frappe.utils import add_days, getdate
 from frappe_agile.frappe_agile.page.roadmap_board.roadmap_board import (
 	create_missing_sprints,
 	get_roadmap_data,
+	get_scrum_projects,
 	move_work_item,
 )
 from frappe_agile.frappe_agile.doctype.sprint.sprint import (
@@ -191,6 +194,68 @@ class TestRoadmapBoard(FrappeTestCase):
 		rows = self._rows(get_roadmap_data(project_status=json.dumps(["Open", "Bogus"])))
 		self.assertIn(self.projects["OPEN"], rows)
 		self.assertNotIn(self.projects["COMPLETED"], rows)
+
+	# ------------------------------------------------------------------
+	# Project half of the same multi-select (WI-002020)
+	# ------------------------------------------------------------------
+	def test_lane_accepts_several_projects_as_json(self):
+		"""Picking projects in the filter pins the board to exactly those lanes."""
+		picked = [self.projects["OPEN"], self.projects["CANCELLED"]]
+		rows = self._rows(get_roadmap_data(lane=json.dumps(picked)))
+
+		self.assertEqual(set(rows), set(picked))
+
+	def test_empty_lane_shows_every_project(self):
+		for empty in (None, "", [], "[]"):
+			rows = self._rows(get_roadmap_data(lane=empty))
+			self.assertIn(self.projects["COMPLETED"], rows, f"failed for {empty!r}")
+
+	def test_lane_and_status_narrow_together(self):
+		"""The two halves AND: a project outside the ticked statuses drops out."""
+		picked = json.dumps([self.projects["OPEN"], self.projects["COMPLETED"]])
+
+		rows = self._rows(get_roadmap_data(lane=picked, project_status=json.dumps(["Open"])))
+		self.assertEqual(set(rows), {self.projects["OPEN"]})
+
+		# ...to the point of an empty board when the two disagree entirely.
+		rows = self._rows(
+			get_roadmap_data(
+				lane=json.dumps([self.projects["OPEN"]]),
+				project_status=json.dumps(["Cancelled"]),
+			)
+		)
+		self.assertEqual(rows, {})
+
+	def test_lane_cannot_reach_a_non_board_project(self):
+		"""Naming an inactive or non-SCRUM project must not put it on the board."""
+		picked = json.dumps(
+			[self.projects["OPEN"], self.projects["INACTIVE"], self.projects["NOTSCRUM"], "NO SUCH PROJECT"]
+		)
+		rows = self._rows(get_roadmap_data(lane=picked))
+
+		self.assertEqual(set(rows), {self.projects["OPEN"]})
+
+	def test_get_scrum_projects_lists_the_board_lanes(self):
+		"""The filter's project list must match the rows the board can show."""
+		listed = {p["name"]: p for p in get_scrum_projects() if p["label"].startswith(TEST_PREFIX)}
+
+		self.assertEqual(set(listed), set(self._rows(get_roadmap_data())))
+		self.assertEqual(listed[self.projects["COMPLETED"]]["status"], "Completed")
+		self.assertEqual(
+			listed[self.projects["OPEN"]]["label"], self._project_name("OPEN")
+		)
+
+	def test_create_missing_sprints_respects_the_lane_filter(self):
+		"""A project filtered off the board cannot be filled, even if ticked."""
+		result = create_missing_sprints(
+			lane=json.dumps([self.projects["OPEN"]]),
+			future_count=2,
+			lanes=json.dumps([self.projects["OPEN"], self.projects["COMPLETED"]]),
+		)
+
+		self.assertEqual(result["created_count"], 2)
+		created = frappe.get_all("Sprint", filters={"name": ("in", result["created"])}, pluck="project")
+		self.assertEqual(set(created), {self.projects["OPEN"]})
 
 	# ------------------------------------------------------------------
 	# Cells
