@@ -244,6 +244,10 @@ class RoadmapBoard {
 				get_data: () => this._filter_options(),
 				change: () => {
 					this._apply_filter_selection(this.project_filter_control.get_value() || []);
+					// Ticking a status changes which projects belong in the list below
+					// it, so re-render the open dropdown instead of waiting for the next
+					// time it happens to be reopened.
+					this._rerender_filter_options();
 					this.refresh({ scrollToCurrent: true }); // refresh() resets selection mode
 				},
 			},
@@ -256,6 +260,11 @@ class RoadmapBoard {
 	// The control re-reads options on every dropdown open and keystroke, so the
 	// project list is fetched once and served from cache after that. Returning a
 	// promise on the first call is supported by MultiSelectList.
+	//
+	// The statuses also act on the list below them: with any ticked, only projects
+	// in those statuses are offered, so the user picks a lane from the set their
+	// status choice actually leaves on the board rather than from projects the
+	// board is no longer showing.
 	_filter_options() {
 		const to_options = (projects) =>
 			// Statuses need no caption — the group heading above them says it, and
@@ -265,7 +274,7 @@ class RoadmapBoard {
 				label: __(s),
 				description: "",
 			})).concat(
-				projects.map((p) => ({
+				this._projects_in_selected_statuses(projects).map((p) => ({
 					value: p.name,
 					label: p.label,
 					// The id is only worth showing when it isn't the name already.
@@ -292,6 +301,27 @@ class RoadmapBoard {
 	_set_scrum_projects(projects) {
 		this.scrum_projects = projects;
 		return projects;
+	}
+
+	// Narrow the offered projects to the ticked statuses. A project the user has
+	// already picked stays in the list whatever its status — the control pins
+	// selected values anyway, and silently dropping a live selection from the list
+	// would leave the board filtered by something the filter no longer shows.
+	_projects_in_selected_statuses(projects) {
+		const statuses = this.filters.project_status || [];
+		if (!statuses.length) return projects;
+		const picked = new Set(this.filters.lane || []);
+		return projects.filter((p) => statuses.includes(p.status) || picked.has(p.name));
+	}
+
+	// Re-read options and repaint the dropdown in place. Used after a selection
+	// changes what the list should contain; MultiSelectList only refreshes options
+	// on open and on keystrokes, so without this the narrowing appears one
+	// interaction late.
+	_rerender_filter_options() {
+		const control = this.project_filter_control;
+		if (!control) return;
+		control.set_options().then(() => control.set_selectable_items(control._options));
 	}
 
 	// Split the combined selection back into the two filters the server takes:
@@ -414,7 +444,8 @@ class RoadmapBoard {
 			this.$grid.html(`
 				<div class="rm-empty">
 					<div class="rm-empty-icon">🗺️</div>
-					<p>${__("No active SCRUM projects match the current filters.")}</p>
+					<p>${__("No projects match the current filters.")}</p>
+					<p class="rm-empty-hint-text">${__("The Roadmap shows active SCRUM projects with <b>Show in Roadmap</b> set to Yes. Set it on a Project to give it a lane here.")}</p>
 				</div>
 			`);
 			return;

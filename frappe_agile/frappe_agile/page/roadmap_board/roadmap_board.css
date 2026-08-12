@@ -555,6 +555,15 @@
 /* ---------------- Empty + skeleton ---------------- */
 .rm-empty { text-align: center; padding: 60px 20px; color: var(--text-muted, #6b7280); }
 .rm-empty-icon { font-size: 40px; margin-bottom: 10px; }
+/* Second line of the empty state: says how a project earns a lane, since an
+   un-opted-in board is empty and otherwise gives no clue why. */
+.rm-empty-hint-text {
+	max-width: 460px;
+	margin: 6px auto 0;
+	font-size: 12px;
+	line-height: 1.5;
+	opacity: 0.85;
+}
 
 .rm-skeleton { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding: 16px; }
 .rm-skel-card { height: 120px; border-radius: 8px; background: linear-gradient(90deg, #f1f5f9 25%, #e8edf3 37%, #f1f5f9 63%); background-size: 400% 100%; animation: rm-shimmer 1.4s ease infinite; }
