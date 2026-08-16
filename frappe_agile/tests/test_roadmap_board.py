@@ -1,364 +1,349 @@
-"""End-to-end tests for Roadmap board sprint creation.
+"""Roadmap board tests — the row axis is always the active SCRUM Project.
 
-Sprint.project is mandatory and Sprint.sprint_prefix is read-only, fetched from
-`project.custom_sprint_prefix`. So a Sprint can only be created where the
-Project is known — which on the Roadmap means project grouping. Under
-sprint-prefix grouping the lane is a bare string that may belong to no project,
-so creation is refused with guidance instead of producing an unowned Sprint.
-
-These tests cover both creation paths (the "Create Missing Sprint(s)" bulk
-action and the drag-into-an-empty-slot path in move_work_item) plus the
-missing_count that drives the button's visibility.
+Covers the WI-001819 behaviour: "Group rows by" is gone, the board only ever
+shows active SCRUM projects, and a Project Status multi-select narrows that set.
 """
+
+from __future__ import annotations
+
+import json
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
-from frappe.utils import add_days, getdate, today
+from frappe.utils import add_days, getdate
 
-from frappe_agile.frappe_agile.doctype.sprint.sprint import (
-    SPRINT_SPAN_DAYS,
-    align_to_sprint_start,
-)
 from frappe_agile.frappe_agile.page.roadmap_board.roadmap_board import (
-    create_missing_sprints,
-    get_roadmap_data,
-    move_work_item,
+	create_missing_sprints,
+	get_roadmap_data,
+	move_work_item,
 )
-from frappe_agile.tests.fixtures import (
-    TEST_PREFIXES,
-    delete_test_projects,
-    ensure_test_project,
-    test_project_name,
+from frappe_agile.frappe_agile.doctype.sprint.sprint import (
+	SPRINT_SPAN_DAYS,
+	align_to_sprint_start,
 )
 
-# A project deliberately left without a Sprint Prefix, to prove it is skipped
-# with a reason rather than blowing up the whole batch.
-NO_PREFIX_PROJECT = "_Test Agile Project NOPREFIX"
+# Every fixture project name starts with this so teardown can find them all.
+TEST_PREFIX = "RMTEST"
+
+PROJECTS = {
+	# name suffix        (project_type,   is_active, status,      sprint_prefix)
+	"OPEN": ("SCRUM Project", "Yes", "Open", "RMTESTOPEN"),
+	"COMPLETED": ("SCRUM Project", "Yes", "Completed", "RMTESTCOMP"),
+	"CANCELLED": ("SCRUM Project", "Yes", "Cancelled", "RMTESTCANC"),
+	# Excluded from the board: inactive, and not a SCRUM project.
+	"INACTIVE": ("SCRUM Project", "No", "Open", "RMTESTINAC"),
+	"NOTSCRUM": ("Internal", "Yes", "Open", "RMTESTNSCR"),
+	# Active SCRUM but no Sprint Prefix — shows as a lane, cannot be planned into.
+	"NOPREFIX": ("SCRUM Project", "Yes", "Open", None),
+}
 
 
-class RoadmapBoardTestCase(FrappeTestCase):
-    """create_missing_sprints commits, so rollback cannot be relied on."""
+class TestRoadmapBoard(FrappeTestCase):
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		cls.company = frappe.db.get_value("Company", {}, "name")
 
-    def setUp(self):
-        self._cleanup()
-        frappe.db.commit()
-        frappe.db.transaction_writes = 0
-        self.addCleanup(self._cleanup_and_commit)
+	def setUp(self):
+		self._cleanup()
+		self.projects = {key: self._make_project(key) for key in PROJECTS}
+		frappe.db.commit()
 
-    def _cleanup(self):
-        sprints = frappe.get_all(
-            "Sprint", filters={"sprint_prefix": ("in", TEST_PREFIXES)}, pluck="name"
-        )
-        projects = [test_project_name(p) for p in TEST_PREFIXES] + [NO_PREFIX_PROJECT]
-        sprints += frappe.get_all("Sprint", filters={"project": ("in", projects)}, pluck="name")
-        if sprints:
-            frappe.db.delete("Sprint Work Item", {"parent": ("in", sprints)})
-            frappe.db.delete("Work Item", {"sprint": ("in", sprints)})
-            frappe.db.delete("Sprint", {"name": ("in", sprints)})
-        frappe.db.delete("Work Item", {"title": ("like", "_Test Roadmap%")})
-        delete_test_projects(extra_projects=[NO_PREFIX_PROJECT])
+	def tearDown(self):
+		self._cleanup()
+		frappe.db.commit()
 
-    def _cleanup_and_commit(self):
-        self._cleanup()
-        frappe.db.commit()
+	# ------------------------------------------------------------------
+	# Fixtures
+	# ------------------------------------------------------------------
+	def _project_name(self, key):
+		return f"{TEST_PREFIX} {key}"
 
-    # --- helpers -----------------------------------------------------------
+	def _make_project(self, key):
+		project_type, is_active, status, prefix = PROJECTS[key]
+		doc = frappe.get_doc(
+			{
+				"doctype": "Project",
+				"project_name": self._project_name(key),
+				"project_type": project_type,
+				"is_active": is_active,
+				"status": status,
+				"custom_sprint_prefix": prefix,
+				"company": self.company,
+			}
+		)
+		doc.insert(ignore_permissions=True)
+		return doc.name
 
-    def _seed_lane_without_prefix(self):
-        """A board lane whose Project has no Sprint Prefix.
+	def _make_sprint(self, project_key, start_date, status="Draft"):
+		start = getdate(start_date)
+		doc = frappe.get_doc(
+			{
+				"doctype": "Sprint",
+				"project": self.projects[project_key],
+				"sprint_prefix": PROJECTS[project_key][3],
+				"status": status,
+				"start_date": start,
+				"end_date": add_days(start, SPRINT_SPAN_DAYS),
+				"sprint_goal": "Roadmap board test",
+			}
+		)
+		doc.insert(ignore_permissions=True)
+		return doc.name
 
-        Reached the only way it can be in practice: the Project had a prefix,
-        sprints were created under it, and the prefix was then cleared. (A
-        Project with no prefix can never get a first Sprint, since sprint_prefix
-        is mandatory — so it could not be a lane at all.)
-        """
-        if not frappe.db.exists("Project", NO_PREFIX_PROJECT):
-            frappe.get_doc(
-                {
-                    "doctype": "Project",
-                    "project_name": NO_PREFIX_PROJECT,
-                    "status": "Open",
-                    "custom_sprint_prefix": "NOPFX",
-                }
-            ).insert(ignore_permissions=True)
-        else:
-            frappe.db.set_value(
-                "Project", NO_PREFIX_PROJECT, "custom_sprint_prefix", "NOPFX", update_modified=False
-            )
+	def _make_work_item(self, title, sprint, story_points=3, status="Open"):
+		doc = frappe.get_doc(
+			{
+				"doctype": "Work Item",
+				"work_item_type": "User Story",
+				"title": title,
+				"sprint": sprint,
+				"story_points": story_points,
+				"status": status,
+			}
+		)
+		doc.insert(ignore_permissions=True)
+		return doc.name
 
-        sprint = self._seed_sprint(NO_PREFIX_PROJECT)
+	def _cleanup(self):
+		projects = frappe.get_all(
+			"Project", filters={"project_name": ("like", f"{TEST_PREFIX}%")}, pluck="name"
+		)
+		sprints = (
+			frappe.get_all("Sprint", filters={"project": ("in", projects)}, pluck="name")
+			if projects
+			else []
+		)
+		sprints += frappe.get_all(
+			"Sprint", filters={"sprint_prefix": ("like", f"{TEST_PREFIX}%")}, pluck="name"
+		)
+		sprints = list(set(sprints))
 
-        frappe.db.set_value(
-            "Project", NO_PREFIX_PROJECT, "custom_sprint_prefix", None, update_modified=False
-        )
-        return NO_PREFIX_PROJECT, sprint
+		if sprints:
+			frappe.db.delete("Sprint Work Item", {"parent": ("in", sprints)})
+			frappe.db.delete("Work Item", {"sprint": ("in", sprints)})
+			frappe.db.delete("Sprint", {"name": ("in", sprints)})
 
-    def _seed_sprint(self, project, start_date=None):
-        """A sprint must already exist for a project to appear as a board lane."""
-        ws = align_to_sprint_start(start_date or add_days(today(), -14))
-        doc = frappe.get_doc(
-            {
-                "doctype": "Sprint",
-                "project": project,
-                "status": "Draft",
-                "start_date": ws,
-                "end_date": add_days(ws, SPRINT_SPAN_DAYS),
-                "sprint_goal": "seed",
-            }
-        )
-        doc.insert(ignore_permissions=True)
-        return doc
+		frappe.db.delete("Work Item", {"title": ("like", f"{TEST_PREFIX}%")})
+		if projects:
+			frappe.db.delete("Project", {"name": ("in", projects)})
 
-    def _make_work_item(self, title, sprint_name):
-        wi = frappe.get_doc(
-            {
-                "doctype": "Work Item",
-                "work_item_type": "User Story",
-                "title": title,
-                "sprint": sprint_name,
-                "story_points": 3,
-                "workflow_state": "Open",
-                "status": "Open",
-            }
-        )
-        wi.insert(ignore_permissions=True)
-        return wi
+	def _rows(self, data):
+		"""Only the fixture rows, keyed by project name (the board shows real ones too)."""
+		return {r["key"]: r for r in data["rows"] if r["label"].startswith(TEST_PREFIX)}
 
+	# ------------------------------------------------------------------
+	# Row axis: active SCRUM projects only
+	# ------------------------------------------------------------------
+	def test_rows_are_active_scrum_projects_only(self):
+		data = get_roadmap_data()
+		rows = self._rows(data)
 
-class TestCreateMissingSprints(RoadmapBoardTestCase):
-    def test_refused_when_grouped_by_sprint_prefix(self):
-        """The old default. A prefix lane does not identify a Project."""
-        project = ensure_test_project("TEST")
-        self._seed_sprint(project)
+		self.assertIn(self.projects["OPEN"], rows)
+		self.assertIn(self.projects["COMPLETED"], rows)
+		self.assertIn(self.projects["CANCELLED"], rows)
+		self.assertIn(self.projects["NOPREFIX"], rows)
+		# Is Active = No and a non-SCRUM project type are both excluded outright.
+		self.assertNotIn(self.projects["INACTIVE"], rows)
+		self.assertNotIn(self.projects["NOTSCRUM"], rows)
 
-        with self.assertRaises(frappe.ValidationError) as ctx:
-            create_missing_sprints(group_by="sprint_prefix", future_count=2)
-        self.assertIn("grouped by Project", str(ctx.exception))
+	def test_row_carries_prefix_and_project_status(self):
+		rows = self._rows(get_roadmap_data())
 
-    def test_refused_for_any_non_project_grouping(self):
-        with self.assertRaises(frappe.ValidationError):
-            create_missing_sprints(group_by="", future_count=2)
+		row = rows[self.projects["OPEN"]]
+		self.assertEqual(row["prefix"], "RMTESTOPEN")
+		self.assertEqual(row["project_status"], "Open")
+		# No prefix means the lane renders but nothing can be planned into it.
+		self.assertEqual(rows[self.projects["NOPREFIX"]]["prefix"], "")
 
-    def test_creates_sprints_carrying_the_project(self):
-        project = ensure_test_project("TEST")
-        self._seed_sprint(project)
+	def test_project_without_sprints_still_gets_a_lane_and_axis(self):
+		"""A brand-new project must be plannable, so it needs a row and columns."""
+		data = get_roadmap_data(lane=self.projects["OPEN"])
 
-        result = create_missing_sprints(group_by="project", future_count=2)
+		self.assertEqual([r["key"] for r in data["rows"]], [self.projects["OPEN"]])
+		self.assertEqual(data["cells"], {})
+		self.assertTrue(data["columns"], "expected a future axis even with no sprints")
+		self.assertTrue(any(c["is_current"] for c in data["columns"]))
 
-        self.assertEqual(result["created_count"], 2)
-        for name in result["created"]:
-            sprint = frappe.get_doc("Sprint", name)
-            self.assertEqual(sprint.project, project)
-            # The whole point: the prefix is derived, never passed in.
-            self.assertEqual(sprint.sprint_prefix, "TEST")
-            self.assertEqual(sprint.status, "Draft")
-            self.assertTrue(sprint.name.startswith("TEST-"))
+	# ------------------------------------------------------------------
+	# Project Status multi-select
+	# ------------------------------------------------------------------
+	def test_project_status_filter_narrows_rows(self):
+		rows = self._rows(get_roadmap_data(project_status=["Open"]))
+		self.assertIn(self.projects["OPEN"], rows)
+		self.assertNotIn(self.projects["COMPLETED"], rows)
+		self.assertNotIn(self.projects["CANCELLED"], rows)
 
-    def test_created_sprints_land_on_upcoming_windows(self):
-        project = ensure_test_project("TEST")
-        self._seed_sprint(project)
+	def test_project_status_accepts_multiple_values_as_json(self):
+		"""The client posts the multi-select as a JSON list."""
+		rows = self._rows(get_roadmap_data(project_status=json.dumps(["Open", "Cancelled"])))
+		self.assertIn(self.projects["OPEN"], rows)
+		self.assertIn(self.projects["CANCELLED"], rows)
+		self.assertNotIn(self.projects["COMPLETED"], rows)
 
-        result = create_missing_sprints(group_by="project", future_count=3)
+	def test_empty_project_status_shows_every_status(self):
+		for empty in (None, "", [], "[]"):
+			rows = self._rows(get_roadmap_data(project_status=empty))
+			self.assertIn(self.projects["COMPLETED"], rows, f"failed for {empty!r}")
 
-        first = align_to_sprint_start(add_days(getdate(), 1))
-        expected = {add_days(first, 7 * i) for i in range(3)}
-        actual = {
-            getdate(frappe.db.get_value("Sprint", n, "start_date")) for n in result["created"]
-        }
-        self.assertEqual(actual, expected)
+	def test_unknown_status_values_are_dropped(self):
+		"""A forged status must not widen the query past the three real ones."""
+		rows = self._rows(get_roadmap_data(project_status=json.dumps(["Open", "Bogus"])))
+		self.assertIn(self.projects["OPEN"], rows)
+		self.assertNotIn(self.projects["COMPLETED"], rows)
 
-    def test_is_idempotent(self):
-        project = ensure_test_project("TEST")
-        self._seed_sprint(project)
+	# ------------------------------------------------------------------
+	# Cells
+	# ------------------------------------------------------------------
+	def test_cells_are_keyed_by_project_and_window(self):
+		start = align_to_sprint_start(getdate())
+		sprint = self._make_sprint("OPEN", start)
+		self._make_work_item(f"{TEST_PREFIX} story", sprint, story_points=5)
 
-        first = create_missing_sprints(group_by="project", future_count=2)
-        self.assertEqual(first["created_count"], 2)
+		data = get_roadmap_data(lane=self.projects["OPEN"])
+		cell_key = f"{self.projects['OPEN']}::{getdate(start).isoformat()}"
 
-        second = create_missing_sprints(group_by="project", future_count=2)
-        self.assertEqual(second["created_count"], 0, "re-running must not duplicate sprints")
+		self.assertIn(cell_key, data["cells"])
+		cell = data["cells"][cell_key]
+		self.assertEqual(cell["sprint"], sprint)
+		self.assertEqual(cell["total_points"], 5)
+		self.assertEqual(self._rows(data)[self.projects["OPEN"]]["sprint_count"], 1)
 
-    def test_project_without_prefix_is_skipped_not_fatal(self):
-        """One unprefixed project must not deny every other project its sprints."""
-        good = ensure_test_project("TEST")
-        self._seed_sprint(good)
-        bad, _ = self._seed_lane_without_prefix()
+	def test_sprint_status_filter_still_applies(self):
+		start = align_to_sprint_start(getdate())
+		self._make_sprint("OPEN", start, status="Draft")
 
-        result = create_missing_sprints(group_by="project", future_count=2)
+		data = get_roadmap_data(lane=self.projects["OPEN"], sprint_status="Active")
+		# The lane survives (it's a project) but its Draft sprint is filtered out.
+		self.assertIn(self.projects["OPEN"], self._rows(data))
+		self.assertEqual(data["cells"], {})
 
-        # Only the two windows for the prefixed test project. Any other lane on
-        # the site without a prefix is skipped too, so assert membership rather
-        # than an exact list.
-        self.assertEqual(result["created_count"], 2, "the prefixed project should still be filled")
-        skipped = [s["project"] for s in result["skipped"]]
-        self.assertIn(bad, skipped)
-        self.assertNotIn(good, skipped)
-        self.assertEqual(
-            frappe.db.count("Sprint", {"project": bad, "start_date": (">", today())}), 0
-        )
-        for entry in result["skipped"]:
-            self.assertIn("Sprint Prefix", entry["reason"])
+	# ------------------------------------------------------------------
+	# Create missing sprints
+	# ------------------------------------------------------------------
+	def test_create_missing_sprints_fills_selected_projects_only(self):
+		result = create_missing_sprints(
+			future_count=2, lanes=json.dumps([self.projects["OPEN"]])
+		)
+		self.assertEqual(result["created_count"], 2)
 
-    def test_lane_selection_restricts_creation(self):
-        a = ensure_test_project("ALPHA")
-        b = ensure_test_project("BETA")
-        self._seed_sprint(a)
-        self._seed_sprint(b)
+		created = frappe.get_all(
+			"Sprint",
+			filters={"name": ("in", result["created"])},
+			fields=["project", "sprint_prefix", "status"],
+		)
+		for row in created:
+			self.assertEqual(row.project, self.projects["OPEN"])
+			self.assertEqual(row.sprint_prefix, "RMTESTOPEN")
+			self.assertEqual(row.status, "Draft")
 
-        result = create_missing_sprints(
-            group_by="project", future_count=2, lanes=frappe.as_json([a])
-        )
+		# Nothing was created for the projects that weren't ticked.
+		self.assertFalse(
+			frappe.db.exists("Sprint", {"project": self.projects["COMPLETED"]})
+		)
 
-        self.assertEqual(result["created_count"], 2)
-        projects = {frappe.db.get_value("Sprint", n, "project") for n in result["created"]}
-        self.assertEqual(projects, {a})
+	def test_create_missing_sprints_survives_a_stale_naming_counter(self):
+		"""Regression: a lagging series counter used to abort the whole project.
 
-    def test_forged_lane_outside_the_board_creates_nothing(self):
-        project = ensure_test_project("TEST")
-        self._seed_sprint(project)
+		Sprints restored/imported under forced names leave `tabSeries` behind, so
+		`make_autoname` returns a name that already exists and the insert died with
+		"Sprint LCR-001 already exists". Naming must skip past the taken numbers.
+		"""
+		from frappe.model.naming import NamingSeries
 
-        result = create_missing_sprints(
-            group_by="project", future_count=2, lanes=frappe.as_json(["_Not On The Board"])
-        )
-        self.assertEqual(result["created_count"], 0)
+		project = self.projects["OPEN"]
+		prefix = PROJECTS["OPEN"][3]
+		counter = NamingSeries(f"{prefix}-.###")
 
+		# Existing sprints occupying <prefix>-001 … -003 …
+		counter.update_counter(0)  # teardown clears the sprints but not the counter
+		start = align_to_sprint_start(getdate())
+		for i in range(3):
+			doc = frappe.get_doc(
+				{
+					"doctype": "Sprint",
+					"project": project,
+					"sprint_prefix": prefix,
+					"status": "Draft",
+					"start_date": add_days(start, -7 * (i + 1)),
+					"end_date": add_days(start, -7 * (i + 1) + SPRINT_SPAN_DAYS),
+					"sprint_goal": "Occupies a number",
+				}
+			)
+			doc.insert(ignore_permissions=True)
 
-class TestMissingCount(RoadmapBoardTestCase):
-    """missing_count drives the "Create Missing Sprint(s)" button's visibility."""
+		# … while the counter is rewound to zero, exactly as an import leaves it.
+		counter.update_counter(0)
+		self.assertTrue(frappe.db.exists("Sprint", f"{prefix}-001"))
 
-    def test_reported_under_project_grouping(self):
-        project = ensure_test_project("TEST")
-        self._seed_sprint(project)
+		result = create_missing_sprints(future_count=2, lanes=json.dumps([project]))
 
-        data = get_roadmap_data(group_by="project", future_count=2)
-        self.assertEqual(data["missing_count"], 2)
+		self.assertEqual(result["created_count"], 2)
+		self.assertEqual(len(set(result["created"])), 2, "generated names must be distinct")
+		for name in result["created"]:
+			self.assertNotIn(name, (f"{prefix}-001", f"{prefix}-002", f"{prefix}-003"))
 
-    def test_zero_under_prefix_grouping(self):
-        """Nothing can be created there, so nothing may be offered."""
-        project = ensure_test_project("TEST")
-        self._seed_sprint(project)
+	def test_create_missing_sprints_is_idempotent(self):
+		lanes = json.dumps([self.projects["OPEN"]])
+		self.assertEqual(create_missing_sprints(future_count=2, lanes=lanes)["created_count"], 2)
+		self.assertEqual(create_missing_sprints(future_count=2, lanes=lanes)["created_count"], 0)
 
-        data = get_roadmap_data(group_by="sprint_prefix", future_count=2)
-        self.assertEqual(data["missing_count"], 0)
+	def test_create_missing_sprints_skips_prefixless_project(self):
+		result = create_missing_sprints(
+			future_count=2, lanes=json.dumps([self.projects["NOPREFIX"]])
+		)
+		self.assertEqual(result["created_count"], 0)
 
-    def test_drops_to_zero_once_filled(self):
-        project = ensure_test_project("TEST")
-        self._seed_sprint(project)
+	def test_missing_count_ignores_prefixless_project(self):
+		data = get_roadmap_data(lane=self.projects["NOPREFIX"], future_count=4)
+		self.assertEqual(data["missing_count"], 0)
 
-        create_missing_sprints(group_by="project", future_count=2)
-        data = get_roadmap_data(group_by="project", future_count=2)
-        self.assertEqual(data["missing_count"], 0)
+		data = get_roadmap_data(lane=self.projects["OPEN"], future_count=4)
+		self.assertEqual(data["missing_count"], 4)
 
-    def test_project_without_prefix_is_not_counted(self):
-        self._seed_lane_without_prefix()
+	# ------------------------------------------------------------------
+	# Drag & drop into an empty slot
+	# ------------------------------------------------------------------
+	def test_move_into_empty_slot_creates_sprint_on_that_project(self):
+		start = align_to_sprint_start(getdate())
+		source = self._make_sprint("OPEN", start)
+		item = self._make_work_item(f"{TEST_PREFIX} draggable", source)
 
-        data = get_roadmap_data(group_by="project", future_count=2)
-        self.assertEqual(data["missing_count"], 0, "an uncreatable lane must not be offered")
+		window_start = add_days(start, 7)
+		result = move_work_item(
+			work_item=item,
+			lane=self.projects["COMPLETED"],
+			window_start=window_start,
+			window_end=add_days(window_start, SPRINT_SPAN_DAYS),
+		)
 
+		self.assertTrue(result["created"])
+		created = frappe.get_doc("Sprint", result["target_sprint"])
+		self.assertEqual(created.project, self.projects["COMPLETED"])
+		self.assertEqual(created.sprint_prefix, "RMTESTCOMP")
+		self.assertEqual(getdate(created.start_date), getdate(window_start))
+		self.assertEqual(frappe.db.get_value("Work Item", item, "sprint"), created.name)
 
-class TestMoveWorkItem(RoadmapBoardTestCase):
-    def _future_window(self):
-        ws = align_to_sprint_start(add_days(today(), 1))
-        return ws, add_days(ws, SPRINT_SPAN_DAYS)
+	def test_move_into_empty_slot_of_prefixless_project_is_refused(self):
+		start = align_to_sprint_start(getdate())
+		source = self._make_sprint("OPEN", start)
+		item = self._make_work_item(f"{TEST_PREFIX} stuck", source)
 
-    def test_drop_into_empty_slot_creates_sprint_for_the_project(self):
-        project = ensure_test_project("TEST")
-        seed = self._seed_sprint(project)
-        wi = self._make_work_item("_Test Roadmap Move", seed.name)
-        ws, we = self._future_window()
+		with self.assertRaises(frappe.ValidationError):
+			move_work_item(
+				work_item=item,
+				lane=self.projects["NOPREFIX"],
+				window_start=add_days(start, 7),
+			)
 
-        result = move_work_item(
-            work_item=wi.name,
-            target_sprint=None,
-            lane=project,
-            group_by="project",
-            window_start=ws,
-            window_end=we,
-        )
+	def test_move_into_empty_slot_of_non_scrum_project_is_refused(self):
+		start = align_to_sprint_start(getdate())
+		source = self._make_sprint("OPEN", start)
+		item = self._make_work_item(f"{TEST_PREFIX} offboard", source)
 
-        self.assertTrue(result["created"])
-        created = frappe.get_doc("Sprint", result["target_sprint"])
-        self.assertEqual(created.project, project)
-        self.assertEqual(created.sprint_prefix, "TEST")
-        self.assertEqual(getdate(created.start_date), getdate(ws))
-
-        wi.reload()
-        self.assertEqual(wi.sprint, created.name)
-        # Work Item.project is fetched from the sprint, completing the hierarchy.
-        self.assertEqual(wi.project, project)
-
-    def test_drop_into_empty_slot_reuses_an_existing_sprint(self):
-        project = ensure_test_project("TEST")
-        seed = self._seed_sprint(project)
-        ws, we = self._future_window()
-        existing = self._seed_sprint(project, start_date=ws)
-        wi = self._make_work_item("_Test Roadmap Reuse", seed.name)
-
-        result = move_work_item(
-            work_item=wi.name,
-            target_sprint=None,
-            lane=project,
-            group_by="project",
-            window_start=ws,
-            window_end=we,
-        )
-
-        self.assertFalse(result["created"])
-        self.assertEqual(result["target_sprint"], existing.name)
-
-    def test_drop_under_prefix_grouping_is_refused_and_creates_nothing(self):
-        """The reported bug: this used to raise a bare MandatoryError."""
-        project = ensure_test_project("TEST")
-        seed = self._seed_sprint(project)
-        wi = self._make_work_item("_Test Roadmap Refused", seed.name)
-        ws, we = self._future_window()
-        before = frappe.db.count("Sprint")
-
-        with self.assertRaises(frappe.ValidationError) as ctx:
-            move_work_item(
-                work_item=wi.name,
-                target_sprint=None,
-                lane="TEST",
-                group_by="sprint_prefix",
-                window_start=ws,
-                window_end=we,
-            )
-
-        message = str(ctx.exception)
-        self.assertIn("grouped by Project", message)
-        self.assertNotIn("MandatoryError", message)
-        self.assertEqual(frappe.db.count("Sprint"), before, "no Sprint may be created")
-        wi.reload()
-        self.assertEqual(wi.sprint, seed.name, "the work item must not move")
-
-    def test_drop_for_project_without_prefix_gives_an_actionable_error(self):
-        good = ensure_test_project("TEST")
-        seed = self._seed_sprint(good)
-        bad, _ = self._seed_lane_without_prefix()
-        wi = self._make_work_item("_Test Roadmap NoPrefix", seed.name)
-        ws, we = self._future_window()
-
-        with self.assertRaises(frappe.ValidationError) as ctx:
-            move_work_item(
-                work_item=wi.name,
-                target_sprint=None,
-                lane=bad,
-                group_by="project",
-                window_start=ws,
-                window_end=we,
-            )
-        self.assertIn("Sprint Prefix", str(ctx.exception))
-
-    def test_move_to_an_explicit_sprint_still_works_under_prefix_grouping(self):
-        """Only auto-creation is gated; moving into an existing sprint is not."""
-        project = ensure_test_project("TEST")
-        seed = self._seed_sprint(project)
-        target = self._seed_sprint(project, start_date=add_days(today(), -7))
-        wi = self._make_work_item("_Test Roadmap Explicit", seed.name)
-
-        result = move_work_item(
-            work_item=wi.name, target_sprint=target.name, group_by="sprint_prefix"
-        )
-
-        self.assertEqual(result["target_sprint"], target.name)
-        wi.reload()
-        self.assertEqual(wi.sprint, target.name)
+		with self.assertRaises(frappe.ValidationError):
+			move_work_item(
+				work_item=item,
+				lane=self.projects["NOTSCRUM"],
+				window_start=add_days(start, 7),
+			)
