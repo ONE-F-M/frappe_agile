@@ -347,3 +347,301 @@ class TestRoadmapBoard(FrappeTestCase):
 				lane=self.projects["NOTSCRUM"],
 				window_start=add_days(start, 7),
 			)
+
+
+# ---------------------------------------------------------------------------
+# Backlog panel — ported from version-15 during the Step 14 reconciliation.
+#
+# get_unassigned_work_items is identical on both branches, but only version-15
+# carried its tests. They exist because an earlier sprint-cleanup revert removed
+# the method while the JS calling it was merged back, leaving the panel dead.
+# Dropping them here would remove the guard against that exact regression.
+# ---------------------------------------------------------------------------
+
+from frappe_agile.frappe_agile.page.roadmap_board.roadmap_board import (
+	get_unassigned_work_items,
+)
+from frappe_agile.tests.fixtures import (
+	TEST_PREFIXES,
+	delete_test_projects,
+	ensure_test_project,
+	test_project_name,
+)
+
+NO_PREFIX_PROJECT = "_Test Agile Project NOPREFIX"
+
+class RoadmapBoardTestCase(FrappeTestCase):
+    """create_missing_sprints commits, so rollback cannot be relied on."""
+
+    def setUp(self):
+        self._cleanup()
+        frappe.db.commit()
+        frappe.db.transaction_writes = 0
+        self.addCleanup(self._cleanup_and_commit)
+
+    def _cleanup(self):
+        sprints = frappe.get_all(
+            "Sprint", filters={"sprint_prefix": ("in", TEST_PREFIXES)}, pluck="name"
+        )
+        projects = [test_project_name(p) for p in TEST_PREFIXES] + [NO_PREFIX_PROJECT]
+        sprints += frappe.get_all("Sprint", filters={"project": ("in", projects)}, pluck="name")
+        if sprints:
+            frappe.db.delete("Sprint Work Item", {"parent": ("in", sprints)})
+            frappe.db.delete("Work Item", {"sprint": ("in", sprints)})
+            frappe.db.delete("Sprint", {"name": ("in", sprints)})
+        frappe.db.delete("Work Item", {"title": ("like", "_Test Roadmap%")})
+        delete_test_projects(extra_projects=[NO_PREFIX_PROJECT])
+
+    def _cleanup_and_commit(self):
+        self._cleanup()
+        frappe.db.commit()
+
+    # --- helpers -----------------------------------------------------------
+
+    def _seed_lane_without_prefix(self):
+        """A board lane whose Project has no Sprint Prefix.
+
+        Reached the only way it can be in practice: the Project had a prefix,
+        sprints were created under it, and the prefix was then cleared. (A
+        Project with no prefix can never get a first Sprint, since sprint_prefix
+        is mandatory — so it could not be a lane at all.)
+        """
+        if not frappe.db.exists("Project", NO_PREFIX_PROJECT):
+            frappe.get_doc(
+                {
+                    "doctype": "Project",
+                    "project_name": NO_PREFIX_PROJECT,
+                    "status": "Open",
+                    "custom_sprint_prefix": "NOPFX",
+                }
+            ).insert(ignore_permissions=True)
+        else:
+            frappe.db.set_value(
+                "Project", NO_PREFIX_PROJECT, "custom_sprint_prefix", "NOPFX", update_modified=False
+            )
+
+        sprint = self._seed_sprint(NO_PREFIX_PROJECT)
+
+        frappe.db.set_value(
+            "Project", NO_PREFIX_PROJECT, "custom_sprint_prefix", None, update_modified=False
+        )
+        return NO_PREFIX_PROJECT, sprint
+
+    def _seed_sprint(self, project, start_date=None):
+        """A sprint must already exist for a project to appear as a board lane."""
+        ws = align_to_sprint_start(start_date or add_days(today(), -14))
+        doc = frappe.get_doc(
+            {
+                "doctype": "Sprint",
+                "project": project,
+                "status": "Draft",
+                "start_date": ws,
+                "end_date": add_days(ws, SPRINT_SPAN_DAYS),
+                "sprint_goal": "seed",
+            }
+        )
+        doc.insert(ignore_permissions=True)
+        return doc
+
+    def _make_work_item(self, title, sprint_name):
+        wi = frappe.get_doc(
+            {
+                "doctype": "Work Item",
+                "work_item_type": "User Story",
+                "title": title,
+                "sprint": sprint_name,
+                "story_points": 3,
+                "workflow_state": "Open",
+                "status": "Open",
+            }
+        )
+        wi.insert(ignore_permissions=True)
+        return wi
+class TestUnassignedWorkItems(RoadmapBoardTestCase):
+    """The Roadmap's backlog panel calls `get_unassigned_work_items`.
+
+    The method was removed by the sprint-cleanup revert (af3b7cd) while the JS
+    that calls it was later merged back, leaving the panel dead with
+    "module has no attribute 'get_unassigned_work_items'". These tests pin the
+    contract the client actually depends on so the pair cannot drift apart
+    again silently.
+    """
+
+    def setUp(self):
+        super().setUp()
+        # The site carries real unsprinted work items, so every assertion below
+        # is about membership and relative order — never an exact result set.
+        self._restore_backlog_status = frappe.db.get_single_value(
+            "Frappe Agile Settings", "backlog_status"
+        )
+        self._set_backlog_status(None)
+        self.addCleanup(lambda: self._set_backlog_status(self._restore_backlog_status))
+
+    def _set_backlog_status(self, value):
+        frappe.db.set_single_value("Frappe Agile Settings", "backlog_status", value)
+
+    def _make_backlog_item(self, title, work_item_type="User Story", status="Open"):
+        """An unsprinted Work Item — what the backlog panel is for.
+
+        Two quirks of Work Item are worked around here rather than in the code
+        under test: the workflow engine stamps its own default state on insert
+        (so a requested `status` has to be forced afterwards), and story points
+        are rejected outright on Epics.
+        """
+        payload = {
+            "doctype": "Work Item",
+            "work_item_type": work_item_type,
+            "title": title,
+            "project": ensure_test_project("TEST"),
+        }
+        if work_item_type != "Epic":
+            payload["story_points"] = 2
+
+        wi = frappe.get_doc(payload)
+        wi.insert(ignore_permissions=True)
+
+        if wi.status != status:
+            frappe.db.set_value(
+                "Work Item",
+                wi.name,
+                {"status": status, "workflow_state": status},
+                update_modified=False,
+            )
+            wi.reload()
+        return wi
+
+    def _names(self, **kwargs):
+        return [row["name"] for row in get_unassigned_work_items(**kwargs)]
+
+    # --- the regression itself ---------------------------------------------
+
+    def test_module_exposes_the_whitelisted_method(self):
+        """The exact failure that was reported: the client resolves this method
+        by dotted path, so its absence is an AttributeError at call time rather
+        than anything the linter or the tests would otherwise notice."""
+        from frappe_agile.frappe_agile.page.roadmap_board import roadmap_board
+
+        method = getattr(roadmap_board, "get_unassigned_work_items", None)
+        self.assertIsNotNone(method, "roadmap_board.js calls this by dotted path")
+        self.assertIn(method, frappe.whitelisted, "must be callable from the client")
+
+    # --- what belongs in the backlog ---------------------------------------
+
+    def test_returns_items_with_no_sprint(self):
+        wi = self._make_backlog_item("_Test Roadmap Backlog Loose")
+        self.assertIn(wi.name, self._names())
+
+    def test_excludes_items_already_on_a_sprint(self):
+        sprint = self._seed_sprint(ensure_test_project("TEST"))
+        wi = self._make_work_item("_Test Roadmap Backlog Sprinted", sprint.name)
+        self.assertNotIn(wi.name, self._names())
+
+    def test_excludes_epics(self):
+        """Epics are containers, not schedulable work — they must never be
+        draggable onto a sprint from the backlog."""
+        epic = self._make_backlog_item("_Test Roadmap Backlog Epic", work_item_type="Epic")
+        self.assertNotIn(epic.name, self._names())
+
+    def test_includes_every_schedulable_type(self):
+        made = {
+            t: self._make_backlog_item(f"_Test Roadmap Backlog {t}", work_item_type=t).name
+            for t in ("Task", "User Story", "Bug")
+        }
+        names = self._names()
+        for work_item_type, name in made.items():
+            self.assertIn(name, names, f"{work_item_type} should appear in the backlog")
+
+    # --- ordering and paging ------------------------------------------------
+
+    def test_newest_modified_first(self):
+        older = self._make_backlog_item("_Test Roadmap Backlog Older")
+        newer = self._make_backlog_item("_Test Roadmap Backlog Newer")
+        # Insert order does not guarantee distinct timestamps; force the gap so
+        # the assertion is about the ordering rule, not about clock resolution.
+        frappe.db.set_value(
+            "Work Item", older.name, "modified", add_days(today(), -3), update_modified=False
+        )
+        frappe.db.set_value(
+            "Work Item", newer.name, "modified", today(), update_modified=False
+        )
+
+        names = self._names()
+        self.assertLess(
+            names.index(newer.name), names.index(older.name), "most recently edited first"
+        )
+
+    def test_limit_is_respected(self):
+        for i in range(3):
+            self._make_backlog_item(f"_Test Roadmap Backlog Limit {i}")
+        self.assertLessEqual(len(self._names(limit=2)), 2)
+
+    # --- the Backlog Status setting ----------------------------------------
+
+    def test_blank_backlog_status_shows_every_status(self):
+        open_item = self._make_backlog_item("_Test Roadmap Backlog Open", status="Open")
+        draft_item = self._make_backlog_item("_Test Roadmap Backlog Draft", status="Draft")
+
+        names = self._names()
+        self.assertIn(open_item.name, names)
+        self.assertIn(draft_item.name, names)
+
+    def test_backlog_status_narrows_the_panel(self):
+        open_item = self._make_backlog_item("_Test Roadmap Backlog Keep", status="Open")
+        draft_item = self._make_backlog_item("_Test Roadmap Backlog Drop", status="Draft")
+
+        self._set_backlog_status("Open")
+
+        names = self._names()
+        self.assertIn(open_item.name, names)
+        self.assertNotIn(draft_item.name, names)
+
+    # --- the contract the client reads --------------------------------------
+
+    def test_payload_carries_every_field_the_client_renders(self):
+        """roadmap_board.js reads these keys directly in _backlog_item_html; a
+        rename here shows up as a blank card rather than an error."""
+        wi = self._make_backlog_item("_Test Roadmap Backlog Shape")
+
+        row = next(r for r in get_unassigned_work_items() if r["name"] == wi.name)
+
+        self.assertEqual(row["title"], "_Test Roadmap Backlog Shape")
+        self.assertEqual(row["type"], "User Story")
+        self.assertEqual(row["status"], "Open")
+        self.assertEqual(row["story_points"], 2)
+        self.assertTrue(row["modified"], "prettyDate() needs a modified timestamp")
+        self.assertFalse(row["accepted"], "an Open item is not accepted")
+
+    def test_title_falls_back_to_the_name(self):
+        """The card would otherwise render an empty row."""
+        wi = self._make_backlog_item("_Test Roadmap Backlog Untitled")
+        frappe.db.set_value("Work Item", wi.name, "title", "", update_modified=False)
+
+        row = next(r for r in get_unassigned_work_items() if r["name"] == wi.name)
+        self.assertEqual(row["title"], wi.name)
+class TestBacklogStatusValidation(FrappeTestCase):
+    """Backlog Status is free-text but drives a status filter, so a typo would
+    silently empty the panel rather than fail."""
+
+    def tearDown(self):
+        frappe.db.rollback()
+
+    def test_rejects_a_status_that_does_not_exist(self):
+        settings = frappe.get_single("Frappe Agile Settings")
+        settings.backlog_status = "Not A Real Status"
+        with self.assertRaises(frappe.ValidationError) as ctx:
+            settings.validate_backlog_status()
+        self.assertIn("not a valid Work Item status", str(ctx.exception))
+
+    def test_accepts_a_real_status(self):
+        from frappe_agile.frappe_agile.doctype.frappe_agile_settings.frappe_agile_settings import (
+            work_item_status_options,
+        )
+
+        settings = frappe.get_single("Frappe Agile Settings")
+        settings.backlog_status = work_item_status_options()[0]
+        settings.validate_backlog_status()  # must not raise
+
+    def test_blank_is_allowed(self):
+        settings = frappe.get_single("Frappe Agile Settings")
+        settings.backlog_status = None
+        settings.validate_backlog_status()  # must not raise
