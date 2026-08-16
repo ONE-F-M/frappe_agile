@@ -4,14 +4,21 @@
 """Server-side data provider for the Roadmap board page.
 
 The Roadmap renders a Kanban-style grid:
-  - Rows    = a "lane" (sprint prefix, or linked Project) — each lane runs a
-              sequence of sprints over time.
+  - Rows    = one lane per **active SCRUM Project** — each lane runs a sequence
+              of sprints over time. The row axis is always the Project; there is
+              no other grouping. A project with no sprints yet still gets a lane
+              so work can be planned into it.
   - Columns = weekly time windows, aligned across lanes by sprint start_date.
               The axis is extended with empty *future* windows so work can be
               planned ahead and dragged into upcoming sprints.
-  - Cells   = the Sprint that falls in that (lane, window), with its status,
+  - Cells   = the Sprint that falls in that (project, window), with its status,
               story-point acceptance %, and the list of work items (each shown
               with a checkbox marking whether the item is accepted / Done).
+
+"Active SCRUM Project" is a hard restriction — Project Type "SCRUM Project" and
+Is Active "Yes". On top of that the user narrows the board with a multi-select
+**Project Status** filter (Open / Completed / Cancelled); leaving it empty shows
+every status.
 
 Acceptance is computed live from the work items rather than from the stored
 `points_accepted` field so the board is always accurate even if that cached
@@ -19,15 +26,7 @@ field is stale.
 
 Work items can be moved between sprints via `move_work_item` (drag & drop on
 the client). Dropping into an empty future slot auto-creates a Draft Sprint for
-that lane/window.
-
-Sprint creation (both the drop-into-empty-slot path and the "create missing
-sprints" bulk action) is only available when grouping by **project**. A Sprint
-requires a Project, and its `sprint_prefix` is read-only and fetched from
-`project.custom_sprint_prefix` — so the project has to be known up front, and
-only the project lane supplies it. Under sprint-prefix grouping the lane is a
-bare prefix string that does not identify a project, so creation is refused
-there rather than guessed at.
+that project/window, named from the project's Sprint Prefix.
 """
 
 import frappe
@@ -40,39 +39,51 @@ ACCEPTED_STATUS = "Done"
 # Default number of empty future sprint windows to project forward for planning.
 DEFAULT_FUTURE_COUNT = 8
 
+# Only projects of this type, and only while they are active, appear on the board.
+SCRUM_PROJECT_TYPE = "SCRUM Project"
+
+# The Project statuses the multi-select filter may narrow the board to.
+PROJECT_STATUSES = ("Open", "Completed", "Cancelled")
+
 # Sprints run Wednesday → Tuesday (7-day window). The cadence helpers live on the
 # Sprint controller so the board and the doctype stay in lock-step.
 from frappe_agile.frappe_agile.doctype.sprint.sprint import (  # noqa: E402
 	SPRINT_SPAN_DAYS,
+	SPRINT_START_WEEKDAY,
 	align_to_sprint_start,
 )
 
 
 @frappe.whitelist()
-def get_roadmap_data(group_by="sprint_prefix", lane=None, sprint_status=None, search=None, future_count=None):
-	"""Return the full roadmap grid.
+def get_roadmap_data(project_status=None, lane=None, sprint_status=None, search=None, future_count=None):
+	"""Return the full roadmap grid, one row per active SCRUM Project.
 
 	Args:
-		group_by: "sprint_prefix" (default) or "project" — controls the row axis.
-		lane: optional, restrict to a single lane (prefix or project value).
+		project_status: optional multi-select of Project statuses (list or JSON
+			list of "Open" / "Completed" / "Cancelled"). Empty = every status.
+		lane: optional, restrict to a single Project.
 		sprint_status: optional, restrict to sprints in this status.
 		search: optional, free-text filter on work item title / sprint name.
 		future_count: how many empty future sprint windows to append for planning.
 
 	Returns dict: {columns: [...], rows: [...], cells: {cell_key: {...}}}
 	"""
-	if group_by not in ("sprint_prefix", "project"):
-		group_by = "sprint_prefix"
-
 	frappe.has_permission("Sprint", "read", throw=True)
 	frappe.has_permission("Work Item", "read", throw=True)
 
 	future_count = cint(future_count) if future_count not in (None, "") else DEFAULT_FUTURE_COUNT
-	sprint_filters = {}
+
+	# The row axis is the project list, not the sprint list — a brand-new project
+	# with no sprints must still get a lane to plan into.
+	projects = _scrum_projects(project_status=project_status, lane=lane)
+	if not projects:
+		return {"columns": [], "rows": [], "cells": {}, "missing_count": 0}
+
+	project_names = [p.name for p in projects]
+
+	sprint_filters = {"project": ["in", project_names]}
 	if sprint_status:
 		sprint_filters["status"] = sprint_status
-	if lane:
-		sprint_filters[group_by] = lane
 
 	sprints = frappe.get_list(
 		"Sprint",
@@ -93,26 +104,27 @@ def get_roadmap_data(group_by="sprint_prefix", lane=None, sprint_status=None, se
 		limit_page_length=0,
 	)
 
-	if not sprints:
-		return {"columns": [], "rows": [], "cells": {}, "group_by": group_by}
-
 	# --- Fetch all work items for these sprints in one query ---
 	sprint_names = [s.name for s in sprints]
-	work_items = frappe.get_list(
-		"Work Item",
-		filters={"sprint": ["in", sprint_names]},
-		fields=[
-			"name",
-			"title",
-			"work_item_type",
-			"status",
-			"story_points",
-			"sprint",
-			"epic",
-			"assignee_user",
-		],
-		order_by="story_points desc, name asc",
-		limit_page_length=0,
+	work_items = (
+		frappe.get_list(
+			"Work Item",
+			filters={"sprint": ["in", sprint_names]},
+			fields=[
+				"name",
+				"title",
+				"work_item_type",
+				"status",
+				"story_points",
+				"sprint",
+				"epic",
+				"assignee_user",
+			],
+			order_by="story_points desc, name asc",
+			limit_page_length=0,
+		)
+		if sprint_names
+		else []
 	)
 
 	search_term = (search or "").strip().lower()
@@ -156,52 +168,52 @@ def get_roadmap_data(group_by="sprint_prefix", lane=None, sprint_status=None, se
 			and getdate(col["start_date"]) <= today <= getdate(col["end_date"])
 		)
 
-	# --- Build rows (lanes) and cells ---
+	# --- Build rows (one per project, in project order) and cells ---
 	rows = {}
-	cells = {}
+	row_list = []
+	for p in projects:
+		row = {
+			"key": p.name,
+			"label": p.project_name or p.name,
+			"prefix": (p.custom_sprint_prefix or "").strip(),
+			"project_status": p.status,
+			"sprint_count": 0,
+		}
+		rows[p.name] = row
+		row_list.append(row)
 
+	cells = {}
 	for s in sprints:
 		if not s.start_date:
 			continue
 
-		lane_key = (s.get(group_by) or "").strip()
-		if not lane_key:
-			lane_key = _("(Unassigned)")
-
-		row = rows.setdefault(
-			lane_key,
-			{"key": lane_key, "label": lane_key, "projects": set(), "sprint_count": 0},
-		)
+		row = rows.get(s.project)
+		if row is None:
+			# Shouldn't happen — sprints were queried for these projects only.
+			continue
 		row["sprint_count"] += 1
-		if s.project:
-			row["projects"].add(s.project)
 
 		col_key = getdate(s.start_date).isoformat()
-		cell_key = f"{lane_key}::{col_key}"
+		cell_key = f"{s.project}::{col_key}"
 
 		sprint_items = items_by_sprint.get(s.name, [])
 		cell = _build_cell(s, sprint_items, search_term, epic_titles)
 
-		# Two sprints may collide in one (lane, window); keep the richer one.
+		# Two sprints may collide in one (project, window); keep the richer one.
 		existing = cells.get(cell_key)
 		if existing is None or len(cell["work_items"]) > len(existing["work_items"]):
 			cells[cell_key] = cell
 
-	# Finalise rows: turn project sets into a sorted list, sort lanes by label.
-	row_list = []
-	for r in rows.values():
-		r["projects"] = sorted(r["projects"])
-		row_list.append(r)
-	row_list.sort(key=lambda r: r["label"].lower())
+	# How many upcoming windows still need a sprint — drives the "Create Missing
+	# Sprints" button. Computed the same way as the creator so the count converges
+	# to zero once they are created.
+	missing_count = len(_missing_upcoming_windows(projects, future_count))
 
 	return {
-		"group_by": group_by,
 		"columns": columns,
 		"rows": row_list,
 		"cells": cells,
-		# Drives the "Create Missing Sprint(s)" control, which is only offered
-		# under project grouping (see create_missing_sprints).
-		"missing_count": _board_missing_count(sprints, group_by, future_count),
+		"missing_count": missing_count,
 	}
 
 
@@ -269,19 +281,55 @@ def get_unassigned_work_items(limit=200):
 	]
 
 
-def _board_missing_count(sprints, group_by, future_count):
-	"""How many upcoming (project, window) slots on this board have no Sprint.
+def _scrum_projects(project_status=None, lane=None):
+	"""Active SCRUM Projects the current user may read, in display order.
 
-	Zero under any grouping other than project: Sprints cannot be created from a
-	prefix lane, so there is nothing to offer.
+	These are the Roadmap's rows. "Active SCRUM Project" is fixed (Project Type
+	"SCRUM Project" + Is Active "Yes"); `project_status` is the user-facing
+	multi-select narrowing that set further, and `lane` pins a single project.
+	`frappe.get_list` keeps the result permission-scoped.
 	"""
-	if group_by != "project":
-		return 0
+	frappe.has_permission("Project", "read", throw=True)
 
-	board_projects = sorted({(s.project or "").strip() for s in sprints if (s.project or "").strip()})
-	prefixes = _project_prefixes(board_projects)
-	creatable = [p for p in board_projects if prefixes.get(p)]
-	return len(_missing_upcoming_windows(creatable, future_count))
+	filters = {"project_type": SCRUM_PROJECT_TYPE, "is_active": "Yes"}
+
+	statuses = _parse_status_selection(project_status)
+	if statuses:
+		filters["status"] = ["in", statuses]
+	if lane:
+		filters["name"] = lane
+
+	return frappe.get_list(
+		"Project",
+		filters=filters,
+		fields=["name", "project_name", "status", "custom_sprint_prefix"],
+		order_by="project_name asc, name asc",
+		limit_page_length=0,
+	)
+
+
+def _parse_status_selection(project_status):
+	"""Normalise the Project Status multi-select into a list of known statuses.
+
+	Accepts a list, a JSON-encoded list, or a single status string. Unknown
+	values are dropped so a forged filter can never widen the query beyond the
+	three Project statuses.
+	"""
+	if project_status in (None, ""):
+		return []
+	if isinstance(project_status, str):
+		project_status = project_status.strip()
+		if project_status.startswith("["):
+			project_status = frappe.parse_json(project_status)
+		else:
+			project_status = [project_status]
+	return [s for s in {(v or "").strip() for v in project_status} if s in PROJECT_STATUSES]
+
+
+def _current_window_start(reference_date=None):
+	"""Start (Wednesday) of the standard sprint window containing *reference_date*."""
+	d = getdate(reference_date or getdate())
+	return add_days(d, -((d.weekday() - SPRINT_START_WEEKDAY) % 7))
 
 
 def _build_future_columns(existing, future_count):
@@ -293,13 +341,20 @@ def _build_future_columns(existing, future_count):
 	irregular (e.g. two-week) trailing sprint. Generation continues until
 	`future_count` windows lie beyond today, filling any gap up to today as well.
 	Capped to avoid runaway generation.
+
+	With no existing windows at all (every shown project is sprint-less) the axis
+	is seeded from the *current* window, so the board still renders a usable
+	timeline to plan the first sprints into.
 	"""
-	if not existing or future_count <= 0:
+	if future_count <= 0:
 		return []
 
-	# Start strictly after the latest end_date among existing windows.
-	last_end = max(getdate(c.get("end_date") or c["start_date"]) for c in existing)
-	start = align_to_sprint_start(add_days(last_end, 1))
+	if existing:
+		# Start strictly after the latest end_date among existing windows.
+		last_end = max(getdate(c.get("end_date") or c["start_date"]) for c in existing)
+		start = align_to_sprint_start(add_days(last_end, 1))
+	else:
+		start = _current_window_start()
 
 	today = getdate()
 	future = []
@@ -406,18 +461,15 @@ def move_work_item(
 	work_item,
 	target_sprint=None,
 	lane=None,
-	group_by="sprint_prefix",
 	window_start=None,
 	window_end=None,
 ):
 	"""Move a Work Item into `target_sprint`.
 
 	If `target_sprint` is not given, an empty future slot was targeted: a Draft
-	Sprint is auto-created for the (lane, window). Auto-creation is only possible
-	when grouping by project — a Sprint requires a Project, and only the project
-	lane identifies one. Under sprint-prefix grouping the lane is a bare prefix
-	that may belong to no project at all, so the move is refused with guidance
-	rather than creating an unowned Sprint.
+	Sprint is auto-created for the (project, window). `lane` is the project; the
+	new Sprint is named from that project's Sprint Prefix, so a project without
+	one cannot be planned into until the prefix is set.
 
 	Saving the Work Item runs its normal `on_update`, which keeps the Sprint Work
 	Item child tables in sync, marks the item as brought-forward, recalculates
@@ -428,11 +480,10 @@ def move_work_item(
 
 	created = False
 	if not target_sprint:
-		if group_by != "project" or not lane or not window_start:
+		if not lane or not window_start:
 			frappe.throw(
-				_("No sprint exists for this slot. Sprints can only be created from the "
-				  "Roadmap when it is grouped by Project — switch Group by to Project, "
-				  "or create the Sprint first and then move the item.")
+				_("No sprint exists for this slot and one cannot be auto-created here. "
+				  "Create a Sprint first, then move the item.")
 			)
 		target_sprint, created = _ensure_sprint_for_window(lane, window_start, window_end)
 
@@ -454,30 +505,8 @@ def move_work_item(
 	}
 
 
-def _require_creatable_project(project):
-	"""Validate that Sprints can actually be created for *project*.
-
-	Sprint.sprint_prefix is reqd, read-only and fetched from the Project, so a
-	Project without one produces a bare MandatoryError on sprint_prefix that
-	says nothing about the real cause. Fail with an actionable message instead.
-	"""
-	if not project:
-		frappe.throw(_("A Project is required to create a Sprint."))
-
-	if not frappe.db.exists("Project", project):
-		frappe.throw(_("Project {0} does not exist.").format(project))
-
-	if not frappe.db.get_value("Project", project, "custom_sprint_prefix"):
-		frappe.throw(
-			_(
-				"Project {0} has no Sprint Prefix, so its Sprints cannot be named. "
-				"Set one on the Project first."
-			).format(project)
-		)
-
-
 def _ensure_sprint_for_window(project, window_start, window_end):
-	"""Return an existing sprint for (project, window) or create one.
+	"""Return an existing sprint for (project, window) or create a Draft one.
 
 	Returns (sprint_name, created_bool).
 	"""
@@ -489,28 +518,51 @@ def _ensure_sprint_for_window(project, window_start, window_end):
 	if existing:
 		return existing, False
 
+	prefix = _sprint_prefix_for_project(project)
+
 	if not frappe.has_permission("Sprint", "create"):
 		frappe.throw(
 			_("A new Sprint is needed for this slot, but you lack permission to create Sprints."),
 			frappe.PermissionError,
 		)
 
-	_require_creatable_project(project)
-
-	# sprint_prefix is deliberately not set: it is read-only and fetched from
-	# project.custom_sprint_prefix, so setting it here would be overwritten.
 	doc = frappe.get_doc(
 		{
 			"doctype": "Sprint",
 			"project": project,
+			"sprint_prefix": prefix,
 			"status": "Draft",
 			"start_date": ws,
 			"end_date": we,
 			"sprint_goal": _("Planned via Roadmap"),
+			"business_analyst": _latest_business_analyst(project),
 		}
 	)
 	doc.insert()
 	return doc.name, True
+
+
+def _sprint_prefix_for_project(project):
+	"""Sprint Prefix of an active SCRUM Project, or throw explaining why not."""
+	row = frappe.db.get_value(
+		"Project",
+		project,
+		["project_type", "is_active", "custom_sprint_prefix"],
+		as_dict=True,
+	)
+	if not row or row.project_type != SCRUM_PROJECT_TYPE or row.is_active != "Yes":
+		frappe.throw(
+			_("{0} is not an active SCRUM Project, so sprints cannot be planned for it here.").format(project)
+		)
+
+	prefix = (row.custom_sprint_prefix or "").strip()
+	if not prefix:
+		frappe.throw(
+			_("Project {0} has no Sprint Prefix — set one on the Project before planning sprints for it.").format(
+				project
+			)
+		)
+	return prefix
 
 
 def _latest_business_analyst(project):
@@ -526,15 +578,20 @@ def _latest_business_analyst(project):
 
 
 def _missing_upcoming_windows(projects, future_count):
-	"""Return [(project, window_start, window_end)] that need a Draft sprint.
+	"""Return [(project, prefix, window_start, window_end)] needing a Draft sprint.
 
 	The target for each project is the next ``future_count`` standard Wed→Tue
 	windows strictly after today. A window is "missing" when no sprint of that
-	project already starts on it. This is idempotent: once the target windows are
-	filled, the result is empty (so the create button can hide).
+	project already starts on it. Projects without a Sprint Prefix are skipped —
+	there would be nothing to name the sprint from. This is idempotent: once the
+	target windows are filled, the result is empty (so the create button hides).
 	"""
-	projects = [p for p in (projects or []) if p]
-	if not projects or future_count <= 0:
+	planned = [
+		(p["name"], (p.get("custom_sprint_prefix") or "").strip())
+		for p in (projects or [])
+		if (p.get("custom_sprint_prefix") or "").strip()
+	]
+	if not planned or future_count <= 0:
 		return []
 
 	today = getdate()
@@ -545,80 +602,62 @@ def _missing_upcoming_windows(projects, future_count):
 	# One query for all existing (project, start_date) pairs in the target range.
 	existing_rows = frappe.get_all(
 		"Sprint",
-		filters={"project": ["in", projects], "start_date": ["in", target_starts]},
+		filters={"project": ["in", [n for n, _p in planned]], "start_date": ["in", target_starts]},
 		fields=["project", "start_date"],
 	)
 	existing = {(r.project, getdate(r.start_date)) for r in existing_rows}
 
 	missing = []
-	for project in projects:
+	for name, prefix in planned:
 		for ws in target_starts:
-			if (project, getdate(ws)) not in existing:
-				missing.append((project, ws, add_days(ws, SPRINT_SPAN_DAYS)))
+			if (name, getdate(ws)) not in existing:
+				missing.append((name, prefix, ws, add_days(ws, SPRINT_SPAN_DAYS)))
 	return missing
 
 
 @frappe.whitelist()
-def create_missing_sprints(group_by="project", lane=None, sprint_status=None, future_count=None, lanes=None):
+def create_missing_sprints(project_status=None, lane=None, future_count=None, lanes=None):
 	"""Create Draft sprints for every upcoming window that has no sprint yet.
 
 	For each project lane shown on the board, a Draft Sprint is created for each
 	upcoming window (within the Plan-ahead range) that does not already have one.
-	New sprints inherit the project's latest Business Analyst.
+	New sprints are named from the project's Sprint Prefix and inherit that
+	project's latest Business Analyst.
 
 	Args:
-		lanes: optional JSON list of project names to restrict creation to.
-			When given, only those projects are filled (the Business Analyst
-			selected a subset of projects on the board); otherwise every project
-			on the board is filled.
+		lanes: optional JSON list of Projects to restrict creation to. When
+			given, only those projects are filled (the Business Analyst selected
+			a subset on the board); otherwise every project on the board is.
 
-	Only supported when grouping by project: a Sprint requires a Project, and its
-	name comes from that Project's Sprint Prefix. Returns
-	{"created": [names], "created_count": n, "skipped": [{project, reason}]}.
+	Returns {"created": [names], "created_count": n}.
 	"""
-	if group_by != "project":
-		frappe.throw(
-			_("Missing sprints can only be created when the Roadmap is grouped by Project, "
-			  "because every Sprint must belong to a Project.")
-		)
-
 	frappe.has_permission("Sprint", "create", throw=True)
 
 	future_count = cint(future_count) if future_count not in (None, "") else DEFAULT_FUTURE_COUNT
 
-	projects = _board_projects(lane, sprint_status)
+	projects = _scrum_projects(project_status=project_status, lane=lane)
 
 	# Restrict to the projects the user selected, if any. Intersecting with the
-	# board projects keeps a stale/forged selection from creating off-board lanes.
+	# board projects keeps a stale/forged selection from creating off-board sprints.
 	selected = _parse_lane_selection(lanes)
 	if selected is not None:
-		projects = [p for p in projects if p in selected]
+		projects = [p for p in projects if p.name in selected]
 
-	# A project with no Sprint Prefix cannot name its sprints. Skip it with a
-	# reason rather than aborting the whole batch for the other projects.
-	creatable, skipped = [], []
-	prefixes = _project_prefixes(projects)
-	for project in projects:
-		if prefixes.get(project):
-			creatable.append(project)
-		else:
-			skipped.append({"project": project, "reason": _("No Sprint Prefix set on the Project.")})
-
-	missing = _missing_upcoming_windows(creatable, future_count)
+	missing = _missing_upcoming_windows(projects, future_count)
 	if not missing:
-		return {"created": [], "created_count": 0, "skipped": skipped}
+		return {"created": [], "created_count": 0}
 
 	ba_by_project = {}
 	created = []
-	for project, ws, we in missing:
+	for project, prefix, ws, we in missing:
 		if project not in ba_by_project:
 			ba_by_project[project] = _latest_business_analyst(project)
 
-		# sprint_prefix is omitted on purpose — read-only, fetched from the Project.
 		doc = frappe.get_doc(
 			{
 				"doctype": "Sprint",
 				"project": project,
+				"sprint_prefix": prefix,
 				"status": "Draft",
 				"start_date": ws,
 				"end_date": we,
@@ -630,51 +669,19 @@ def create_missing_sprints(group_by="project", lane=None, sprint_status=None, fu
 		created.append(doc.name)
 
 	frappe.db.commit()
-	return {"created": created, "created_count": len(created), "skipped": skipped}
+	return {"created": created, "created_count": len(created)}
 
 
 def _parse_lane_selection(lanes):
-	"""Normalise the client's lane selection into a set of prefixes, or None.
+	"""Normalise the client's lane selection into a set of projects, or None.
 
-	Returns None when no selection was made (create for all tracks) and a set of
-	trimmed, non-empty prefixes otherwise. An empty selection also returns an
-	empty set so nothing is created — the caller distinguishes it from None.
+	Returns None when no selection was made (create for every project) and a set
+	of trimmed, non-empty project names otherwise. An empty selection also
+	returns an empty set so nothing is created — the caller distinguishes it
+	from None.
 	"""
 	if lanes in (None, ""):
 		return None
 	if isinstance(lanes, str):
 		lanes = frappe.parse_json(lanes)
 	return {(p or "").strip() for p in (lanes or []) if (p or "").strip()}
-
-
-def _board_projects(lane=None, sprint_status=None):
-	"""Distinct, non-empty projects shown on the board for the filters."""
-	sprint_filters = {}
-	if sprint_status:
-		sprint_filters["status"] = sprint_status
-	if lane:
-		sprint_filters["project"] = lane
-
-	rows = frappe.get_all(
-		"Sprint",
-		filters=sprint_filters,
-		fields=["project"],
-		distinct=True,
-		limit_page_length=0,
-	)
-	return sorted({(r.project or "").strip() for r in rows if (r.project or "").strip()})
-
-
-def _project_prefixes(projects):
-	"""Map {project: custom_sprint_prefix} for the given projects, in one query."""
-	projects = [p for p in (projects or []) if p]
-	if not projects:
-		return {}
-
-	rows = frappe.get_all(
-		"Project",
-		filters={"name": ["in", projects]},
-		fields=["name", "custom_sprint_prefix"],
-		limit_page_length=0,
-	)
-	return {r.name: (r.custom_sprint_prefix or "").strip() for r in rows}

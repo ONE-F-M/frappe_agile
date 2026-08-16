@@ -160,9 +160,9 @@ function setupListViewFilters(listview) {
 		let filters_to_add = [
 			{ fieldname: 'work_item_type', fieldtype: 'Select', options: type_options, label: __('Work Item Type'), placeholder: __('Work Item Type') },
 			{ fieldname: 'status', fieldtype: 'Select', options: status_options, label: __('Status'), placeholder: __('Status') },
-			{ fieldname: 'sprint', fieldtype: 'Link', options: 'Sprint', label: __('Sprint'), placeholder: __('Sprint'),
-				get_query: function() { return { filters: { "status": "Active" } }; }
-			},
+			// Sprint is unfiltered: this is a search affordance, so every Sprint must be
+			// selectable — restricting it to Active hid Work Items on Draft/Completed Sprints.
+			{ fieldname: 'sprint', fieldtype: 'Link', options: 'Sprint', label: __('Sprint'), placeholder: __('Sprint') },
 			{ fieldname: 'epic', fieldtype: 'Link', options: 'Work Item', label: __('Epic'), placeholder: __('Epic'),
 				get_query: function() { return { filters: { "work_item_type": "Epic" } }; }
 			},
@@ -260,9 +260,8 @@ function setupKanbanFilters(listview) {
 		listview.custom_kanban_controls = {};
 
 		let filters_to_add = [
-			{ fieldname: 'sprint', fieldtype: 'Link', options: 'Sprint', label: __('Sprint'), placeholder: __('Sprint'),
-				get_query: function() { return { filters: { "status": "Active" } }; }
-			},
+			// Sprint is unfiltered — see the List view filter bar above for the rationale.
+			{ fieldname: 'sprint', fieldtype: 'Link', options: 'Sprint', label: __('Sprint'), placeholder: __('Sprint') },
 			{ fieldname: 'epic', fieldtype: 'Link', options: 'Work Item', label: __('Epic'), placeholder: __('Epic'),
 				get_query: function() { return { filters: { "work_item_type": "Epic" } }; }
 			},

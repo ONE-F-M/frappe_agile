@@ -10,6 +10,10 @@ from frappe.utils import add_days, cint, flt, getdate
 SPRINT_START_WEEKDAY = 2  # Monday=0 … Wednesday=2
 SPRINT_SPAN_DAYS = 6  # start + 6 days = the following Tuesday (7-day window)
 
+# Extra names to try past the ones already taken when the naming-series counter
+# has fallen behind. Bounded by real data plus this, so naming can never spin.
+NAMING_SKIP_HEADROOM = 100
+
 
 def align_to_sprint_start(d):
 	"""Return the sprint-start weekday (Wednesday) on or after date *d*."""
@@ -25,10 +29,39 @@ def default_sprint_window(reference_date=None):
 
 class Sprint(Document):
 	def autoname(self):
-		if not self.name and self.sprint_prefix:
-			self.sprint_prefix = self.sprint_prefix.strip()
-			from frappe.model.naming import make_autoname
-			self.name = make_autoname(f"{self.sprint_prefix}-.###")
+		"""Name the sprint `<prefix>-###`, skipping numbers already in use.
+
+		`make_autoname` trusts the stored series counter, which can lag the sprints
+		that actually exist — a site restore, a bulk import or a rename all leave it
+		behind. It then hands back a name that is already taken and the insert dies
+		with "Sprint <name> already exists", which took out the Roadmap's
+		"Create Missing Sprint(s)" for the whole project. Draw again until the name
+		is free so the counter walks itself back into sync.
+		"""
+		if self.name or not self.sprint_prefix:
+			return
+
+		from frappe.model.naming import make_autoname
+
+		self.sprint_prefix = self.sprint_prefix.strip()
+		series = f"{self.sprint_prefix}-.###"
+
+		# One query up front; the loop then only pays for the counter increment.
+		taken = set(frappe.get_all("Sprint", filters={"sprint_prefix": self.sprint_prefix}, pluck="name"))
+		for _attempt in range(len(taken) + NAMING_SKIP_HEADROOM):
+			candidate = make_autoname(series)
+			# `taken` covers this prefix; the exists() check also catches a sprint
+			# renamed into this number range under a different prefix.
+			if candidate not in taken and not frappe.db.exists("Sprint", candidate):
+				self.name = candidate
+				return
+
+		frappe.throw(
+			_("Could not generate a free Sprint name for prefix <b>{0}</b> — every candidate is already taken.").format(
+				self.sprint_prefix
+			),
+			title=_("Sprint Naming Failed"),
+		)
 
 	def _is_transitioning_to_completed(self):
 		"""True only when an existing Sprint is being moved to Completed.
@@ -53,14 +86,8 @@ class Sprint(Document):
 			return
 
 		if self._is_transitioning_to_completed():
-			# Bug fix: the form payload that triggered this save may carry
-			# expected_velocity = 0 (the client value dropped when items were
-			# moved out by handle_incomplete_items).  Restore from the
-			# pre-save DB snapshot, which was correctly set by
-			# handle_incomplete_items before frm.save() was called.
-			# The same applies to stories_carried_forward and
-			# points_carried_forward which are also set by
-			# handle_incomplete_items before the client save.
+			# Restore the carry-forward snapshot from the pre-save DB state, since
+			# the form payload may carry stale zeros after items were moved out.
 			doc_before = self.get_doc_before_save()
 			if doc_before is not None:
 				self.db_set(
@@ -324,6 +351,7 @@ def _make_new_sprint(source_doc, extra_fields=None):
 		"doctype": "Sprint",
 		"sprint_prefix": source_doc.sprint_prefix,
 		"project": source_doc.project,
+		"business_analyst": source_doc.business_analyst,
 		"status": "Draft",
 		"start_date": new_start,
 		"end_date": new_end,
@@ -337,39 +365,62 @@ def _make_new_sprint(source_doc, extra_fields=None):
 	return new_sprint.name
 
 
+def _find_next_existing_sprint(source_doc):
+	"""Return the sprint that already follows *source_doc*, or None.
+
+	"The next sprint already exists" is deliberately not tied to the exact
+	Wed→Tue window: a sprint the team planned by hand, or one whose window no
+	longer lines up because *source_doc* ran long or short, is still the next
+	sprint. Any non-Completed Sprint of the same prefix that starts once
+	*source_doc* has finished qualifies, and the earliest one wins.
+
+	Matching on the computed window alone used to miss those and create a second
+	Sprint for a week that was already planned.
+	"""
+	candidates = frappe.get_all(
+		"Sprint",
+		filters={
+			"sprint_prefix": source_doc.sprint_prefix,
+			"start_date": [">=", add_days(source_doc.end_date, 1)],
+			"status": ["!=", "Completed"],
+			"name": ["!=", source_doc.name],
+		},
+		pluck="name",
+		order_by="start_date asc, creation asc",
+		limit=1,
+	)
+	return candidates[0] if candidates else None
+
+
 @frappe.whitelist()
 def get_or_create_target_sprint(sprint_name: str) -> str:
-	"""
-	Calculates the next sequential sprint.
-	If it exists and is Draft, returns it.
-	If it doesn't exist, creates it in Draft silently and returns it.
-	Falls back to normal creation if the sequence is broken.
-	"""
-	import re
+	"""Return the sprint that should receive carry-forward items from *sprint_name*.
 
+	  - If a non-Completed Sprint is already scheduled after this one for the same
+	    prefix, reuse it (no new Sprint is created).
+	  - Otherwise a new Draft Sprint is created for the next standard Wed→Tue
+	    window via the naming series (never with an explicit name, so the series
+	    counter stays in sync).
+	"""
 	doc = frappe.get_doc("Sprint", sprint_name)
 
-	match = re.search(r'-(\d+)$', sprint_name)
-	if not match:
-		return _make_new_sprint(doc)
+	existing = _find_next_existing_sprint(doc)
+	if existing:
+		return existing
 
-	num_str = match.group(1)
-	next_num = int(num_str) + 1
-	target_sprint_name = f"{doc.sprint_prefix}-{str(next_num).zfill(len(num_str))}"
-
-	if frappe.db.exists("Sprint", target_sprint_name):
-		status = frappe.db.get_value("Sprint", target_sprint_name, "status")
-		if status == "Draft":
-			return target_sprint_name
-		else:
-			return _make_new_sprint(doc)
-	else:
-		return _make_new_sprint(doc, {"name": target_sprint_name})
+	return _make_new_sprint(doc)
 
 
 @frappe.whitelist()
-def handle_incomplete_items(sprint: str, action: str):
-	"""Handle Work Items that are not Done when a sprint is completed."""
+def handle_incomplete_items(sprint: str) -> str | None:
+	"""Carry all not-Done Work Items of *sprint* forward to the next sprint.
+
+	Called when a sprint is being completed. Incomplete items are never left in
+	a backlog — they always move to the next sprint (reused if it already exists,
+	otherwise created).
+
+	Returns the target sprint name, or None when there is nothing to carry forward.
+	"""
 	# Snapshot the current velocity before any items are moved away.
 	# Normalize with flt() to avoid restoring NULL into a Float field.
 	current_velocity = flt(frappe.db.get_value("Sprint", sprint, "expected_velocity"))
@@ -377,20 +428,18 @@ def handle_incomplete_items(sprint: str, action: str):
 	work_items = frappe.get_all(
 		"Work Item",
 		filters={"sprint": sprint, "workflow_state": ["!=", "Done"]},
-		fields=["name", "story_points"]
+		fields=["name", "work_item_type", "title", "status", "story_points", "assignee_user"],
 	)
 
-	new_sprint_name = None
-	if action == "Move to New Sprint":
-		new_sprint_name = get_or_create_target_sprint(sprint)
-
+	# Nothing incomplete — no next sprint is needed or created
 	if not work_items:
-		return new_sprint_name
+		return None
+
+	# Resolve (reuse or create) the next sprint that will receive the items
+	target_sprint = get_or_create_target_sprint(sprint)
 
 	# --- Capture carried-forward snapshot BEFORE items are moved ---
 	# This permanently records the spill-over on the completing sprint.
-	# Only written when there are actually incomplete items (otherwise the
-	# default value of 0 is already correct, and writing before commit is safe).
 	stories_cf = len(work_items)
 	points_cf = flt(sum(flt(wi.story_points) for wi in work_items), 1)
 	frappe.db.set_value(
@@ -403,42 +452,56 @@ def handle_incomplete_items(sprint: str, action: str):
 		update_modified=False,
 	)
 
-	# Move each incomplete Work Item to the target destination.
-	# We use frappe.db.set_value() (not Work Item .save()) to avoid triggering
-	# _remove_from_sprint, which would try to modify the completing sprint's
-	# child table — the table is now intentionally left intact as a frozen
-	# historical record.
+	# Move via frappe.db.set_value (not .save()) so _remove_from_sprint does not
+	# fire and strip the completing sprint's child rows, which are kept as history.
 	work_item_names = [wi.name for wi in work_items]
 	for wi_name in work_item_names:
-		frappe.db.set_value("Work Item", wi_name, "sprint", new_sprint_name or "")
+		frappe.db.set_value("Work Item", wi_name, "sprint", target_sprint)
 
-	# Bug fix: do NOT delete Sprint Work Item rows from the completing sprint.
-	# Those rows stay as a frozen historical record of what was in-flight when
-	# the sprint closed.  The freeze is enforced naturally:
-	#   - _remove_from_sprint() guards against Completed sprints.
-	#   - _sync_with_sprint() uses doc.sprint (new / empty) as the parent,
-	#     so it will never overwrite the completing sprint's historical rows.
+	# Add rows to the target sprint's child table, skipping any work item already
+	# present (the target may be a pre-existing draft).
+	already_present = set(
+		frappe.get_all(
+			"Sprint Work Item",
+			filters={"parent": target_sprint, "work_item": ["in", work_item_names]},
+			pluck="work_item",
+		)
+	)
+	# A row that was already planned into the reused sprint still represents work
+	# spilling out of the sprint being closed, so flag it — otherwise the target's
+	# brought-forward totals undercount exactly the items that carried over.
+	if already_present:
+		frappe.db.set_value(
+			"Sprint Work Item",
+			{"parent": target_sprint, "work_item": ["in", list(already_present)]},
+			"is_brought_forward",
+			1,
+			update_modified=False,
+		)
+	for wi in work_items:
+		if wi.name in already_present:
+			continue
+		frappe.get_doc({
+			"doctype": "Sprint Work Item",
+			"parent": target_sprint,
+			"parentfield": "work_items",
+			"parenttype": "Sprint",
+			"work_item": wi.name,
+			"work_item_type": wi.work_item_type,
+			"title": wi.title,
+			"status": wi.status,
+			"story_points": wi.story_points,
+			"assignee_user": wi.assignee_user,
+			"is_brought_forward": 1,
+		}).insert(ignore_permissions=True)
 
-	# If moving to new sprint, add rows to that sprint's child table
-	if new_sprint_name:
-		for wi_name in work_item_names:
-			frappe.get_doc({
-				"doctype": "Sprint Work Item",
-				"parent": new_sprint_name,
-				"parentfield": "work_items",
-				"parenttype": "Sprint",
-				"work_item": wi_name,
-				"is_brought_forward": 1,
-			}).insert(ignore_permissions=True)
-		# Recalculate velocity and brought-forward counts on the new sprint
-		_recalculate_sprint_velocity(new_sprint_name)
-		_recalculate_brought_forward(new_sprint_name)
+	# Recalculate velocity and brought-forward counts on the target sprint
+	_recalculate_sprint_velocity(target_sprint)
+	_recalculate_brought_forward(target_sprint)
 
-	# Persist the velocity snapshot so it survives the form save that
-	# immediately follows this call.  on_update will restore it again from
-	# doc_before as a belt-and-suspenders guard.
+	# Persist the velocity snapshot so it survives the form save that follows.
 	frappe.db.set_value("Sprint", sprint, "expected_velocity", current_velocity, update_modified=False)
 
 	frappe.db.commit()
 
-	return new_sprint_name
+	return target_sprint
