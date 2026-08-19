@@ -140,10 +140,22 @@ frappe.ui.form.on("Work Item", {
 	},
 
 	work_item_type: function (frm) {
-		// Clear epic and sprint fields when type switches to Epic
+		// Clear epic, sprint and orchestrator fields when type switches to Epic.
+		// _validate_orchestrator_target() in work_item.py rejects an orchestrator
+		// Epic on save; clearing it here means the user never reaches that error.
 		if (frm.doc.work_item_type === "Epic") {
 			frm.set_value("epic", null);
 			frm.set_value("sprint", null);
+			frm.set_value("orchestrator", 0);
+		}
+	},
+
+	orchestrator: function (frm) {
+		// The orchestrator is the assignee. work_item.py clears assignee_user on
+		// save; doing it here too keeps the form honest instead of showing a human
+		// assignee that is about to be dropped.
+		if (frm.doc.orchestrator && frm.doc.assignee_user) {
+			frm.set_value("assignee_user", null);
 		}
 	},
 });
