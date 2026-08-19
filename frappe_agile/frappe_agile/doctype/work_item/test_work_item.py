@@ -3,9 +3,8 @@
 
 """Work Item tests.
 
-Covers the `orchestrator` flag (WI-002112): the flag that tells the Software
-Development process to take the orchestrator path instead of assigning the item
-to a person.
+Covers the `orchestrator` flag: the flag that tells the Software Development
+process to take the orchestrator path instead of assigning the item to a person.
 """
 
 import frappe
