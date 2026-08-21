@@ -49,9 +49,9 @@
 	gap: 8px;
 }
 
-/* Host for the framework MultiSelectList control (Project Status filter) so it
-   lines up with the plain <select> filters beside it. */
-.rm-multiselect { min-width: 170px; }
+/* Host for the framework MultiSelectList control (Projects filter) so it lines
+   up with the plain <select> filters beside it. */
+.rm-multiselect { min-width: 190px; }
 .rm-multiselect .multiselect-list { width: 100%; }
 /* Match the plain <select> filters beside it, which sit at --input-height. */
 .rm-multiselect .multiselect-list > .form-control {
@@ -59,7 +59,36 @@
 	display: flex;
 	align-items: center;
 }
-.rm-multiselect .dropdown-menu { min-width: 200px; }
+.rm-multiselect .dropdown-menu { min-width: 260px; }
+
+/* The Projects filter lists the three Project statuses first, then the SCRUM
+   projects. The control renders one flat list, so the first row of each group
+   carries its heading (the label is set from JS to keep it translatable). */
+.rm-multiselect .selectable-item.rm-opt-group-start {
+	position: relative;
+	margin-top: 6px;
+	padding-top: calc(var(--padding-sm, 8px) + 18px);
+	border-top: 1px solid var(--border-color, #e5e7eb);
+}
+.rm-multiselect .selectable-item.rm-opt-group-start:first-child {
+	margin-top: 0;
+	border-top: 0;
+}
+.rm-multiselect .selectable-item.rm-opt-group-start::before {
+	content: attr(data-group-label);
+	position: absolute;
+	top: 6px;
+	left: var(--padding-sm, 8px);
+	font-size: 10px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	color: var(--text-muted, #6b7280);
+}
+/* Statuses carry no caption; drop the empty line so their rows stay compact. */
+.rm-multiselect .selectable-item .small:empty { display: none; }
+/* With every SCRUM project in the list, 200px shows barely three of them. */
+.rm-multiselect .selectable-items { max-height: 320px; }
 
 /* Inline prompt shown while picking projects for "Create Missing Sprint(s)". */
 .rm-select-hint {
@@ -526,6 +555,15 @@
 /* ---------------- Empty + skeleton ---------------- */
 .rm-empty { text-align: center; padding: 60px 20px; color: var(--text-muted, #6b7280); }
 .rm-empty-icon { font-size: 40px; margin-bottom: 10px; }
+/* Second line of the empty state: says how a project earns a lane, since an
+   un-opted-in board is empty and otherwise gives no clue why. */
+.rm-empty-hint-text {
+	max-width: 460px;
+	margin: 6px auto 0;
+	font-size: 12px;
+	line-height: 1.5;
+	opacity: 0.85;
+}
 
 .rm-skeleton { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding: 16px; }
 .rm-skel-card { height: 120px; border-radius: 8px; background: linear-gradient(90deg, #f1f5f9 25%, #e8edf3 37%, #f1f5f9 63%); background-size: 400% 100%; animation: rm-shimmer 1.4s ease infinite; }
