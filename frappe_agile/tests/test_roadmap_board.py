@@ -1,7 +1,9 @@
 """Roadmap board tests — the row axis is always the active SCRUM Project.
 
 Covers the WI-001819 behaviour: "Group rows by" is gone, the board only ever
-shows active SCRUM projects, and a Project Status multi-select narrows that set.
+shows active SCRUM projects, and a Project Status multi-select narrows that set;
+plus WI-002020, where that same multi-select also lists the SCRUM projects so a
+lane can be picked by name (the `lane` argument, which AND-s with the statuses).
 """
 
 from __future__ import annotations
@@ -13,8 +15,10 @@ from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_days, getdate
 
 from frappe_agile.frappe_agile.page.roadmap_board.roadmap_board import (
+	ROADMAP_FLAG_FIELD,
 	create_missing_sprints,
 	get_roadmap_data,
+	get_scrum_projects,
 	move_work_item,
 )
 from frappe_agile.frappe_agile.doctype.sprint.sprint import (
@@ -26,15 +30,19 @@ from frappe_agile.frappe_agile.doctype.sprint.sprint import (
 TEST_PREFIX = "RMTEST"
 
 PROJECTS = {
-	# name suffix        (project_type,   is_active, status,      sprint_prefix)
-	"OPEN": ("SCRUM Project", "Yes", "Open", "RMTESTOPEN"),
-	"COMPLETED": ("SCRUM Project", "Yes", "Completed", "RMTESTCOMP"),
-	"CANCELLED": ("SCRUM Project", "Yes", "Cancelled", "RMTESTCANC"),
+	# name suffix        (project_type,   is_active, status,      sprint_prefix, show_in_roadmap)
+	"OPEN": ("SCRUM Project", "Yes", "Open", "RMTESTOPEN", "Yes"),
+	"COMPLETED": ("SCRUM Project", "Yes", "Completed", "RMTESTCOMP", "Yes"),
+	"CANCELLED": ("SCRUM Project", "Yes", "Cancelled", "RMTESTCANC", "Yes"),
 	# Excluded from the board: inactive, and not a SCRUM project.
-	"INACTIVE": ("SCRUM Project", "No", "Open", "RMTESTINAC"),
-	"NOTSCRUM": ("Internal", "Yes", "Open", "RMTESTNSCR"),
+	"INACTIVE": ("SCRUM Project", "No", "Open", "RMTESTINAC", "Yes"),
+	"NOTSCRUM": ("Internal", "Yes", "Open", "RMTESTNSCR", "Yes"),
 	# Active SCRUM but no Sprint Prefix — shows as a lane, cannot be planned into.
-	"NOPREFIX": ("SCRUM Project", "Yes", "Open", None),
+	"NOPREFIX": ("SCRUM Project", "Yes", "Open", None, "Yes"),
+	# Opted out / never opted in (WI-002045): active SCRUM projects that must not
+	# reach the board at all. Blank is deliberately not treated as Yes.
+	"HIDDEN": ("SCRUM Project", "Yes", "Open", "RMTESTHIDE", "No"),
+	"UNSET": ("SCRUM Project", "Yes", "Open", "RMTESTUNST", None),
 }
 
 
@@ -60,7 +68,7 @@ class TestRoadmapBoard(FrappeTestCase):
 		return f"{TEST_PREFIX} {key}"
 
 	def _make_project(self, key):
-		project_type, is_active, status, prefix = PROJECTS[key]
+		project_type, is_active, status, prefix, show_in_roadmap = PROJECTS[key]
 		doc = frappe.get_doc(
 			{
 				"doctype": "Project",
@@ -69,6 +77,7 @@ class TestRoadmapBoard(FrappeTestCase):
 				"is_active": is_active,
 				"status": status,
 				"custom_sprint_prefix": prefix,
+				ROADMAP_FLAG_FIELD: show_in_roadmap,
 				"company": self.company,
 			}
 		)
@@ -147,6 +156,63 @@ class TestRoadmapBoard(FrappeTestCase):
 		self.assertNotIn(self.projects["INACTIVE"], rows)
 		self.assertNotIn(self.projects["NOTSCRUM"], rows)
 
+	# ------------------------------------------------------------------
+	# Show in Roadmap opt-in (WI-002045)
+	# ------------------------------------------------------------------
+	def test_only_projects_shown_in_roadmap_get_a_lane(self):
+		"""Show in Roadmap is opt-in: No and blank both keep a project off the board."""
+		rows = self._rows(get_roadmap_data())
+
+		self.assertIn(self.projects["OPEN"], rows)
+		self.assertNotIn(self.projects["HIDDEN"], rows, "Show in Roadmap = No must be excluded")
+		self.assertNotIn(self.projects["UNSET"], rows, "blank must not be treated as Yes")
+
+	def test_show_in_roadmap_filter_cannot_be_bypassed_by_naming_the_project(self):
+		"""`lane` comes from the client, so it must not reach an opted-out project."""
+		for key in ("HIDDEN", "UNSET"):
+			rows = self._rows(get_roadmap_data(lane=json.dumps([self.projects[key]])))
+			self.assertEqual(rows, {}, f"{key} was reachable via lane")
+
+	def test_opting_a_project_in_gives_it_a_lane(self):
+		"""Flipping the flag to Yes is all it takes — no other change required."""
+		hidden = self.projects["HIDDEN"]
+		self.assertNotIn(hidden, self._rows(get_roadmap_data()))
+
+		frappe.db.set_value("Project", hidden, ROADMAP_FLAG_FIELD, "Yes")
+		frappe.db.commit()
+
+		self.assertIn(hidden, self._rows(get_roadmap_data()))
+
+	def test_filter_project_list_excludes_opted_out_projects(self):
+		"""The picker must offer exactly the projects the board can show."""
+		listed = {p["name"] for p in get_scrum_projects() if p["label"].startswith(TEST_PREFIX)}
+
+		self.assertIn(self.projects["OPEN"], listed)
+		self.assertNotIn(self.projects["HIDDEN"], listed)
+		self.assertNotIn(self.projects["UNSET"], listed)
+
+	def test_create_missing_sprints_skips_opted_out_projects(self):
+		"""An off-board project must not be fillable even if the client names it."""
+		result = create_missing_sprints(
+			future_count=2, lanes=json.dumps([self.projects["HIDDEN"]])
+		)
+
+		self.assertEqual(result["created_count"], 0)
+
+	def test_move_into_empty_slot_of_opted_out_project_is_refused(self):
+		"""Auto-creating a sprint re-checks board membership, not just the type."""
+		sprint = self._make_sprint("OPEN", align_to_sprint_start(getdate()))
+		wi = self._make_work_item(f"{TEST_PREFIX} guarded", sprint)
+		ws = align_to_sprint_start(add_days(getdate(), 8))
+
+		with self.assertRaises(frappe.ValidationError):
+			move_work_item(
+				work_item=wi,
+				lane=self.projects["HIDDEN"],
+				window_start=str(ws),
+				window_end=str(add_days(ws, SPRINT_SPAN_DAYS)),
+			)
+
 	def test_row_carries_prefix_and_project_status(self):
 		rows = self._rows(get_roadmap_data())
 
@@ -191,6 +257,68 @@ class TestRoadmapBoard(FrappeTestCase):
 		rows = self._rows(get_roadmap_data(project_status=json.dumps(["Open", "Bogus"])))
 		self.assertIn(self.projects["OPEN"], rows)
 		self.assertNotIn(self.projects["COMPLETED"], rows)
+
+	# ------------------------------------------------------------------
+	# Project half of the same multi-select (WI-002020)
+	# ------------------------------------------------------------------
+	def test_lane_accepts_several_projects_as_json(self):
+		"""Picking projects in the filter pins the board to exactly those lanes."""
+		picked = [self.projects["OPEN"], self.projects["CANCELLED"]]
+		rows = self._rows(get_roadmap_data(lane=json.dumps(picked)))
+
+		self.assertEqual(set(rows), set(picked))
+
+	def test_empty_lane_shows_every_project(self):
+		for empty in (None, "", [], "[]"):
+			rows = self._rows(get_roadmap_data(lane=empty))
+			self.assertIn(self.projects["COMPLETED"], rows, f"failed for {empty!r}")
+
+	def test_lane_and_status_narrow_together(self):
+		"""The two halves AND: a project outside the ticked statuses drops out."""
+		picked = json.dumps([self.projects["OPEN"], self.projects["COMPLETED"]])
+
+		rows = self._rows(get_roadmap_data(lane=picked, project_status=json.dumps(["Open"])))
+		self.assertEqual(set(rows), {self.projects["OPEN"]})
+
+		# ...to the point of an empty board when the two disagree entirely.
+		rows = self._rows(
+			get_roadmap_data(
+				lane=json.dumps([self.projects["OPEN"]]),
+				project_status=json.dumps(["Cancelled"]),
+			)
+		)
+		self.assertEqual(rows, {})
+
+	def test_lane_cannot_reach_a_non_board_project(self):
+		"""Naming an inactive or non-SCRUM project must not put it on the board."""
+		picked = json.dumps(
+			[self.projects["OPEN"], self.projects["INACTIVE"], self.projects["NOTSCRUM"], "NO SUCH PROJECT"]
+		)
+		rows = self._rows(get_roadmap_data(lane=picked))
+
+		self.assertEqual(set(rows), {self.projects["OPEN"]})
+
+	def test_get_scrum_projects_lists_the_board_lanes(self):
+		"""The filter's project list must match the rows the board can show."""
+		listed = {p["name"]: p for p in get_scrum_projects() if p["label"].startswith(TEST_PREFIX)}
+
+		self.assertEqual(set(listed), set(self._rows(get_roadmap_data())))
+		self.assertEqual(listed[self.projects["COMPLETED"]]["status"], "Completed")
+		self.assertEqual(
+			listed[self.projects["OPEN"]]["label"], self._project_name("OPEN")
+		)
+
+	def test_create_missing_sprints_respects_the_lane_filter(self):
+		"""A project filtered off the board cannot be filled, even if ticked."""
+		result = create_missing_sprints(
+			lane=json.dumps([self.projects["OPEN"]]),
+			future_count=2,
+			lanes=json.dumps([self.projects["OPEN"], self.projects["COMPLETED"]]),
+		)
+
+		self.assertEqual(result["created_count"], 2)
+		created = frappe.get_all("Sprint", filters={"name": ("in", result["created"])}, pluck="project")
+		self.assertEqual(set(created), {self.projects["OPEN"]})
 
 	# ------------------------------------------------------------------
 	# Cells

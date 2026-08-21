@@ -21,10 +21,16 @@ const API_GET = "frappe_agile.frappe_agile.page.roadmap_board.roadmap_board.get_
 const API_MOVE = "frappe_agile.frappe_agile.page.roadmap_board.roadmap_board.move_work_item";
 const API_CREATE_MISSING = "frappe_agile.frappe_agile.page.roadmap_board.roadmap_board.create_missing_sprints";
 const API_BACKLOG = "frappe_agile.frappe_agile.page.roadmap_board.roadmap_board.get_unassigned_work_items";
+const API_PROJECTS = "frappe_agile.frappe_agile.page.roadmap_board.roadmap_board.get_scrum_projects";
 const SORTABLE_ASSET = "/assets/frappe_agile/js/vendor/sortable.min.js";
 const MAX_ITEMS_VISIBLE = 6; // collapse longer item lists behind a "+N more"
-// Project.status options — the values the Project Status multi-select offers.
+// Project.status options — the first group in the Projects multi-select, above
+// the SCRUM projects themselves. Their option values carry a prefix because
+// Projects are named after their project name on some benches, so a project
+// really can be called "Open"; the prefix keeps the two groups apart.
 const PROJECT_STATUSES = ["Open", "Completed", "Cancelled"];
+const STATUS_PREFIX = "status:";
+const is_status_option = (value) => (value || "").startsWith(STATUS_PREFIX);
 
 frappe.pages["roadmap-board"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({
@@ -47,15 +53,19 @@ class RoadmapBoard {
 		this.page = page;
 		this.wrapper = wrapper;
 
+		// The two halves of the Projects multi-select. Both empty (the state the
+		// page loads in) means every active SCRUM project, every status; the board
+		// is restricted to active SCRUM projects server-side either way.
 		this.filters = {
-			// Multi-select of Project statuses; empty = every status (the board is
-			// already restricted to active SCRUM projects server-side).
 			project_status: [],
-			lane: "",
+			lane: [],
 			sprint_status: "",
 			search: "",
 			future_count: 8,
 		};
+		// SCRUM projects offered by that filter, fetched once on first dropdown
+		// open and cached from then on. `null` until then.
+		this.scrum_projects = null;
 		this._loading = false;
 		this._sortables = [];
 		// Backlog (left panel) state + its own Sortable instance, kept separate
@@ -132,8 +142,8 @@ class RoadmapBoard {
 	_render_filters() {
 		this.$filters.html(`
 			<div class="rm-filter-group">
-				<span class="rm-filter-label">${__("Project Status")}</span>
-				<div id="rm-project-status" class="rm-multiselect"></div>
+				<span class="rm-filter-label">${__("Projects")}</span>
+				<div id="rm-project-filter" class="rm-multiselect"></div>
 			</div>
 			<div class="rm-filter-group">
 				<span class="rm-filter-label">${__("Sprint Status")}</span>
@@ -182,7 +192,7 @@ class RoadmapBoard {
 			</div>
 		`);
 
-		this._make_project_status_filter();
+		this._make_project_filter();
 		this.$filters.find("#rm-status").on("change", (e) => {
 			this.filters.sprint_status = e.target.value;
 			this.refresh({ scrollToCurrent: true });
@@ -214,29 +224,147 @@ class RoadmapBoard {
 		this._update_create_controls();
 	}
 
-	// Project Status is a multi-select: the board is always restricted to active
-	// SCRUM projects, and this narrows that set by Project.status. Nothing ticked
-	// means "every status", which is the state the page loads in.
-	_make_project_status_filter() {
-		const mount = this.$filters.find("#rm-project-status")[0];
+	// One multi-select drives which lanes the board shows. It lists the three
+	// Project statuses first, then the SCRUM projects themselves; ticking a status
+	// narrows by Project.status, ticking a project pins that lane, and the two AND
+	// together. Nothing ticked — the state the page loads in — means every active
+	// SCRUM project in every status.
+	_make_project_filter() {
+		const mount = this.$filters.find("#rm-project-filter")[0];
 		if (!mount) return;
 
-		this.project_status_control = frappe.ui.form.make_control({
+		this.project_filter_control = frappe.ui.form.make_control({
 			parent: mount,
 			only_input: true,
 			render_input: true,
 			df: {
 				fieldtype: "MultiSelectList",
-				fieldname: "project_status",
-				placeholder: __("All Statuses"),
-				get_data: () =>
-					PROJECT_STATUSES.map((s) => ({ value: s, label: __(s), description: "" })),
+				fieldname: "project_filter",
+				placeholder: __("All Projects"),
+				get_data: () => this._filter_options(),
 				change: () => {
-					this.filters.project_status = this.project_status_control.get_value() || [];
+					this._apply_filter_selection(this.project_filter_control.get_value() || []);
+					// Ticking a status changes which projects belong in the list below
+					// it, so re-render the open dropdown instead of waiting for the next
+					// time it happens to be reopened.
+					this._rerender_filter_options();
 					this.refresh({ scrollToCurrent: true }); // refresh() resets selection mode
 				},
 			},
 		});
+
+		this._decorate_filter_groups(this.project_filter_control);
+	}
+
+	// Options for that filter: the statuses, then one entry per SCRUM project.
+	// The control re-reads options on every dropdown open and keystroke, so the
+	// project list is fetched once and served from cache after that. Returning a
+	// promise on the first call is supported by MultiSelectList.
+	//
+	// The statuses also act on the list below them: with any ticked, only projects
+	// in those statuses are offered, so the user picks a lane from the set their
+	// status choice actually leaves on the board rather than from projects the
+	// board is no longer showing.
+	_filter_options() {
+		const to_options = (projects) =>
+			// Statuses need no caption — the group heading above them says it, and
+			// the shorter rows leave more of the scroll box for the projects.
+			PROJECT_STATUSES.map((s) => ({
+				value: STATUS_PREFIX + s,
+				label: __(s),
+				description: "",
+			})).concat(
+				this._projects_in_selected_statuses(projects).map((p) => ({
+					value: p.name,
+					label: p.label,
+					// The id is only worth showing when it isn't the name already.
+					description:
+						p.name === p.label
+							? __(p.status || "")
+							: `${p.name} · ${__(p.status || "")}`,
+				}))
+			);
+
+		if (this.scrum_projects) return to_options(this.scrum_projects);
+
+		this._projects_promise =
+			this._projects_promise ||
+			frappe
+				.call({ method: API_PROJECTS })
+				.then((r) => this._set_scrum_projects((r && r.message) || []))
+				// Degrade to a status-only filter rather than losing the control.
+				.catch(() => this._set_scrum_projects([]));
+
+		return this._projects_promise.then(to_options);
+	}
+
+	_set_scrum_projects(projects) {
+		this.scrum_projects = projects;
+		return projects;
+	}
+
+	// Narrow the offered projects to the ticked statuses. A project the user has
+	// already picked stays in the list whatever its status — the control pins
+	// selected values anyway, and silently dropping a live selection from the list
+	// would leave the board filtered by something the filter no longer shows.
+	_projects_in_selected_statuses(projects) {
+		const statuses = this.filters.project_status || [];
+		if (!statuses.length) return projects;
+		const picked = new Set(this.filters.lane || []);
+		return projects.filter((p) => statuses.includes(p.status) || picked.has(p.name));
+	}
+
+	// Re-read options and repaint the dropdown in place. Used after a selection
+	// changes what the list should contain; MultiSelectList only refreshes options
+	// on open and on keystrokes, so without this the narrowing appears one
+	// interaction late.
+	_rerender_filter_options() {
+		const control = this.project_filter_control;
+		if (!control) return;
+		control.set_options().then(() => control.set_selectable_items(control._options));
+	}
+
+	// Split the combined selection back into the two filters the server takes:
+	// prefixed values narrow by Project.status, the rest name projects to pin.
+	// Project names the user may not read are dropped server-side.
+	_apply_filter_selection(values) {
+		this.filters.project_status = values
+			.filter(is_status_option)
+			.map((v) => v.slice(STATUS_PREFIX.length));
+		this.filters.lane = values.filter((v) => !is_status_option(v));
+	}
+
+	// Send the picked projects as a JSON list, or nothing at all when none are
+	// picked — an omitted `lane` is what tells the server "every project".
+	_lane_arg() {
+		const lanes = this.filters.lane || [];
+		return lanes.length ? JSON.stringify(lanes) : undefined;
+	}
+
+	// MultiSelectList renders one flat list and floats selected options to the top
+	// while filtering, which would scatter the two groups. Wrap its renderer to
+	// re-sort statuses ahead of projects (Array#sort is stable, so the order within
+	// each group survives) and tag the first row of each group, which the CSS heads
+	// with the group label.
+	_decorate_filter_groups(control) {
+		const render = control.set_selectable_items.bind(control);
+		const group_of = (value) =>
+			is_status_option(value) ? __("Project Status") : __("SCRUM Projects");
+		const rank = (option) => (is_status_option(option.value) ? 0 : 1);
+
+		control.set_selectable_items = (options) => {
+			render([...options].sort((a, b) => rank(a) - rank(b)));
+
+			let current = null;
+			control.$list_wrapper.find(".selectable-item").each((i, el) => {
+				const $item = $(el).removeClass("rm-opt-group-start").removeAttr("data-group-label");
+				const group = group_of(decodeURIComponent($item.attr("data-value")));
+				if (group !== current) {
+					current = group;
+					$item.addClass("rm-opt-group-start").attr("data-group-label", group);
+				}
+			});
+		};
 	}
 
 	_render_legend() {
@@ -280,7 +408,7 @@ class RoadmapBoard {
 			method: API_GET,
 			args: {
 				project_status: JSON.stringify(this.filters.project_status || []),
-				lane: this.filters.lane || undefined,
+				lane: this._lane_arg(),
 				sprint_status: this.filters.sprint_status || undefined,
 				search: this.filters.search || undefined,
 				future_count: this.filters.future_count,
@@ -316,7 +444,8 @@ class RoadmapBoard {
 			this.$grid.html(`
 				<div class="rm-empty">
 					<div class="rm-empty-icon">🗺️</div>
-					<p>${__("No active SCRUM projects match the current filters.")}</p>
+					<p>${__("No projects match the current filters.")}</p>
+					<p class="rm-empty-hint-text">${__("The Roadmap shows active SCRUM projects with <b>Show in Roadmap</b> set to Yes. Set it on a Project to give it a lane here.")}</p>
 				</div>
 			`);
 			return;
@@ -459,7 +588,7 @@ class RoadmapBoard {
 					method: API_CREATE_MISSING,
 					args: {
 						project_status: JSON.stringify(this.filters.project_status || []),
-						lane: this.filters.lane || undefined,
+						lane: this._lane_arg(),
 						future_count: this.filters.future_count,
 						lanes: JSON.stringify(selected),
 					},
