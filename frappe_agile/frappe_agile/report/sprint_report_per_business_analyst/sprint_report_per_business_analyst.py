@@ -25,8 +25,9 @@ def get_columns():
 		{"fieldname": "working_days", "label": "Working Days", "fieldtype": "Int", "width": 120},
 		{"fieldname": "public_holidays", "label": "Public Holidays", "fieldtype": "Int", "width": 130},
 		{"fieldname": "leave_days", "label": "Leave Days", "fieldtype": "Float", "width": 120},
-		{"fieldname": "target_points", "label": "Target Points", "fieldtype": "Float", "width": 130},
+		{"fieldname": "expected_velocity", "label": "Expected Velocity", "fieldtype": "Float", "width": 150},
 		{"fieldname": "points_scoped", "label": "Points Scoped", "fieldtype": "Float", "width": 130},
+		{"fieldname": "percentage_target", "label": "Percentage Target %", "fieldtype": "Percent", "width": 160},
 		{"fieldname": "accepted_points", "label": "Accepted Points", "fieldtype": "Float", "width": 140},
 		{"fieldname": "rejected_points", "label": "Rejected Points", "fieldtype": "Float", "width": 140},
 		{"fieldname": "spillover_points", "label": "Spillover Points", "fieldtype": "Float", "width": 140},
@@ -171,13 +172,14 @@ def get_data(filters):
 				unique_periods.add((sprint_map[s].start_date, sprint_map[s].end_date))
 		no_of_sprints = len(unique_periods)
 
-		# Target Points = the BA's expected velocity, prorated by the days they
-		# could actually work in each distinct sprint period and summed across
-		# them:
+		# Expected Velocity = the BA's velocity, prorated by the days they could
+		# actually work in each distinct sprint period and summed across them:
 		#   velocity × (working_days − public_holidays − leave_days) / working_days
 		employee = employee_map.get(ba)
 		factor, working_days, public_holidays, leave_days = get_proration(employee, unique_periods)
-		target_points = flt(ba_velocity * factor, 1)
+		prorated_target = ba_velocity * factor
+
+		expected_velocity = flt(prorated_target, 1)
 
 		# Sum scoped, accepted, and rejected across all sprints
 		total_scoped_raw = sum(v["scoped_points"] for v in sprint_dict.values())
@@ -222,8 +224,9 @@ def get_data(filters):
 			"working_days": working_days,
 			"public_holidays": public_holidays,
 			"leave_days": flt(leave_days, 2),
-			"target_points": target_points,
+			"expected_velocity": expected_velocity,
 			"points_scoped": total_scoped,
+			"percentage_target": flt((total_scoped_raw / prorated_target * 100) if prorated_target else 0.0, 2),
 			"accepted_points": total_accepted,
 			"rejected_points": total_rejected,
 			"spillover_points": spillover,

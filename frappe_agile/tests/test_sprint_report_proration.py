@@ -421,6 +421,8 @@ class TestSprintReportProration(FrappeTestCase):
 		self.assertEqual(row["leave_days"], 0.0)
 		self.assertEqual(row["target_points"], 64.0)
 		self.assertEqual(row["points_scoped"], 12.0)
+		# 12 scoped against a 64-point target, not against 80.
+		self.assertEqual(row["percentage_target"], 18.75)
 
 	def test_developer_report_leaves_an_unlinked_user_alone(self):
 		sprint = self._make_sprint(PERIOD)
@@ -444,7 +446,7 @@ class TestSprintReportProration(FrappeTestCase):
 			{"start_date": PERIOD[0], "end_date": PERIOD[1], "business_analyst": BA_USER}
 		)
 		fieldnames = [column["fieldname"] for column in columns]
-		for fieldname in ("working_days", "public_holidays", "leave_days", "target_points"):
+		for fieldname in ("working_days", "public_holidays", "leave_days", "expected_velocity"):
 			self.assertIn(fieldname, fieldnames)
 
 		row = self._row_for(
@@ -453,8 +455,9 @@ class TestSprintReportProration(FrappeTestCase):
 		self.assertIsNotNone(row, f"no row for {BA_USER} in {rows}")
 		self.assertEqual(row["working_days"], WORKING_DAYS)
 		self.assertEqual(row["public_holidays"], 1)
-		self.assertEqual(row["target_points"], 80.0)  # 100 × 4/5
+		self.assertEqual(row["expected_velocity"], 80.0)  # 100 × 4/5
 		self.assertEqual(row["points_scoped"], 10.0)
+		self.assertEqual(row["percentage_target"], 12.5)
 
 	def test_business_analyst_report_counts_leave_too(self):
 		"""The BA report had no time-off accounting at all before this."""
@@ -471,4 +474,4 @@ class TestSprintReportProration(FrappeTestCase):
 		)
 		self.assertIsNotNone(row, f"no row for {BA_USER} in {rows}")
 		self.assertEqual(row["leave_days"], 1.0)
-		self.assertEqual(row["target_points"], 60.0)  # 100 × 3/5
+		self.assertEqual(row["expected_velocity"], 60.0)  # 100 × 3/5
