@@ -4,6 +4,8 @@
 import frappe
 from frappe.utils import flt
 
+from frappe_agile.frappe_agile.report.proration import get_employee_map, get_proration
+
 
 def execute(filters=None):
 	if not filters:
@@ -20,7 +22,10 @@ def get_columns():
 		{"fieldname": "sprint_start_date", "label": "Start Date", "fieldtype": "Date", "width": 150},
 		{"fieldname": "sprint_end_date", "label": "End Date", "fieldtype": "Date", "width": 150},
 		{"fieldname": "no_of_sprints", "label": "No. of Sprints", "fieldtype": "Int", "width": 120},
-		{"fieldname": "expected_velocity", "label": "Expected Velocity", "fieldtype": "Float", "width": 150},
+		{"fieldname": "working_days", "label": "Working Days", "fieldtype": "Int", "width": 120},
+		{"fieldname": "public_holidays", "label": "Public Holidays", "fieldtype": "Int", "width": 130},
+		{"fieldname": "leave_days", "label": "Leave Days", "fieldtype": "Float", "width": 120},
+		{"fieldname": "target_points", "label": "Target Points", "fieldtype": "Float", "width": 130},
 		{"fieldname": "points_scoped", "label": "Points Scoped", "fieldtype": "Float", "width": 130},
 		{"fieldname": "percentage_target", "label": "Percentage Target %", "fieldtype": "Percent", "width": 160},
 		{"fieldname": "accepted_points", "label": "Accepted Points", "fieldtype": "Float", "width": 140},
@@ -149,6 +154,9 @@ def get_data(filters):
 	)
 	user_full_name_map = {u.name: u.full_name or u.name for u in users_data}
 
+	# Map BAs to their Employee record so time off can be looked up
+	employee_map = get_employee_map(all_users)
+
 	# ------------------------------------------------------------------
 	# 6. Build one row per BA (aggregated across all sprints)
 	# ------------------------------------------------------------------
@@ -164,8 +172,15 @@ def get_data(filters):
 				unique_periods.add((sprint_map[s].start_date, sprint_map[s].end_date))
 		no_of_sprints = len(unique_periods)
 
-		# Expected Velocity = ba_velocity × No. of Sprints (for this BA's sprints)
-		expected_velocity = flt(ba_velocity * no_of_sprints, 1)
+		# Target Points = the BA's expected velocity, prorated by the days they
+		# could actually work in each distinct sprint period and summed across
+		# them:
+		#   velocity × (working_days − public_holidays − leave_days) / working_days
+		employee = employee_map.get(ba)
+		factor, working_days, public_holidays, leave_days = get_proration(employee, unique_periods)
+		prorated_target = ba_velocity * factor
+
+		target_points = flt(prorated_target, 1)
 
 		# Sum scoped, accepted, and rejected across all sprints
 		total_scoped_raw = sum(v["scoped_points"] for v in sprint_dict.values())
@@ -207,9 +222,12 @@ def get_data(filters):
 			"sprint_start_date": earliest_start,
 			"sprint_end_date": latest_end,
 			"no_of_sprints": no_of_sprints,
-			"expected_velocity": expected_velocity,
+			"working_days": working_days,
+			"public_holidays": public_holidays,
+			"leave_days": flt(leave_days, 2),
+			"target_points": target_points,
 			"points_scoped": total_scoped,
-			"percentage_target": flt((total_scoped / expected_velocity * 100) if expected_velocity else 0.0, 2),
+			"percentage_target": flt((total_scoped_raw / prorated_target * 100) if prorated_target else 0.0, 2),
 			"accepted_points": total_accepted,
 			"rejected_points": total_rejected,
 			"spillover_points": spillover,
