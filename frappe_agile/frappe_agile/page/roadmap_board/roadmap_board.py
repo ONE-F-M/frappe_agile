@@ -232,9 +232,11 @@ def get_roadmap_data(project_status=None, lane=None, sprint_status=None, search=
 	}
 
 
-# Work item types that may sit in the backlog. Epics are containers, not
-# schedulable work, so they are never listed here.
-BACKLOG_TYPES = ("Task", "User Story", "Bug")
+# Epics are containers rather than schedulable work, so they never sit in the
+# backlog. Everything else that has not been scheduled and not been started yet
+# does.
+EXCLUDED_BACKLOG_TYPE = "Epic"
+BACKLOG_STATUSES = ("Draft", "Open")
 
 
 @frappe.whitelist()
@@ -242,24 +244,18 @@ def get_unassigned_work_items(limit=200):
 	"""Return Work Items not attached to any Sprint, newest-modified first.
 
 	These populate the Roadmap's backlog panel so a Business Analyst can drag
-	each one onto a sprint. Only schedulable types (Task / User Story / Bug)
-	are listed and the order is reverse-chronological by ``modified`` — the
-	last edited item shows first, per the roadmap spec.
-
-	When a Backlog Status is configured in Frappe Agile Settings, the panel is
-	further narrowed to unsprinted items in that status; left blank, unsprinted
-	items of every status are shown.
+	each one onto a sprint. The panel shows the same thing for everyone, with
+	nothing to configure: unsprinted Work Items that are still Draft or Open and
+	are not Epics. The order is reverse-chronological by ``modified`` — the last
+	edited item shows first, per the roadmap spec.
 	"""
 	frappe.has_permission("Work Item", "read", throw=True)
 
 	filters = {
 		"sprint": ["is", "not set"],
-		"work_item_type": ["in", list(BACKLOG_TYPES)],
+		"work_item_type": ["!=", EXCLUDED_BACKLOG_TYPE],
+		"status": ["in", list(BACKLOG_STATUSES)],
 	}
-
-	backlog_status = frappe.db.get_single_value("Frappe Agile Settings", "backlog_status")
-	if backlog_status:
-		filters["status"] = backlog_status
 
 	rows = frappe.get_list(
 		"Work Item",
