@@ -18,6 +18,8 @@ from frappe_agile.frappe_agile.page.roadmap_board.roadmap_board import (
 	ROADMAP_FLAG_FIELD,
 	create_missing_sprints,
 	get_roadmap_data,
+	DEFAULT_BACKLOG_STATUSES,
+	get_backlog_statuses,
 	get_scrum_projects,
 	get_unassigned_work_items,
 	move_work_item,
@@ -483,30 +485,53 @@ BACKLOG_PROJECT = f"{BACKLOG_PREFIX} Project"
 
 
 class TestRoadmapBacklog(FrappeTestCase):
-	"""What the Roadmap backlog panel shows, and that nothing configures it.
+	"""What the Roadmap backlog panel shows, and what can change it.
 
-	The rule is fixed: unsprinted Work Items that are still Draft or Open and are
-	not Epics. There is no setting behind it.
+	By default: unsprinted Work Items that are still Draft or Open and are not
+	Epics. Backlog Status on Frappe Agile Settings can put different statuses in
+	place of Draft and Open; the sprint and Epic tests are not negotiable.
 	"""
 
 	@classmethod
 	def setUpClass(cls):
 		super().setUpClass()
 		cls.company = frappe.db.get_value("Company", {}, "name")
+		cls.configured_status = frappe.db.get_single_value(
+			"Frappe Agile Settings", "backlog_status"
+		)
+
+	@classmethod
+	def tearDownClass(cls):
+		cls._write_backlog_status(cls.configured_status or "")
+		super().tearDownClass()
 
 	def setUp(self):
 		self._cleanup()
+		self._write_backlog_status("")
 		self.project = self._make_project()
 		self.sprint = self._make_sprint()
 		frappe.db.commit()
 
 	def tearDown(self):
 		self._cleanup()
+		self._write_backlog_status("")
 		frappe.db.commit()
 
 	# ------------------------------------------------------------------
 	# Fixtures
 	# ------------------------------------------------------------------
+	@classmethod
+	def _write_backlog_status(cls, value):
+		"""Set Backlog Status without going through validation."""
+		frappe.db.set_single_value("Frappe Agile Settings", "backlog_status", value)
+		frappe.clear_document_cache("Frappe Agile Settings", "Frappe Agile Settings")
+
+	def _save_backlog_status(self, value):
+		"""Set Backlog Status the way a user would, so validation runs."""
+		settings = frappe.get_single("Frappe Agile Settings")
+		settings.backlog_status = value
+		settings.save(ignore_permissions=True)
+
 	def _cleanup(self):
 		frappe.db.delete("Work Item", {"title": ("like", f"{BACKLOG_PREFIX}%")})
 		sprints = frappe.get_all("Sprint", {"sprint_prefix": BACKLOG_PREFIX}, pluck="name")
@@ -666,19 +691,53 @@ class TestRoadmapBacklog(FrappeTestCase):
 		self.assertLess(names.index(second), names.index(first))
 
 	# ------------------------------------------------------------------
-	# Nothing configures it
+	# Backlog Status: the statuses are a default, not a fixture
 	# ------------------------------------------------------------------
-	def test_frappe_agile_settings_no_longer_carries_a_backlog_status(self):
-		self.assertIsNone(
-			frappe.get_meta("Frappe Agile Settings").get_field("backlog_status"),
-			"Backlog Status is back on Frappe Agile Settings — the backlog is fixed, not configured",
-		)
+	def test_a_blank_backlog_status_falls_back_to_draft_and_open(self):
+		self._write_backlog_status("")
+		self.assertEqual(get_backlog_statuses(), list(DEFAULT_BACKLOG_STATUSES))
 
-	def test_a_leftover_backlog_status_value_changes_nothing(self):
-		"""Sites that had the old setting keep the stored value; it must be inert."""
-		frappe.db.set_single_value("Frappe Agile Settings", "backlog_status", "In Staging")
-		draft = self._unsprinted("draft despite the old setting", status="Draft")
-		try:
-			self.assertIn(draft, self._backlog_names())
-		finally:
-			frappe.db.set_single_value("Frappe Agile Settings", "backlog_status", "")
+	def test_a_configured_status_replaces_the_defaults(self):
+		staging = self._unsprinted("in staging", status="In Staging")
+		draft = self._unsprinted("draft", status="Draft")
+
+		self._write_backlog_status("In Staging")
+		names = self._backlog_names()
+		self.assertIn(staging, names)
+		self.assertNotIn(draft, names, "Draft is a default, so a configured status must replace it")
+
+	def test_several_statuses_can_be_configured_at_once(self):
+		draft = self._unsprinted("draft", status="Draft")
+		started = self._unsprinted("in progress", status="In Progress")
+		open_item = self._unsprinted("open", status="Open")
+
+		self._write_backlog_status("Draft, In Progress")
+		names = self._backlog_names()
+		self.assertIn(draft, names)
+		self.assertIn(started, names)
+		self.assertNotIn(open_item, names)
+
+	def test_a_configured_status_cannot_pull_in_epics_or_sprinted_work(self):
+		"""Only the statuses are configurable — the other two tests always hold."""
+		epic = self._unsprinted("an epic", status="Open", work_item_type="Epic")
+		scheduled = self._sprinted("already scheduled", status="Open")
+
+		self._write_backlog_status("Open")
+		names = self._backlog_names()
+		self.assertNotIn(epic, names)
+		self.assertNotIn(scheduled, names)
+
+	def test_a_status_that_does_not_exist_is_refused_on_save(self):
+		with self.assertRaises(frappe.ValidationError):
+			self._save_backlog_status("Nonsense Status")
+
+	def test_one_bad_status_in_a_list_is_refused_on_save(self):
+		with self.assertRaises(frappe.ValidationError):
+			self._save_backlog_status("Draft, Nonsense Status")
+
+	def test_a_valid_list_is_stored_tidied(self):
+		self._save_backlog_status("  Draft ,In Progress  ")
+		self.assertEqual(
+			frappe.db.get_single_value("Frappe Agile Settings", "backlog_status"),
+			"Draft, In Progress",
+		)

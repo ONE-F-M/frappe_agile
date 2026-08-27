@@ -232,11 +232,23 @@ def get_roadmap_data(project_status=None, lane=None, sprint_status=None, search=
 	}
 
 
-# Epics are containers rather than schedulable work, so they never sit in the
-# backlog. Everything else that has not been scheduled and not been started yet
-# does.
+# Two of the backlog's three tests are fixed: an item on a sprint is scheduled
+# rather than backlog, and an Epic is a container rather than schedulable work.
+# The third — which statuses count as "not started yet" — defaults to these and
+# can be overridden through Backlog Status on Frappe Agile Settings.
 EXCLUDED_BACKLOG_TYPE = "Epic"
-BACKLOG_STATUSES = ("Draft", "Open")
+DEFAULT_BACKLOG_STATUSES = ("Draft", "Open")
+
+
+def get_backlog_statuses():
+	"""The Work Item statuses the backlog panel lists.
+
+	Backlog Status on Frappe Agile Settings replaces the default when it is set —
+	one status, or several separated by commas. Left blank, the default stands.
+	"""
+	configured = frappe.db.get_single_value("Frappe Agile Settings", "backlog_status") or ""
+	statuses = [status.strip() for status in configured.split(",") if status.strip()]
+	return statuses or list(DEFAULT_BACKLOG_STATUSES)
 
 
 @frappe.whitelist()
@@ -244,17 +256,18 @@ def get_unassigned_work_items(limit=200):
 	"""Return Work Items not attached to any Sprint, newest-modified first.
 
 	These populate the Roadmap's backlog panel so a Business Analyst can drag
-	each one onto a sprint. The panel shows the same thing for everyone, with
-	nothing to configure: unsprinted Work Items that are still Draft or Open and
-	are not Epics. The order is reverse-chronological by ``modified`` — the last
-	edited item shows first, per the roadmap spec.
+	each one onto a sprint. By default the panel lists unsprinted Work Items that
+	are still Draft or Open and are not Epics; Backlog Status on Frappe Agile
+	Settings can put a different set of statuses in place of Draft and Open. The
+	order is reverse-chronological by ``modified`` — the last edited item shows
+	first, per the roadmap spec.
 	"""
 	frappe.has_permission("Work Item", "read", throw=True)
 
 	filters = {
 		"sprint": ["is", "not set"],
 		"work_item_type": ["!=", EXCLUDED_BACKLOG_TYPE],
-		"status": ["in", list(BACKLOG_STATUSES)],
+		"status": ["in", get_backlog_statuses()],
 	}
 
 	rows = frappe.get_list(

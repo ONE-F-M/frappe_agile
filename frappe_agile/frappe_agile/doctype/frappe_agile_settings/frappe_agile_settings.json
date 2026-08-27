@@ -9,7 +9,9 @@
   "development_team_section",
   "development_team",
   "ba_velocity",
-  "developer_velocity"
+  "developer_velocity",
+  "roadmap_section",
+  "backlog_status"
  ],
  "fields": [
   {
@@ -45,6 +47,17 @@
    "fieldname": "developer_velocity",
    "fieldtype": "Float",
    "label": "Developer Velocity"
+  },
+  {
+   "fieldname": "roadmap_section",
+   "fieldtype": "Section Break",
+   "label": "Roadmap"
+  },
+  {
+   "description": "Optional. The Roadmap backlog lists unsprinted Work Items that are not Epics. Leave blank to use the default statuses, Draft and Open. Name one Work Item status, or several separated by commas, to list those instead.",
+   "fieldname": "backlog_status",
+   "fieldtype": "Data",
+   "label": "Backlog Status"
   }
  ],
  "issingle": 1,
