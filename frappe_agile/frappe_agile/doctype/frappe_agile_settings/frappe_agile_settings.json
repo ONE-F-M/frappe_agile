@@ -54,7 +54,7 @@
    "label": "Roadmap"
   },
   {
-   "description": "Optional. When set, the Roadmap backlog panel shows only unsprinted Work Items whose Status equals this value. Must be one of the Work Item Status options. Leave blank to show unsprinted Work Items of every status.",
+   "description": "Optional. The Roadmap backlog lists unsprinted Work Items that are not Epics. Leave blank to use the default statuses, Draft and Open. Name one Work Item status, or several separated by commas, to list those instead.",
    "fieldname": "backlog_status",
    "fieldtype": "Data",
    "label": "Backlog Status"

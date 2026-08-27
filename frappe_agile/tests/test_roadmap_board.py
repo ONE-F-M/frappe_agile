@@ -18,7 +18,10 @@ from frappe_agile.frappe_agile.page.roadmap_board.roadmap_board import (
 	ROADMAP_FLAG_FIELD,
 	create_missing_sprints,
 	get_roadmap_data,
+	DEFAULT_BACKLOG_STATUSES,
+	get_backlog_statuses,
 	get_scrum_projects,
+	get_unassigned_work_items,
 	move_work_item,
 )
 from frappe_agile.frappe_agile.doctype.sprint.sprint import (
@@ -475,3 +478,266 @@ class TestRoadmapBoard(FrappeTestCase):
 				lane=self.projects["NOTSCRUM"],
 				window_start=add_days(start, 7),
 			)
+
+
+BACKLOG_PREFIX = "RMBACKLOG"
+BACKLOG_PROJECT = f"{BACKLOG_PREFIX} Project"
+
+
+class TestRoadmapBacklog(FrappeTestCase):
+	"""What the Roadmap backlog panel shows, and what can change it.
+
+	By default: unsprinted Work Items that are still Draft or Open and are not
+	Epics. Backlog Status on Frappe Agile Settings can put different statuses in
+	place of Draft and Open; the sprint and Epic tests are not negotiable.
+	"""
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		cls.company = frappe.db.get_value("Company", {}, "name")
+		cls.configured_status = frappe.db.get_single_value(
+			"Frappe Agile Settings", "backlog_status"
+		)
+
+	@classmethod
+	def tearDownClass(cls):
+		cls._write_backlog_status(cls.configured_status or "")
+		super().tearDownClass()
+
+	def setUp(self):
+		self._cleanup()
+		self._write_backlog_status("")
+		self.project = self._make_project()
+		self.sprint = self._make_sprint()
+		frappe.db.commit()
+
+	def tearDown(self):
+		self._cleanup()
+		self._write_backlog_status("")
+		frappe.db.commit()
+
+	# ------------------------------------------------------------------
+	# Fixtures
+	# ------------------------------------------------------------------
+	@classmethod
+	def _write_backlog_status(cls, value):
+		"""Set Backlog Status without going through validation."""
+		frappe.db.set_single_value("Frappe Agile Settings", "backlog_status", value)
+		frappe.clear_document_cache("Frappe Agile Settings", "Frappe Agile Settings")
+
+	def _save_backlog_status(self, value):
+		"""Set Backlog Status the way a user would, so validation runs."""
+		settings = frappe.get_single("Frappe Agile Settings")
+		settings.backlog_status = value
+		settings.save(ignore_permissions=True)
+
+	def _cleanup(self):
+		frappe.db.delete("Work Item", {"title": ("like", f"{BACKLOG_PREFIX}%")})
+		sprints = frappe.get_all("Sprint", {"sprint_prefix": BACKLOG_PREFIX}, pluck="name")
+		if sprints:
+			frappe.db.delete("Sprint Work Item", {"parent": ("in", sprints)})
+			frappe.db.delete("Sprint", {"name": ("in", sprints)})
+		projects = frappe.get_all("Project", {"project_name": BACKLOG_PROJECT}, pluck="name")
+		if projects:
+			frappe.db.delete("Project", {"name": ("in", projects)})
+
+	def _make_project(self):
+		doc = frappe.get_doc(
+			{
+				"doctype": "Project",
+				"project_name": BACKLOG_PROJECT,
+				"project_type": "SCRUM Project",
+				"is_active": "Yes",
+				"status": "Open",
+				"custom_sprint_prefix": BACKLOG_PREFIX,
+				ROADMAP_FLAG_FIELD: "Yes",
+				"company": self.company,
+			}
+		)
+		doc.insert(ignore_permissions=True)
+		return doc.name
+
+	def _make_sprint(self):
+		start = align_to_sprint_start(getdate())
+		doc = frappe.get_doc(
+			{
+				"doctype": "Sprint",
+				"project": self.project,
+				"sprint_prefix": BACKLOG_PREFIX,
+				"status": "Draft",
+				"start_date": start,
+				"end_date": add_days(start, SPRINT_SPAN_DAYS),
+				"sprint_goal": "Backlog test",
+			}
+		)
+		doc.insert(ignore_permissions=True)
+		return doc.name
+
+	def _set_status(self, name, status):
+		"""Force the stored status.
+
+		A newly inserted Work Item lands on Draft whatever status was asked for,
+		so the status a test wants has to be written afterwards. These tests are
+		about which rows the backlog query returns, not about how an item reaches
+		a status.
+		"""
+		frappe.db.set_value(
+			"Work Item",
+			name,
+			{"status": status, "workflow_state": status},
+			update_modified=False,
+		)
+
+	def _sprinted(self, title, status="Open", work_item_type="User Story"):
+		"""A Work Item sitting on the fixture sprint."""
+		doc = frappe.get_doc(
+			{
+				"doctype": "Work Item",
+				"work_item_type": work_item_type,
+				"title": f"{BACKLOG_PREFIX} {title}",
+				"sprint": self.sprint,
+				"story_points": 3,
+				"status": status,
+				"workflow_state": status,
+			}
+		)
+		doc.insert(ignore_permissions=True)
+		self._set_status(doc.name, status)
+		return doc.name
+
+	def _unsprinted(self, title, status="Open", work_item_type="User Story"):
+		"""A Work Item in the backlog — no sprint.
+
+		Work Item.validate refuses to save a non-Epic without a sprint, so the
+		item is created on the fixture sprint and then detached in the database,
+		which is how the unsprinted items on real sites came to exist.
+		"""
+		if work_item_type == "Epic":
+			doc = frappe.get_doc(
+				{
+					"doctype": "Work Item",
+					"work_item_type": "Epic",
+					"title": f"{BACKLOG_PREFIX} {title}",
+					"status": status,
+					"workflow_state": status,
+				}
+			)
+			doc.insert(ignore_permissions=True)
+			self._set_status(doc.name, status)
+			return doc.name
+
+		name = self._sprinted(title, status=status, work_item_type=work_item_type)
+		frappe.db.delete("Sprint Work Item", {"work_item": name})
+		frappe.db.set_value("Work Item", name, "sprint", None, update_modified=False)
+		return name
+
+	def _backlog_names(self):
+		"""Only the fixture items — the panel lists the site's real backlog too."""
+		return [
+			row["name"]
+			for row in get_unassigned_work_items()
+			if (row["title"] or "").startswith(BACKLOG_PREFIX)
+		]
+
+	# ------------------------------------------------------------------
+	# What the backlog holds
+	# ------------------------------------------------------------------
+	def test_draft_and_open_unsprinted_items_are_listed(self):
+		draft = self._unsprinted("draft story", status="Draft")
+		open_item = self._unsprinted("open story", status="Open")
+		names = self._backlog_names()
+		self.assertIn(draft, names)
+		self.assertIn(open_item, names)
+
+	def test_a_bug_and_a_task_are_listed_too(self):
+		bug = self._unsprinted("a bug", work_item_type="Bug")
+		task = self._unsprinted("a task", work_item_type="Task")
+		names = self._backlog_names()
+		self.assertIn(bug, names)
+		self.assertIn(task, names)
+
+	def test_items_on_a_sprint_are_not_listed(self):
+		"""The backlog is what has not been scheduled."""
+		scheduled = self._sprinted("already scheduled", status="Open")
+		self.assertNotIn(scheduled, self._backlog_names())
+
+	def test_epics_are_not_listed(self):
+		"""Epics are containers, not schedulable work."""
+		epic = self._unsprinted("an epic", status="Open", work_item_type="Epic")
+		self.assertNotIn(epic, self._backlog_names())
+
+	def test_work_already_under_way_is_not_listed(self):
+		"""Anything past Open has been picked up, so it is no longer backlog."""
+		started = self._unsprinted("in progress", status="In Progress")
+		staging = self._unsprinted("in staging", status="In Staging")
+		review = self._unsprinted("pending review", status="Pending Review")
+		names = self._backlog_names()
+		self.assertNotIn(started, names)
+		self.assertNotIn(staging, names)
+		self.assertNotIn(review, names)
+
+	def test_finished_and_rejected_work_is_not_listed(self):
+		done = self._unsprinted("done", status="Done")
+		rejected = self._unsprinted("rejected", status="Rejected")
+		names = self._backlog_names()
+		self.assertNotIn(done, names)
+		self.assertNotIn(rejected, names)
+
+	def test_newest_edited_item_comes_first(self):
+		first = self._unsprinted("edited first", status="Open")
+		second = self._unsprinted("edited second", status="Open")
+		names = self._backlog_names()
+		self.assertLess(names.index(second), names.index(first))
+
+	# ------------------------------------------------------------------
+	# Backlog Status: the statuses are a default, not a fixture
+	# ------------------------------------------------------------------
+	def test_a_blank_backlog_status_falls_back_to_draft_and_open(self):
+		self._write_backlog_status("")
+		self.assertEqual(get_backlog_statuses(), list(DEFAULT_BACKLOG_STATUSES))
+
+	def test_a_configured_status_replaces_the_defaults(self):
+		staging = self._unsprinted("in staging", status="In Staging")
+		draft = self._unsprinted("draft", status="Draft")
+
+		self._write_backlog_status("In Staging")
+		names = self._backlog_names()
+		self.assertIn(staging, names)
+		self.assertNotIn(draft, names, "Draft is a default, so a configured status must replace it")
+
+	def test_several_statuses_can_be_configured_at_once(self):
+		draft = self._unsprinted("draft", status="Draft")
+		started = self._unsprinted("in progress", status="In Progress")
+		open_item = self._unsprinted("open", status="Open")
+
+		self._write_backlog_status("Draft, In Progress")
+		names = self._backlog_names()
+		self.assertIn(draft, names)
+		self.assertIn(started, names)
+		self.assertNotIn(open_item, names)
+
+	def test_a_configured_status_cannot_pull_in_epics_or_sprinted_work(self):
+		"""Only the statuses are configurable — the other two tests always hold."""
+		epic = self._unsprinted("an epic", status="Open", work_item_type="Epic")
+		scheduled = self._sprinted("already scheduled", status="Open")
+
+		self._write_backlog_status("Open")
+		names = self._backlog_names()
+		self.assertNotIn(epic, names)
+		self.assertNotIn(scheduled, names)
+
+	def test_a_status_that_does_not_exist_is_refused_on_save(self):
+		with self.assertRaises(frappe.ValidationError):
+			self._save_backlog_status("Nonsense Status")
+
+	def test_one_bad_status_in_a_list_is_refused_on_save(self):
+		with self.assertRaises(frappe.ValidationError):
+			self._save_backlog_status("Draft, Nonsense Status")
+
+	def test_a_valid_list_is_stored_tidied(self):
+		self._save_backlog_status("  Draft ,In Progress  ")
+		self.assertEqual(
+			frappe.db.get_single_value("Frappe Agile Settings", "backlog_status"),
+			"Draft, In Progress",
+		)
