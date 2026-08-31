@@ -12,7 +12,6 @@ class WorkItem(Document):
 
 	def validate(self):
 		self._validate_epic_story_points()
-		self._validate_sprint_required()
 		self._validate_sprint_status()
 		self._validate_orchestrator_target()
 
@@ -81,7 +80,7 @@ class WorkItem(Document):
 				"work_item_type": self.work_item_type,
 				"title": self.title,
 				"status": self.status,
-				"story_points": self.story_points,
+				"story_points": flt(self.story_points),
 				"assignee_user": self.assignee_user,
 			},
 			update_modified=False,
@@ -98,8 +97,11 @@ class WorkItem(Document):
 
 		sprint_doc = frappe.get_doc("Sprint", sprint_name)
 
+		# Clean up any empty rows from the child table first
+		sprint_doc.work_items = [row for row in sprint_doc.get("work_items", []) if row.work_item]
+
 		# Avoid duplicate rows
-		if any(row.work_item == self.name for row in sprint_doc.get("work_items", [])):
+		if any(row.work_item == self.name for row in sprint_doc.work_items):
 			return
 
 		sprint_doc.append(
@@ -109,7 +111,7 @@ class WorkItem(Document):
 				"work_item_type": self.work_item_type,
 				"title": self.title,
 				"status": self.status,
-				"story_points": self.story_points,
+				"story_points": flt(self.story_points),
 				"assignee_user": self.assignee_user,
 				"is_brought_forward": 1 if is_brought_forward else 0,
 			},
@@ -141,19 +143,6 @@ class WorkItem(Document):
 				title=_("Invalid Story Points"),
 			)
 
-	def _validate_sprint_required(self):
-		""" Every Work Item must live on a Sprint so the roadmap stays complete.
-			Epics are containers, not schedulable work, so they are exempt.
-		"""
-		if self.work_item_type == "Epic":
-			return
-
-		if not self.sprint:
-			frappe.throw(
-				_("Every Work Item must be assigned to an Active or Draft Sprint. Items are not allowed in the backlog."),
-				title=_("Sprint Required"),
-			)
-
 	def _validate_orchestrator_target(self):
 		"""An Epic cannot be handed to the orchestrator.
 
@@ -169,17 +158,16 @@ class WorkItem(Document):
 			)
 
 	def _validate_sprint_status(self):
-		"""Ensure the Work Item can only be linked to an Active or Draft Sprint."""
-
-		# Only allow assigning to Active or Draft sprints (e.g. block Completed)
+		"""Ensure the Work Item cannot be linked to a Completed Sprint, 
+		and cannot be modified if it already belongs to a Completed Sprint."""
+		
+		# 1. Prevent moving to or saving against a currently Completed sprint
 		if self.sprint:
 			sprint_status = frappe.db.get_value("Sprint", self.sprint, "status")
-			if sprint_status not in ("Active", "Draft"):
+			if sprint_status == "Completed":
 				frappe.throw(
-					_("Cannot assign or update Work Item against Sprint <b>{0}</b> because it is <b>{1}</b>. Work Items can only be assigned to Active or Draft Sprints.").format(
-						self.sprint, sprint_status
-					),
-					title=_("Invalid Sprint Status"),
+					_("Cannot assign or update Work Item against Sprint <b>{0}</b> because it is already Completed.").format(self.sprint),
+					title=_("Sprint Completed")
 				)
 
 
