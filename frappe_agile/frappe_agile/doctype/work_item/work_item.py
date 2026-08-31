@@ -13,6 +13,7 @@ class WorkItem(Document):
 	def validate(self):
 		self._validate_epic_story_points()
 		self._validate_sprint_status()
+		self._validate_orchestrator_target()
 
 
 	def before_save(self):
@@ -23,6 +24,12 @@ class WorkItem(Document):
 		if self.status and self.workflow_state != self.status:
 			if frappe.db.exists("Workflow State", self.status):
 				self.workflow_state = self.status
+
+		# The orchestrator IS the assignee. A human assignee left alongside the flag
+		# would leave two owners on the record and no way to tell which is expected
+		# to act, so the flag wins and the human is dropped.
+		if self.orchestrator and self.assignee_user:
+			self.assignee_user = None
 
 	def on_update(self):
 		"""
@@ -134,6 +141,20 @@ class WorkItem(Document):
 			frappe.throw(
 				_("Story Points cannot be set for Epics. Story points should only be assigned to actual work items."),
 				title=_("Invalid Story Points"),
+			)
+
+	def _validate_orchestrator_target(self):
+		"""An Epic cannot be handed to the orchestrator.
+
+		Epics are containers, not schedulable work — the same reason they carry no
+		story points and need no sprint. The orchestrator is given something to
+		implement, so flagging a container would hand it a Work Item with nothing
+		to do.
+		"""
+		if self.orchestrator and self.work_item_type == "Epic":
+			frappe.throw(
+				_("An Epic cannot be assigned to the orchestrator. Epics are containers — flag the individual Work Items inside it instead."),
+				title=_("Invalid Orchestrator Target"),
 			)
 
 	def _validate_sprint_status(self):

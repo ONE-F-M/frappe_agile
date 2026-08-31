@@ -23,20 +23,26 @@ class FrappeAgileSettings(Document):
 		self.validate_backlog_status()
 
 	def validate_backlog_status(self):
-		"""Backlog Status is a free-text Data field, but it drives a status
-		filter on the Roadmap backlog — so it must name a real Work Item status.
-		Blank is allowed (backlog then shows every status)."""
+		"""Backlog Status is free text but replaces the Roadmap backlog's default
+		statuses, so every entry must name a real Work Item status. Blank is
+		allowed — the backlog then falls back to its own defaults."""
 		if not self.backlog_status:
 			return
 
+		entries = [status.strip() for status in self.backlog_status.split(",") if status.strip()]
 		options = work_item_status_options()
-		if self.backlog_status not in options:
-			frappe.throw(
-				_("Backlog Status {0} is not a valid Work Item status. Choose one of: {1}.").format(
-					frappe.bold(self.backlog_status), ", ".join(options)
-				),
-				title=_("Invalid Backlog Status"),
-			)
+		unknown = [status for status in entries if status not in options]
+		if not unknown:
+			# Store it tidied, so the backlog reads exactly what was validated.
+			self.backlog_status = ", ".join(entries)
+			return
+
+		frappe.throw(
+			_("Backlog Status {0} is not a valid Work Item status. Choose from: {1}.").format(
+				frappe.bold(", ".join(unknown)), ", ".join(options)
+			),
+			title=_("Invalid Backlog Status"),
+		)
 
 
 @frappe.whitelist()

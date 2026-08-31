@@ -2,7 +2,9 @@
 # For license information, please see license.txt
 
 import frappe
-from frappe.utils import date_diff, flt, getdate
+from frappe.utils import flt
+
+from frappe_agile.frappe_agile.report.proration import get_employee_map, get_proration
 
 
 def execute(filters=None):
@@ -20,6 +22,9 @@ def get_columns():
 		{"fieldname": "sprint_start_date", "label": "Sprint Start Date", "fieldtype": "Date", "width": 150},
 		{"fieldname": "sprint_end_date", "label": "Sprint End Date", "fieldtype": "Date", "width": 150},
 		{"fieldname": "no_of_sprints", "label": "No. of Sprints", "fieldtype": "Int", "width": 120},
+		{"fieldname": "working_days", "label": "Working Days", "fieldtype": "Int", "width": 120},
+		{"fieldname": "public_holidays", "label": "Public Holidays", "fieldtype": "Int", "width": 130},
+		{"fieldname": "leave_days", "label": "Leave Days", "fieldtype": "Float", "width": 120},
 		{"fieldname": "target_points", "label": "Target Points", "fieldtype": "Float", "width": 130},
 		{"fieldname": "points_scoped", "label": "Points Scoped", "fieldtype": "Float", "width": 130},
 		{"fieldname": "accepted_points", "label": "Accepted Points", "fieldtype": "Float", "width": 140},
@@ -146,14 +151,13 @@ def get_data(filters):
 				unique_periods.add((sprint_map[s].start_date, sprint_map[s].end_date))
 		no_of_sprints = len(unique_periods)
 
-		# Target Points = the developer's expected velocity, prorated for any leave
-		# taken within each distinct sprint period and summed across them:
-		#   velocity × (work_days − leave_days) / work_days  (per sprint period)
+		# Target Points = the developer's expected velocity, prorated by the days
+		# they could actually work in each distinct sprint period and summed
+		# across them:
+		#   velocity × (working_days − public_holidays − leave_days) / working_days
 		employee = employee_map.get(user)
-		prorated_target = 0.0
-		for period_start, period_end in unique_periods:
-			factor, _, _ = get_leave_proration(employee, period_start, period_end)
-			prorated_target += developer_velocity * factor
+		factor, working_days, public_holidays, leave_days = get_proration(employee, unique_periods)
+		prorated_target = developer_velocity * factor
 
 		target_points = flt(prorated_target, 1)
 
@@ -197,6 +201,9 @@ def get_data(filters):
 			"sprint_start_date": earliest_start,
 			"sprint_end_date": latest_end,
 			"no_of_sprints": no_of_sprints,
+			"working_days": working_days,
+			"public_holidays": public_holidays,
+			"leave_days": flt(leave_days, 2),
 			"target_points": target_points,
 			"points_scoped": total_scoped,
 			"accepted_points": total_accepted,
@@ -208,97 +215,3 @@ def get_data(filters):
 	# Sort by developer name
 	data.sort(key=lambda x: x.get("developer") or "")
 	return data
-
-
-def get_employee_map(users):
-	"""Map each developer User to their linked Employee record.
-
-	Where a User is linked to more than one Employee, an Active record is preferred.
-	"""
-	if not users:
-		return {}
-
-	employees = frappe.get_all(
-		"Employee",
-		filters={"user_id": ["in", users]},
-		fields=["name", "user_id", "status"],
-	)
-
-	emp_map = {}
-	for emp in employees:
-		if emp.user_id not in emp_map or emp.status == "Active":
-			emp_map[emp.user_id] = emp.name
-	return emp_map
-
-
-def get_leave_proration(employee, start_date, end_date):
-	"""Return (factor, leave_days, work_days) used to prorate expected velocity.
-
-	    factor = (work_days − leave_days) / work_days
-
-	where:
-	    work_days  = calendar days in the sprint minus the employee's holidays
-	                 (including weekly offs) in that range.
-	    leave_days = approved leave days falling within the sprint, excluding
-	                 holidays (mirrors HRMS leave-day accounting, incl. half days).
-
-	The factor defaults to 1.0 (no proration) when it cannot be determined —
-	no linked Employee, no holiday list, or HRMS not installed.
-	"""
-	if not (employee and start_date and end_date):
-		return 1.0, 0.0, 0.0
-
-	try:
-		from hrms.hr.doctype.leave_application.leave_application import get_number_of_leave_days
-		from hrms.hr.utils import get_holidays_for_employee
-	except ImportError:
-		return 1.0, 0.0, 0.0
-
-	start_date = getdate(start_date)
-	end_date = getdate(end_date)
-
-	calendar_days = date_diff(end_date, start_date) + 1
-	if calendar_days <= 0:
-		return 1.0, 0.0, 0.0
-
-	holidays = get_holidays_for_employee(employee, start_date, end_date, raise_exception=False)
-	work_days = calendar_days - len(holidays)
-	if work_days <= 0:
-		# Entire sprint is holidays for this employee — nothing to prorate against
-		return 1.0, 0.0, 0.0
-
-	# Approved leave applications overlapping the sprint window
-	leave_apps = frappe.get_all(
-		"Leave Application",
-		filters={
-			"employee": employee,
-			"status": "Approved",
-			"docstatus": 1,
-			"from_date": ["<=", end_date],
-			"to_date": [">=", start_date],
-		},
-		fields=["leave_type", "from_date", "to_date", "half_day", "half_day_date"],
-	)
-
-	leave_days = 0.0
-	for la in leave_apps:
-		# Clamp each leave application to the sprint window before counting
-		clamped_from = max(getdate(la.from_date), start_date)
-		clamped_to = min(getdate(la.to_date), end_date)
-		if clamped_to < clamped_from:
-			continue
-		leave_days += flt(
-			get_number_of_leave_days(
-				employee,
-				la.leave_type,
-				clamped_from,
-				clamped_to,
-				la.half_day,
-				la.half_day_date,
-			)
-		)
-
-	# A developer cannot take more leave than there are working days
-	leave_days = min(leave_days, work_days)
-	factor = (work_days - leave_days) / work_days
-	return factor, leave_days, work_days

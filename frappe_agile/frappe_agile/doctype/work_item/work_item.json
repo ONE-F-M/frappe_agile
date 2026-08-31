@@ -30,6 +30,7 @@
   "epic",
   "small_text_yecv",
   "implementation_details_section",
+  "orchestrator",
   "assignee_user",
   "column_break_xgtd",
   "pr_reviewer_user",
@@ -94,6 +95,14 @@
    "options": "Draft\nOpen\nIn Progress\nPR Created\nPending Review\nChanges Requested\nIn Staging\nRejected\nDone"
   },
   {
+   "description": "Hand this item to the orchestrator agent instead of a human assignee. The Software Development process reads this flag and takes the orchestrator path when it is set.",
+   "fieldname": "orchestrator",
+   "fieldtype": "Check",
+   "in_standard_filter": 1,
+   "label": "Orchestrator"
+  },
+  {
+   "depends_on": "eval:!doc.orchestrator",
    "fieldname": "assignee_user",
    "fieldtype": "Link",
    "label": "Assignee User",
@@ -271,7 +280,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-23 20:33:58.868780",
+ "modified": "2026-08-19 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Frappe Agile",
  "name": "Work Item",
