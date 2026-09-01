@@ -27,11 +27,12 @@ def get_columns():
 		{"fieldname": "leave_days", "label": "Leave Days", "fieldtype": "Float", "width": 120},
 		{"fieldname": "target_points", "label": "Target Points", "fieldtype": "Float", "width": 130},
 		{"fieldname": "points_scoped", "label": "Points Scoped", "fieldtype": "Float", "width": 130},
-		{"fieldname": "percentage_target", "label": "Percentage Target %", "fieldtype": "Percent", "width": 160},
+		{"fieldname": "percentage_target", "label": "Scoped Percentage", "fieldtype": "Percent", "width": 160},
 		{"fieldname": "accepted_points", "label": "Accepted Points", "fieldtype": "Float", "width": 140},
+		{"fieldname": "accepted_per_target", "label": "Target Achievement Percentage", "fieldtype": "Percent", "width": 200},
 		{"fieldname": "rejected_points", "label": "Rejected Points", "fieldtype": "Float", "width": 140},
 		{"fieldname": "spillover_points", "label": "Spillover Points", "fieldtype": "Float", "width": 140},
-		{"fieldname": "acceptance_rate", "label": "Acceptance Rate %", "fieldtype": "Percent", "width": 150},
+		{"fieldname": "acceptance_rate", "label": "Acceptance Rate Percentage", "fieldtype": "Percent", "width": 150},
 	]
 
 
@@ -212,6 +213,7 @@ def get_data(filters):
 			"rejected_points": total_rejected,
 			"spillover_points": spillover,
 			"acceptance_rate": flt(acceptance_rate, 2),
+			"accepted_per_target": flt((total_accepted_raw / prorated_target * 100) if prorated_target else 0.0, 2),
 		})
 
 	# Sort by developer name
