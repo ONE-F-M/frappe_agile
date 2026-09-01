@@ -420,9 +420,9 @@ class TestSprintReportProration(FrappeTestCase):
 		self.assertEqual(row["public_holidays"], 1)
 		self.assertEqual(row["leave_days"], 0.0)
 		self.assertEqual(row["target_points"], 64.0)
-		# 12 scoped against a 64-point target, not against 80 — the proration is
-		# visible in target_points above, which is what the column now reports.
 		self.assertEqual(row["points_scoped"], 12.0)
+		# 12 scoped against a 64-point target, not against 80.
+		self.assertEqual(row["percentage_target"], 18.75)
 
 	def test_developer_report_leaves_an_unlinked_user_alone(self):
 		sprint = self._make_sprint(PERIOD)
