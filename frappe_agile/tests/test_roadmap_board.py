@@ -103,7 +103,7 @@ class TestRoadmapBoard(FrappeTestCase):
 		doc.insert(ignore_permissions=True)
 		return doc.name
 
-	def _make_work_item(self, title, sprint, story_points=3, status="Open"):
+	def _make_work_item(self, title, sprint, story_points=3, status="Open", assignee_user=None):
 		doc = frappe.get_doc(
 			{
 				"doctype": "Work Item",
@@ -112,10 +112,25 @@ class TestRoadmapBoard(FrappeTestCase):
 				"sprint": sprint,
 				"story_points": story_points,
 				"status": status,
+				"assignee_user": assignee_user,
 			}
 		)
 		doc.insert(ignore_permissions=True)
+		# A new Work Item lands on its workflow's first state whatever status was
+		# asked for, so the status a test wants has to be written afterwards.
+		frappe.db.set_value(
+			"Work Item",
+			doc.name,
+			{"status": status, "workflow_state": status},
+			update_modified=False,
+		)
 		return doc.name
+
+	def _cell_items(self, project_key, start):
+		"""The work items of the fixture sprint in that project's window."""
+		data = get_roadmap_data(lane=json.dumps([self.projects[project_key]]))
+		cell = data["cells"][f"{self.projects[project_key]}::{getdate(start).isoformat()}"]
+		return cell, {wi["name"]: wi for wi in cell["work_items"]}
 
 	def _cleanup(self):
 		projects = frappe.get_all(
@@ -348,6 +363,73 @@ class TestRoadmapBoard(FrappeTestCase):
 		# The lane survives (it's a project) but its Draft sprint is filtered out.
 		self.assertIn(self.projects["OPEN"], self._rows(data))
 		self.assertEqual(data["cells"], {})
+
+	# ------------------------------------------------------------------
+	# What a work item card shows: ticked = assigned, struck through = Done
+	# ------------------------------------------------------------------
+	def test_an_assigned_work_item_is_ticked(self):
+		start = align_to_sprint_start(getdate())
+		sprint = self._make_sprint("OPEN", start)
+		wi = self._make_work_item(
+			f"{TEST_PREFIX} assigned", sprint, assignee_user="Administrator"
+		)
+
+		_, items = self._cell_items("OPEN", start)
+
+		self.assertTrue(items[wi]["assigned"])
+		self.assertEqual(items[wi]["assignee_user"], "Administrator")
+
+	def test_an_unassigned_work_item_is_not_ticked(self):
+		start = align_to_sprint_start(getdate())
+		sprint = self._make_sprint("OPEN", start)
+		wi = self._make_work_item(f"{TEST_PREFIX} nobody on it", sprint)
+
+		_, items = self._cell_items("OPEN", start)
+
+		self.assertFalse(items[wi]["assigned"])
+
+	def test_the_tick_follows_assignment_not_completion(self):
+		"""The two flags are independent: the checkbox no longer means Done."""
+		start = align_to_sprint_start(getdate())
+		sprint = self._make_sprint("OPEN", start)
+		done_unassigned = self._make_work_item(
+			f"{TEST_PREFIX} finished by nobody", sprint, status="Done"
+		)
+		open_assigned = self._make_work_item(
+			f"{TEST_PREFIX} under way", sprint, status="Open", assignee_user="Administrator"
+		)
+
+		_, items = self._cell_items("OPEN", start)
+
+		# Done but unassigned: struck through, not ticked.
+		self.assertTrue(items[done_unassigned]["accepted"])
+		self.assertFalse(items[done_unassigned]["assigned"])
+		# Assigned but not finished: ticked, not struck through.
+		self.assertTrue(items[open_assigned]["assigned"])
+		self.assertFalse(items[open_assigned]["accepted"])
+
+	def test_assigned_count_counts_the_ticked_items(self):
+		start = align_to_sprint_start(getdate())
+		sprint = self._make_sprint("OPEN", start)
+		self._make_work_item(f"{TEST_PREFIX} one", sprint, assignee_user="Administrator")
+		self._make_work_item(f"{TEST_PREFIX} two", sprint, assignee_user="Administrator")
+		self._make_work_item(f"{TEST_PREFIX} three", sprint)
+
+		cell, _ = self._cell_items("OPEN", start)
+
+		self.assertEqual(cell["item_count"], 3)
+		self.assertEqual(cell["assigned_count"], 2)
+
+	def test_an_empty_assignee_is_not_an_assignment(self):
+		"""A blank stored on the field must read as unassigned, not as ticked."""
+		start = align_to_sprint_start(getdate())
+		sprint = self._make_sprint("OPEN", start)
+		wi = self._make_work_item(f"{TEST_PREFIX} blank assignee", sprint)
+		frappe.db.set_value("Work Item", wi, "assignee_user", "", update_modified=False)
+
+		_, items = self._cell_items("OPEN", start)
+
+		self.assertFalse(items[wi]["assigned"])
 
 	# ------------------------------------------------------------------
 	# Create missing sprints
