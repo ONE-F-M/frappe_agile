@@ -9,11 +9,12 @@
 //   columns = weekly time windows, aligned across lanes, extended with empty
 //             future windows for forward planning
 //   cells   = the sprint in that project/window, with status, story-point
-//             acceptance %, and its work items (checkbox = accepted/Done)
+//             acceptance %, and its work items (checkbox = assigned to a user,
+//             struck-through title = Done)
 //
 // Work items can be dragged between sprints (and into empty future slots, which
 // auto-create a Draft sprint named from the project's Sprint Prefix). The
-// checkbox is an acceptance indicator only.
+// checkbox is an assignment indicator only — it is not editable here.
 //
 // A Backlog panel on the left lists Work Items not yet on any sprint (newest
 // first); items can be dragged from it straight onto a sprint cell.
@@ -383,7 +384,8 @@ class RoadmapBoard {
 			<span class="rm-legend-item"><span class="rm-dot rm-status-active"></span>${__("Active")}</span>
 			<span class="rm-legend-item"><span class="rm-dot rm-status-completed"></span>${__("Completed")}</span>
 			<span class="rm-legend-sep"></span>
-			<span class="rm-legend-item"><i class="fa fa-check-square-o"></i> ${__("Accepted (Done)")}</span>
+			<span class="rm-legend-item"><i class="fa fa-check-square-o"></i> ${__("Assigned")}</span>
+			<span class="rm-legend-item"><span class="rm-legend-done">${__("Done")}</span></span>
 			<span class="rm-legend-item rm-legend-pct">${__("% = story-point acceptance")}</span>
 			<span class="rm-legend-sep"></span>
 			${drag_hint}
@@ -783,7 +785,12 @@ class RoadmapBoard {
 	}
 
 	_item_html(wi, term) {
-		const checked = wi.accepted ? "checked" : "";
+		// Two independent signals: the checkbox is assignment, the struck-through
+		// title is completion.
+		const checked = wi.assigned ? "checked" : "";
+		const check_title = wi.assigned
+			? __("Assigned to {0}", [wi.assignee_user])
+			: __("Unassigned");
 		const acc_class = wi.accepted ? "rm-item-accepted" : "";
 		const type_class = `rm-type-${(wi.type || "").toLowerCase().replace(/\s+/g, "-")}`;
 		const highlight = term && (wi.title || "").toLowerCase().includes(term) ? "rm-item-hit" : "";
@@ -800,7 +807,8 @@ class RoadmapBoard {
 		<div class="rm-item ${acc_class} ${highlight} ${drag_class}" data-name="${frappe.utils.escape_html(wi.name)}"
 			title="${frappe.utils.escape_html((wi.type || "") + " · " + (wi.status || ""))}">
 			${grip}
-			<input type="checkbox" class="rm-check" ${checked} disabled />
+			<input type="checkbox" class="rm-check" ${checked} disabled
+				title="${frappe.utils.escape_html(check_title)}" />
 			<span class="rm-item-type ${type_class}"></span>
 			<span class="rm-item-title" title="${frappe.utils.escape_html(wi.title || "")}">${frappe.utils.escape_html(wi.title || wi.name)}</span>
 			${pts}

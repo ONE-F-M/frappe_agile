@@ -509,6 +509,9 @@ def _build_cell(sprint, items, search_term, epic_titles=None):
 				"epic": wi.epic,
 				"epic_title": epic_titles.get(wi.epic) if wi.epic else None,
 				"assignee_user": wi.assignee_user,
+				# The two independent flags a cell shows: the checkbox is
+				# assignment, the strikethrough is completion.
+				"assigned": bool(wi.assignee_user),
 				"accepted": is_accepted,
 			}
 		)
@@ -541,6 +544,7 @@ def _build_cell(sprint, items, search_term, epic_titles=None):
 		"acceptance_pct": acceptance_pct,
 		"item_count": len(work_items),
 		"accepted_count": sum(1 for wi in work_items if wi["accepted"]),
+		"assigned_count": sum(1 for wi in work_items if wi["assigned"]),
 		"work_items": work_items,
 		"search_matched": matched,
 	}
