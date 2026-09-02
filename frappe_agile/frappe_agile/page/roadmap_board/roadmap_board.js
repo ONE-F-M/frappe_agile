@@ -3,8 +3,9 @@
 
 // Roadmap Board
 // A Kanban-style roadmap grid:
-//   rows    = one lane per active SCRUM Project (always — there is no other
-//             grouping); projects with no sprints yet still get a lane
+//   rows    = one lane per selected active SCRUM Project (there is no other
+//             grouping); projects with no sprints yet still get a lane. Nothing
+//             loads until the Projects filter names something
 //   columns = weekly time windows, aligned across lanes, extended with empty
 //             future windows for forward planning
 //   cells   = the sprint in that project/window, with status, story-point
@@ -53,9 +54,8 @@ class RoadmapBoard {
 		this.page = page;
 		this.wrapper = wrapper;
 
-		// The two halves of the Projects multi-select. Both empty (the state the
-		// page loads in) means every active SCRUM project, every status; the board
-		// is restricted to active SCRUM projects server-side either way.
+		// The two halves of the Projects multi-select. Both empty — the state the
+		// page loads in — means an empty board; the user picks what to load.
 		this.filters = {
 			project_status: [],
 			lane: [],
@@ -227,8 +227,7 @@ class RoadmapBoard {
 	// One multi-select drives which lanes the board shows. It lists the three
 	// Project statuses first, then the SCRUM projects themselves; ticking a status
 	// narrows by Project.status, ticking a project pins that lane, and the two AND
-	// together. Nothing ticked — the state the page loads in — means every active
-	// SCRUM project in every status.
+	// together. Nothing ticked loads nothing — the board waits for a selection.
 	_make_project_filter() {
 		const mount = this.$filters.find("#rm-project-filter")[0];
 		if (!mount) return;
@@ -240,7 +239,7 @@ class RoadmapBoard {
 			df: {
 				fieldtype: "MultiSelectList",
 				fieldname: "project_filter",
-				placeholder: __("All Projects"),
+				placeholder: __("Select projects…"),
 				get_data: () => this._filter_options(),
 				change: () => {
 					this._apply_filter_selection(this.project_filter_control.get_value() || []);
@@ -335,10 +334,18 @@ class RoadmapBoard {
 	}
 
 	// Send the picked projects as a JSON list, or nothing at all when none are
-	// picked — an omitted `lane` is what tells the server "every project".
+	// picked; the ticked statuses travel separately and either half is a selection.
 	_lane_arg() {
 		const lanes = this.filters.lane || [];
 		return lanes.length ? JSON.stringify(lanes) : undefined;
+	}
+
+	// Has the user picked anything to load? Either half of the Projects filter
+	// counts. The server applies the same rule; this only saves the round-trip.
+	_has_project_selection() {
+		return Boolean(
+			(this.filters.lane || []).length || (this.filters.project_status || []).length
+		);
 	}
 
 	// MultiSelectList renders one flat list and floats selected options to the top
@@ -395,6 +402,15 @@ class RoadmapBoard {
 		this._selecting = false;
 		this.selected_lanes.clear();
 
+		// Nothing picked, nothing to fetch: render the prompt and stop.
+		if (!this._has_project_selection()) {
+			this._loading = false;
+			this.data = { columns: [], rows: [], cells: {}, missing_count: 0 };
+			this._render_grid();
+			this._load_backlog();
+			return;
+		}
+
 		// `scrollToCurrent` recentres on the current sprint (first load / filter
 		// changes). `preserveScroll` keeps the viewport exactly where it is — used
 		// after a drag-move so the board updates in place without jumping.
@@ -440,6 +456,17 @@ class RoadmapBoard {
 		const prevTop = scroller ? scroller.scrollTop : 0;
 
 		const data = this.data;
+		if (!this._has_project_selection()) {
+			this.$grid.html(`
+				<div class="rm-empty">
+					<div class="rm-empty-icon">🗺️</div>
+					<p>${__("Pick one or more projects to load the roadmap.")}</p>
+					<p class="rm-empty-hint-text">${__("Use the <b>Projects</b> filter above — the board loads only what you select.")}</p>
+				</div>
+			`);
+			this._update_create_controls();
+			return;
+		}
 		if (!data || !data.rows.length || !data.columns.length) {
 			this.$grid.html(`
 				<div class="rm-empty">
@@ -448,6 +475,7 @@ class RoadmapBoard {
 					<p class="rm-empty-hint-text">${__("The Roadmap shows active SCRUM projects with <b>Show in Roadmap</b> set to Yes. Set it on a Project to give it a lane here.")}</p>
 				</div>
 			`);
+			this._update_create_controls();
 			return;
 		}
 
@@ -856,8 +884,17 @@ class RoadmapBoard {
 	}
 
 	_load_backlog() {
+		if (!this._has_project_selection()) {
+			this.backlog = [];
+			this._render_backlog();
+			return;
+		}
 		frappe.call({
 			method: API_BACKLOG,
+			args: {
+				project_status: JSON.stringify(this.filters.project_status || []),
+				lane: this._lane_arg(),
+			},
 			callback: (r) => {
 				this.backlog = (r && r.message) || [];
 				this._render_backlog();
@@ -882,10 +919,13 @@ class RoadmapBoard {
 		}
 
 		if (!items.length) {
+			const [icon, message] = this._has_project_selection()
+				? ["🎉", __("No unassigned work items")]
+				: ["🗂️", __("Pick a project to see the backlog")];
 			this.$backlog_list.html(`
 				<div class="rm-backlog-empty">
-					<div class="rm-backlog-empty-icon">🎉</div>
-					<p>${__("No unassigned work items")}</p>
+					<div class="rm-backlog-empty-icon">${icon}</div>
+					<p>${message}</p>
 				</div>`);
 			return;
 		}

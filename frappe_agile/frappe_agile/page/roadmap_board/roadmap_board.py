@@ -70,13 +70,16 @@ from frappe_agile.frappe_agile.doctype.sprint.sprint import (  # noqa: E402
 
 @frappe.whitelist()
 def get_roadmap_data(project_status=None, lane=None, sprint_status=None, search=None, future_count=None):
-	"""Return the full roadmap grid, one row per active SCRUM Project.
+	"""Return the roadmap grid, one row per selected active SCRUM Project.
+
+	The board is empty until the Projects filter names something: an unset filter
+	means no lanes, not every lane.
 
 	Args:
 		project_status: optional multi-select of Project statuses (list or JSON
-			list of "Open" / "Completed" / "Cancelled"). Empty = every status.
+			list of "Open" / "Completed" / "Cancelled").
 		lane: optional, restrict to these Projects — a single name, a list, or a
-			JSON list. Empty = every project on the board.
+			JSON list.
 		sprint_status: optional, restrict to sprints in this status.
 		search: optional, free-text filter on work item title / sprint name.
 		future_count: how many empty future sprint windows to append for planning.
@@ -88,11 +91,14 @@ def get_roadmap_data(project_status=None, lane=None, sprint_status=None, search=
 
 	future_count = cint(future_count) if future_count not in (None, "") else DEFAULT_FUTURE_COUNT
 
+	if not _has_project_selection(project_status, lane):
+		return _empty_roadmap()
+
 	# The row axis is the project list, not the sprint list — a brand-new project
 	# with no sprints must still get a lane to plan into.
 	projects = _scrum_projects(project_status=project_status, lane=lane)
 	if not projects:
-		return {"columns": [], "rows": [], "cells": {}, "missing_count": 0}
+		return _empty_roadmap()
 
 	project_names = [p.name for p in projects]
 
@@ -252,7 +258,7 @@ def get_backlog_statuses():
 
 
 @frappe.whitelist()
-def get_unassigned_work_items(limit=200):
+def get_unassigned_work_items(limit=200, project_status=None, lane=None):
 	"""Return Work Items not attached to any Sprint, newest-modified first.
 
 	These populate the Roadmap's backlog panel so a Business Analyst can drag
@@ -261,8 +267,19 @@ def get_unassigned_work_items(limit=200):
 	Settings can put a different set of statuses in place of Draft and Open. The
 	order is reverse-chronological by ``modified`` — the last edited item shows
 	first, per the roadmap spec.
+
+	The panel follows the board's Projects filter and stays empty until it names
+	something. Items carrying no project are always in scope — they belong to no
+	project yet, and hiding them would leave no way to file them onto a sprint.
 	"""
 	frappe.has_permission("Work Item", "read", throw=True)
+
+	if not _has_project_selection(project_status, lane):
+		return []
+
+	projects = [p.name for p in _scrum_projects(project_status=project_status, lane=lane)]
+	if not projects:
+		return []
 
 	filters = {
 		"sprint": ["is", "not set"],
@@ -273,6 +290,7 @@ def get_unassigned_work_items(limit=200):
 	rows = frappe.get_list(
 		"Work Item",
 		filters=filters,
+		or_filters=[["project", "in", projects], ["project", "is", "not set"]],
 		fields=[
 			"name",
 			"title",
@@ -352,6 +370,20 @@ def _scrum_projects(project_status=None, lane=None):
 		order_by="project_name asc, name asc",
 		limit_page_length=0,
 	)
+
+
+def _empty_roadmap():
+	"""The payload for a board with no lanes."""
+	return {"columns": [], "rows": [], "cells": {}, "missing_count": 0}
+
+
+def _has_project_selection(project_status=None, lane=None):
+	"""Whether the Projects filter names anything to load.
+
+	Either half counts — ticked statuses or named projects. Nothing ticked loads
+	nothing, so the Roadmap never opens full of projects nobody asked for.
+	"""
+	return bool(_parse_status_selection(project_status) or _parse_lane_filter(lane))
 
 
 def _parse_lane_filter(lane):
@@ -711,11 +743,17 @@ def create_missing_sprints(project_status=None, lane=None, future_count=None, la
 
 	future_count = cint(future_count) if future_count not in (None, "") else DEFAULT_FUTURE_COUNT
 
+	selected = _parse_lane_selection(lanes)
+
+	# No projects picked anywhere means nothing to fill, the same as the board
+	# itself showing nothing.
+	if selected is None and not _has_project_selection(project_status, lane):
+		return {"created": [], "created_count": 0}
+
 	projects = _scrum_projects(project_status=project_status, lane=lane)
 
 	# Restrict to the projects the user selected, if any. Intersecting with the
 	# board projects keeps a stale/forged selection from creating off-board sprints.
-	selected = _parse_lane_selection(lanes)
 	if selected is not None:
 		projects = [p for p in projects if p.name in selected]
 
