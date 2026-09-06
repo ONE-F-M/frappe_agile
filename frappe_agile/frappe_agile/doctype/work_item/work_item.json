@@ -110,12 +110,12 @@
   },
   {
    "depends_on": "eval:doc.orchestrator==1",
-   "description": "Which app the orchestrator's delegated work should target. Required when Orchestrator is checked, so a Dev Agent delegation always has an explicit target instead of inferring one from free text.",
+   "description": "Which app the orchestrator's delegated work should target. Required when Orchestrator is checked, so a Dev Agent delegation always has an explicit target instead of inferring one from free text. If the repo you need isn't listed, use \"Sync GitHub Repositories\" on Frappe Agile Settings.",
    "fieldname": "target_app",
-   "fieldtype": "Select",
+   "fieldtype": "Link",
    "label": "Target App",
    "mandatory_depends_on": "eval:doc.orchestrator==1",
-   "options": "\none_fm\none_bpmn\nfrappe_agile\nonefm_mcp\nonefm_sso\none_fm_password_management\nmobile_app_ionic\none_lms"
+   "options": "GitHub Repository"
   },
   {
    "depends_on": "eval:doc.orchestrator==1",
