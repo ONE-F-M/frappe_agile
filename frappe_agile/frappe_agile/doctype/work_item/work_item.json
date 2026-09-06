@@ -32,11 +32,12 @@
   "implementation_details_section",
   "orchestrator",
   "assignee_user",
-  "column_break_xgtd",
+  "column_break_target_app_branch",
   "target_app",
+  "git_branch",
+  "column_break_xgtd",
   "pr_reviewer_user",
   "column_break_cjav",
-  "git_branch",
   "pr_link",
   "labels_section",
   "labels",
@@ -102,6 +103,10 @@
    "fieldtype": "Check",
    "in_standard_filter": 1,
    "label": "Orchestrator"
+  },
+  {
+   "fieldname": "column_break_target_app_branch",
+   "fieldtype": "Column Break"
   },
   {
    "depends_on": "eval:doc.orchestrator==1",
