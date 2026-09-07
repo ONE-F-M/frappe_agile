@@ -109,21 +109,19 @@
    "fieldtype": "Column Break"
   },
   {
-   "depends_on": "eval:doc.orchestrator==1",
-   "description": "Which app the orchestrator's delegated work should target. Required when Orchestrator is checked, so a Dev Agent delegation always has an explicit target instead of inferring one from free text. If the repo you need isn't listed, use \"Sync GitHub Repositories\" on Frappe Agile Settings.",
+   "description": "Which app the orchestrator's delegated work should target. Required when Orchestrator is unchecked, so a Dev Agent delegation always has an explicit target instead of inferring one from free text. If the repo you need isn't listed, use \"Sync GitHub Repositories\" on Frappe Agile Settings.",
    "fieldname": "target_app",
    "fieldtype": "Link",
    "label": "Target App",
-   "mandatory_depends_on": "eval:doc.orchestrator==1",
+   "mandatory_depends_on": "eval:doc.orchestrator!=1",
    "options": "GitHub Repository"
   },
   {
-   "depends_on": "eval:doc.orchestrator==1",
-   "description": "Which branch the orchestrator's delegated work should start from, and the pull request should target. Required when Orchestrator is checked.",
+   "description": "Which branch the orchestrator's delegated work should start from, and the pull request should target. Required when Orchestrator is unchecked.",
    "fieldname": "git_branch",
    "fieldtype": "Select",
    "label": "Branch",
-   "mandatory_depends_on": "eval:doc.orchestrator==1",
+   "mandatory_depends_on": "eval:doc.orchestrator!=1",
    "options": "\nstaging\ntest-production\nversion-15"
   },
   {
