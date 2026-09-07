@@ -114,7 +114,7 @@
    "fieldname": "target_app",
    "fieldtype": "Link",
    "label": "Target App",
-   "mandatory_depends_on": "eval:doc.orchestrator==1",
+   "mandatory_depends_on": "eval:doc.orchestrator != 1",
    "options": "GitHub Repository"
   },
   {
@@ -123,7 +123,7 @@
    "fieldname": "git_branch",
    "fieldtype": "Select",
    "label": "Branch",
-   "mandatory_depends_on": "eval:doc.orchestrator==1",
+   "mandatory_depends_on": "eval:doc.orchestrator != 1",
    "options": "\nstaging\ntest-production\nversion-15"
   },
   {
