@@ -46,15 +46,28 @@ class FrappeAgileSettings(Document):
 
 
 @frappe.whitelist()
-def get_development_team_users():
-	"""Return list of user emails from the Development Team table.
+def get_development_team_users(project=None):
+	"""Users who may take a Work Item, narrowed to ``project`` when one is given.
 
-	Returns an empty list if no team members are configured,
-	which means no users will be available for selection in
-	Assignee and PR Reviewer fields until the Development Team
-	is configured in Frappe Agile Settings.
+	The Development Team is the standing list, and a project that names its own
+	users narrows it to the people on that project. A project naming nobody has
+	nothing to narrow by, so the team stands as it is — otherwise every project
+	without a filled-in Users table would offer no assignee at all.
 	"""
 	frappe.has_permission("Work Item", throw=True)
 	settings = frappe.get_single("Frappe Agile Settings")
-	return [row.user for row in settings.development_team if row.user]
+	team = [row.user for row in settings.development_team if row.user]
+	if not (project and team):
+		return team
+
+	on_project = set(
+		frappe.get_all(
+			"Project User",
+			filters={"parent": project, "parenttype": "Project"},
+			pluck="user",
+		)
+	)
+	if not on_project:
+		return team
+	return [user for user in team if user in on_project]
 
