@@ -102,7 +102,6 @@
    "label": "Orchestrator"
   },
   {
-   "depends_on": "eval:!doc.orchestrator",
    "fieldname": "assignee_user",
    "fieldtype": "Link",
    "label": "Assignee User",
