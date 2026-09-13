@@ -25,12 +25,6 @@ class WorkItem(Document):
 			if frappe.db.exists("Workflow State", self.status):
 				self.workflow_state = self.status
 
-		# The orchestrator IS the assignee. A human assignee left alongside the flag
-		# would leave two owners on the record and no way to tell which is expected
-		# to act, so the flag wins and the human is dropped.
-		if self.orchestrator and self.assignee_user:
-			self.assignee_user = None
-
 	def on_update(self):
 		"""
 		Keep the Sprint Work Item child table in sync when the sprint
