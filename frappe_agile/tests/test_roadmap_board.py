@@ -4,6 +4,9 @@ Covers the WI-001819 behaviour: "Group rows by" is gone, the board only ever
 shows active SCRUM projects, and a Project Status multi-select narrows that set;
 plus WI-002020, where that same multi-select also lists the SCRUM projects so a
 lane can be picked by name (the `lane` argument, which AND-s with the statuses).
+
+That multi-select also gates the load: nothing ticked loads nothing, so tests
+that mean "the whole board" tick every status via `_board`.
 """
 
 from __future__ import annotations
@@ -31,6 +34,10 @@ from frappe_agile.frappe_agile.doctype.sprint.sprint import (
 
 # Every fixture project name starts with this so teardown can find them all.
 TEST_PREFIX = "RMTEST"
+
+# Ticking every status is how a test asks for the whole board now that an
+# untouched filter loads nothing.
+ALL_STATUSES = json.dumps(["Open", "Completed", "Cancelled"])
 
 PROJECTS = {
 	# name suffix        (project_type,   is_active, status,      sprint_prefix, show_in_roadmap)
@@ -103,7 +110,7 @@ class TestRoadmapBoard(FrappeTestCase):
 		doc.insert(ignore_permissions=True)
 		return doc.name
 
-	def _make_work_item(self, title, sprint, story_points=3, status="Open"):
+	def _make_work_item(self, title, sprint, story_points=3, status="Open", assignee_user=None):
 		doc = frappe.get_doc(
 			{
 				"doctype": "Work Item",
@@ -112,10 +119,25 @@ class TestRoadmapBoard(FrappeTestCase):
 				"sprint": sprint,
 				"story_points": story_points,
 				"status": status,
+				"assignee_user": assignee_user,
 			}
 		)
 		doc.insert(ignore_permissions=True)
+		# A new Work Item lands on its workflow's first state whatever status was
+		# asked for, so the status a test wants has to be written afterwards.
+		frappe.db.set_value(
+			"Work Item",
+			doc.name,
+			{"status": status, "workflow_state": status},
+			update_modified=False,
+		)
 		return doc.name
+
+	def _cell_items(self, project_key, start):
+		"""The work items of the fixture sprint in that project's window."""
+		data = get_roadmap_data(lane=json.dumps([self.projects[project_key]]))
+		cell = data["cells"][f"{self.projects[project_key]}::{getdate(start).isoformat()}"]
+		return cell, {wi["name"]: wi for wi in cell["work_items"]}
 
 	def _cleanup(self):
 		projects = frappe.get_all(
@@ -140,6 +162,11 @@ class TestRoadmapBoard(FrappeTestCase):
 		if projects:
 			frappe.db.delete("Project", {"name": ("in", projects)})
 
+	def _board(self, **kwargs):
+		"""The whole board — every status ticked, since an empty filter loads nothing."""
+		kwargs.setdefault("project_status", ALL_STATUSES)
+		return get_roadmap_data(**kwargs)
+
 	def _rows(self, data):
 		"""Only the fixture rows, keyed by project name (the board shows real ones too)."""
 		return {r["key"]: r for r in data["rows"] if r["label"].startswith(TEST_PREFIX)}
@@ -148,7 +175,7 @@ class TestRoadmapBoard(FrappeTestCase):
 	# Row axis: active SCRUM projects only
 	# ------------------------------------------------------------------
 	def test_rows_are_active_scrum_projects_only(self):
-		data = get_roadmap_data()
+		data = self._board()
 		rows = self._rows(data)
 
 		self.assertIn(self.projects["OPEN"], rows)
@@ -164,7 +191,7 @@ class TestRoadmapBoard(FrappeTestCase):
 	# ------------------------------------------------------------------
 	def test_only_projects_shown_in_roadmap_get_a_lane(self):
 		"""Show in Roadmap is opt-in: No and blank both keep a project off the board."""
-		rows = self._rows(get_roadmap_data())
+		rows = self._rows(self._board())
 
 		self.assertIn(self.projects["OPEN"], rows)
 		self.assertNotIn(self.projects["HIDDEN"], rows, "Show in Roadmap = No must be excluded")
@@ -179,12 +206,12 @@ class TestRoadmapBoard(FrappeTestCase):
 	def test_opting_a_project_in_gives_it_a_lane(self):
 		"""Flipping the flag to Yes is all it takes — no other change required."""
 		hidden = self.projects["HIDDEN"]
-		self.assertNotIn(hidden, self._rows(get_roadmap_data()))
+		self.assertNotIn(hidden, self._rows(self._board()))
 
 		frappe.db.set_value("Project", hidden, ROADMAP_FLAG_FIELD, "Yes")
 		frappe.db.commit()
 
-		self.assertIn(hidden, self._rows(get_roadmap_data()))
+		self.assertIn(hidden, self._rows(self._board()))
 
 	def test_filter_project_list_excludes_opted_out_projects(self):
 		"""The picker must offer exactly the projects the board can show."""
@@ -217,7 +244,7 @@ class TestRoadmapBoard(FrappeTestCase):
 			)
 
 	def test_row_carries_prefix_and_project_status(self):
-		rows = self._rows(get_roadmap_data())
+		rows = self._rows(self._board())
 
 		row = rows[self.projects["OPEN"]]
 		self.assertEqual(row["prefix"], "RMTESTOPEN")
@@ -250,9 +277,11 @@ class TestRoadmapBoard(FrappeTestCase):
 		self.assertIn(self.projects["CANCELLED"], rows)
 		self.assertNotIn(self.projects["COMPLETED"], rows)
 
-	def test_empty_project_status_shows_every_status(self):
+	def test_empty_project_status_does_not_narrow_the_picked_lanes(self):
+		"""With projects named, no status ticked leaves every one of their statuses."""
+		picked = json.dumps([self.projects["OPEN"], self.projects["COMPLETED"]])
 		for empty in (None, "", [], "[]"):
-			rows = self._rows(get_roadmap_data(project_status=empty))
+			rows = self._rows(get_roadmap_data(lane=picked, project_status=empty))
 			self.assertIn(self.projects["COMPLETED"], rows, f"failed for {empty!r}")
 
 	def test_unknown_status_values_are_dropped(self):
@@ -260,6 +289,58 @@ class TestRoadmapBoard(FrappeTestCase):
 		rows = self._rows(get_roadmap_data(project_status=json.dumps(["Open", "Bogus"])))
 		self.assertIn(self.projects["OPEN"], rows)
 		self.assertNotIn(self.projects["COMPLETED"], rows)
+
+	# ------------------------------------------------------------------
+	# Nothing loads until projects are picked
+	# ------------------------------------------------------------------
+	def test_an_untouched_filter_loads_nothing(self):
+		"""The state the page opens in: no lanes, no columns, no cells."""
+		for empty in (None, "", [], "[]"):
+			data = get_roadmap_data(project_status=empty, lane=empty)
+			self.assertEqual(data["rows"], [], f"failed for {empty!r}")
+			self.assertEqual(data["columns"], [], f"failed for {empty!r}")
+			self.assertEqual(data["cells"], {}, f"failed for {empty!r}")
+			self.assertEqual(data["missing_count"], 0, f"failed for {empty!r}")
+
+	def test_picking_a_project_loads_its_sprints_and_work_items(self):
+		start = align_to_sprint_start(getdate())
+		sprint = self._make_sprint("OPEN", start)
+		wi = self._make_work_item(f"{TEST_PREFIX} picked story", sprint, story_points=5)
+
+		data = get_roadmap_data(lane=json.dumps([self.projects["OPEN"]]))
+		cell = data["cells"][f"{self.projects['OPEN']}::{getdate(start).isoformat()}"]
+
+		self.assertEqual(set(self._rows(data)), {self.projects["OPEN"]})
+		self.assertEqual(cell["sprint"], sprint)
+		self.assertIn(wi, [item["name"] for item in cell["work_items"]])
+
+	def test_picking_a_status_loads_the_projects_in_it(self):
+		"""Either half of the filter is a selection — a status is a bulk pick."""
+		rows = self._rows(get_roadmap_data(project_status=json.dumps(["Cancelled"])))
+
+		self.assertEqual(set(rows), {self.projects["CANCELLED"]})
+
+	def test_an_unpicked_project_is_left_out(self):
+		"""The point of the story: no lane for a project the user did not ask for."""
+		rows = self._rows(get_roadmap_data(lane=json.dumps([self.projects["OPEN"]])))
+
+		self.assertNotIn(self.projects["COMPLETED"], rows)
+		self.assertNotIn(self.projects["CANCELLED"], rows)
+
+	def test_a_forged_filter_that_names_nothing_real_loads_nothing(self):
+		"""Unknown statuses and unreadable projects both reduce to no selection."""
+		data = get_roadmap_data(project_status=json.dumps(["Bogus"]))
+		self.assertEqual(data["rows"], [])
+
+	def test_create_missing_sprints_creates_nothing_without_a_selection(self):
+		"""No projects picked and no lanes ticked must not fill every project."""
+		result = create_missing_sprints(future_count=2)
+
+		self.assertEqual(result["created_count"], 0)
+		self.assertEqual(
+			frappe.get_all("Sprint", filters={"sprint_prefix": ("like", f"{TEST_PREFIX}%")}),
+			[],
+		)
 
 	# ------------------------------------------------------------------
 	# Project half of the same multi-select (WI-002020)
@@ -271,9 +352,10 @@ class TestRoadmapBoard(FrappeTestCase):
 
 		self.assertEqual(set(rows), set(picked))
 
-	def test_empty_lane_shows_every_project(self):
+	def test_empty_lane_shows_every_project_of_the_ticked_statuses(self):
+		"""The lane half may be empty as long as the status half carries the selection."""
 		for empty in (None, "", [], "[]"):
-			rows = self._rows(get_roadmap_data(lane=empty))
+			rows = self._rows(get_roadmap_data(project_status=ALL_STATUSES, lane=empty))
 			self.assertIn(self.projects["COMPLETED"], rows, f"failed for {empty!r}")
 
 	def test_lane_and_status_narrow_together(self):
@@ -305,7 +387,7 @@ class TestRoadmapBoard(FrappeTestCase):
 		"""The filter's project list must match the rows the board can show."""
 		listed = {p["name"]: p for p in get_scrum_projects() if p["label"].startswith(TEST_PREFIX)}
 
-		self.assertEqual(set(listed), set(self._rows(get_roadmap_data())))
+		self.assertEqual(set(listed), set(self._rows(self._board())))
 		self.assertEqual(listed[self.projects["COMPLETED"]]["status"], "Completed")
 		self.assertEqual(
 			listed[self.projects["OPEN"]]["label"], self._project_name("OPEN")
@@ -348,6 +430,73 @@ class TestRoadmapBoard(FrappeTestCase):
 		# The lane survives (it's a project) but its Draft sprint is filtered out.
 		self.assertIn(self.projects["OPEN"], self._rows(data))
 		self.assertEqual(data["cells"], {})
+
+	# ------------------------------------------------------------------
+	# What a work item card shows: ticked = assigned, struck through = Done
+	# ------------------------------------------------------------------
+	def test_an_assigned_work_item_is_ticked(self):
+		start = align_to_sprint_start(getdate())
+		sprint = self._make_sprint("OPEN", start)
+		wi = self._make_work_item(
+			f"{TEST_PREFIX} assigned", sprint, assignee_user="Administrator"
+		)
+
+		_, items = self._cell_items("OPEN", start)
+
+		self.assertTrue(items[wi]["assigned"])
+		self.assertEqual(items[wi]["assignee_user"], "Administrator")
+
+	def test_an_unassigned_work_item_is_not_ticked(self):
+		start = align_to_sprint_start(getdate())
+		sprint = self._make_sprint("OPEN", start)
+		wi = self._make_work_item(f"{TEST_PREFIX} nobody on it", sprint)
+
+		_, items = self._cell_items("OPEN", start)
+
+		self.assertFalse(items[wi]["assigned"])
+
+	def test_the_tick_follows_assignment_not_completion(self):
+		"""The two flags are independent: the checkbox no longer means Done."""
+		start = align_to_sprint_start(getdate())
+		sprint = self._make_sprint("OPEN", start)
+		done_unassigned = self._make_work_item(
+			f"{TEST_PREFIX} finished by nobody", sprint, status="Done"
+		)
+		open_assigned = self._make_work_item(
+			f"{TEST_PREFIX} under way", sprint, status="Open", assignee_user="Administrator"
+		)
+
+		_, items = self._cell_items("OPEN", start)
+
+		# Done but unassigned: struck through, not ticked.
+		self.assertTrue(items[done_unassigned]["accepted"])
+		self.assertFalse(items[done_unassigned]["assigned"])
+		# Assigned but not finished: ticked, not struck through.
+		self.assertTrue(items[open_assigned]["assigned"])
+		self.assertFalse(items[open_assigned]["accepted"])
+
+	def test_assigned_count_counts_the_ticked_items(self):
+		start = align_to_sprint_start(getdate())
+		sprint = self._make_sprint("OPEN", start)
+		self._make_work_item(f"{TEST_PREFIX} one", sprint, assignee_user="Administrator")
+		self._make_work_item(f"{TEST_PREFIX} two", sprint, assignee_user="Administrator")
+		self._make_work_item(f"{TEST_PREFIX} three", sprint)
+
+		cell, _ = self._cell_items("OPEN", start)
+
+		self.assertEqual(cell["item_count"], 3)
+		self.assertEqual(cell["assigned_count"], 2)
+
+	def test_an_empty_assignee_is_not_an_assignment(self):
+		"""A blank stored on the field must read as unassigned, not as ticked."""
+		start = align_to_sprint_start(getdate())
+		sprint = self._make_sprint("OPEN", start)
+		wi = self._make_work_item(f"{TEST_PREFIX} blank assignee", sprint)
+		frappe.db.set_value("Work Item", wi, "assignee_user", "", update_modified=False)
+
+		_, items = self._cell_items("OPEN", start)
+
+		self.assertFalse(items[wi]["assigned"])
 
 	# ------------------------------------------------------------------
 	# Create missing sprints
@@ -490,6 +639,9 @@ class TestRoadmapBacklog(FrappeTestCase):
 	By default: unsprinted Work Items that are still Draft or Open and are not
 	Epics. Backlog Status on Frappe Agile Settings can put different statuses in
 	place of Draft and Open; the sprint and Epic tests are not negotiable.
+
+	The panel follows the board's Projects filter, so every test here names the
+	fixture project — an unset filter deliberately returns nothing.
 	"""
 
 	@classmethod
@@ -632,13 +784,63 @@ class TestRoadmapBacklog(FrappeTestCase):
 		frappe.db.set_value("Work Item", name, "sprint", None, update_modified=False)
 		return name
 
-	def _backlog_names(self):
+	def _backlog_names(self, **kwargs):
 		"""Only the fixture items — the panel lists the site's real backlog too."""
+		kwargs.setdefault("lane", json.dumps([self.project]))
 		return [
 			row["name"]
-			for row in get_unassigned_work_items()
+			for row in get_unassigned_work_items(**kwargs)
 			if (row["title"] or "").startswith(BACKLOG_PREFIX)
 		]
+
+	def _projected(self, title, project, status="Open"):
+		"""An unsprinted Work Item that does carry a project."""
+		name = self._unsprinted(title, status=status)
+		frappe.db.set_value("Work Item", name, "project", project, update_modified=False)
+		return name
+
+	# ------------------------------------------------------------------
+	# The panel follows the Projects filter
+	# ------------------------------------------------------------------
+	def test_the_backlog_is_empty_until_a_project_is_picked(self):
+		self._unsprinted("waiting on a pick")
+
+		for empty in (None, "", [], "[]"):
+			self.assertEqual(
+				get_unassigned_work_items(project_status=empty, lane=empty),
+				[],
+				f"failed for {empty!r}",
+			)
+
+	def test_picking_the_project_loads_its_backlog(self):
+		item = self._projected("belongs here", self.project)
+
+		self.assertIn(item, self._backlog_names())
+
+	def test_another_projects_backlog_is_left_out(self):
+		other = frappe.get_doc(
+			{
+				"doctype": "Project",
+				"project_name": f"{BACKLOG_PROJECT} OTHER",
+				"project_type": "SCRUM Project",
+				"is_active": "Yes",
+				"status": "Open",
+				"custom_sprint_prefix": f"{BACKLOG_PREFIX}O",
+				ROADMAP_FLAG_FIELD: "Yes",
+				"company": self.company,
+			}
+		).insert(ignore_permissions=True)
+		self.addCleanup(frappe.delete_doc, "Project", other.name, force=True)
+		item = self._projected("belongs elsewhere", other.name)
+
+		self.assertNotIn(item, self._backlog_names())
+		self.assertIn(item, self._backlog_names(lane=json.dumps([other.name])))
+
+	def test_items_with_no_project_stay_reachable(self):
+		"""Unsprinted work usually carries no project; it must still be filable."""
+		item = self._unsprinted("no project at all")
+
+		self.assertIn(item, self._backlog_names())
 
 	# ------------------------------------------------------------------
 	# What the backlog holds
