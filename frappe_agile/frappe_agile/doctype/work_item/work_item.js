@@ -150,12 +150,4 @@ frappe.ui.form.on("Work Item", {
 		}
 	},
 
-	orchestrator: function (frm) {
-		// The orchestrator is the assignee. work_item.py clears assignee_user on
-		// save; doing it here too keeps the form honest instead of showing a human
-		// assignee that is about to be dropped.
-		if (frm.doc.orchestrator && frm.doc.assignee_user) {
-			frm.set_value("assignee_user", null);
-		}
-	},
 });
