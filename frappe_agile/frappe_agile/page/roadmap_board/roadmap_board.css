@@ -110,6 +110,8 @@
 }
 
 .rm-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+/* Mirrors the struck-through title of a Done work item. */
+.rm-legend-done { color: var(--text-muted, #9ca3af); text-decoration: line-through; }
 .rm-legend-pct { font-style: italic; }
 .rm-readonly { color: #b45309; }
 .rm-legend-sep { width: 1px; height: 16px; background: var(--border-color, #e2e8f0); }
