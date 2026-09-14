@@ -71,7 +71,7 @@ def get_data(filters):
 	sprint_map = {s.name: s for s in sprints}
 
 	# ------------------------------------------------------------------
-	# 2. Fetch work items (User Story and Task only) from those sprints
+	# 2. Fetch work items (User Story, Task, and Bug only) from those sprints
 	# ------------------------------------------------------------------
 	SprintItem = frappe.qb.DocType("Sprint Work Item")
 	wi_query = (
@@ -82,7 +82,7 @@ def get_data(filters):
 			SprintItem.status,
 		)
 		.where(SprintItem.parent.isin(sprint_names))
-		.where(SprintItem.work_item_type.isin(["User Story", "Task"]))
+		.where(SprintItem.work_item_type.isin(["User Story", "Task", "Bug"]))
 	)
 	work_items = wi_query.run(as_dict=True)
 
