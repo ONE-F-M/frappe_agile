@@ -22,9 +22,7 @@ def get_columns():
 		{"fieldname": "sprint_start_date", "label": "Sprint Start Date", "fieldtype": "Date", "width": 150},
 		{"fieldname": "sprint_end_date", "label": "Sprint End Date", "fieldtype": "Date", "width": 150},
 		{"fieldname": "no_of_sprints", "label": "No. of Sprints", "fieldtype": "Int", "width": 120},
-		{"fieldname": "working_days", "label": "Working Days", "fieldtype": "Int", "width": 120},
-		{"fieldname": "public_holidays", "label": "Public Holidays", "fieldtype": "Int", "width": 130},
-		{"fieldname": "leave_days", "label": "Leave Days", "fieldtype": "Float", "width": 120},
+		{"fieldname": "days", "label": "Working / Holiday / Leave Days", "fieldtype": "Data", "width": 200},
 		{"fieldname": "target_points", "label": "Target Points", "fieldtype": "Float", "width": 130},
 		{"fieldname": "points_scoped", "label": "Points Scoped", "fieldtype": "Float", "width": 130},
 		{"fieldname": "percentage_target", "label": "Scoped Percentage", "fieldtype": "Percent", "width": 160},
@@ -33,6 +31,7 @@ def get_columns():
 		{"fieldname": "rejected_points", "label": "Rejected Points", "fieldtype": "Float", "width": 140},
 		{"fieldname": "spillover_points", "label": "Spillover Points", "fieldtype": "Float", "width": 140},
 		{"fieldname": "acceptance_rate", "label": "Acceptance Rate Percentage", "fieldtype": "Percent", "width": 150},
+		{"fieldname": "orchestrator_stories", "label": "Orchestrator Stories", "fieldtype": "Int", "width": 150},
 	]
 
 
@@ -54,8 +53,9 @@ def get_data(filters):
 		query = query.where(Sprint.start_date <= filters.get("end_date"))
 		query = query.where(Sprint.end_date >= filters.get("start_date"))
 
-	if filters.get("sprint"):
-		query = query.where(Sprint.name == filters.get("sprint"))
+	selected_sprints = frappe.parse_json(filters.get("sprint") or [])
+	if selected_sprints:
+		query = query.where(Sprint.name.isin(selected_sprints))
 
 	sprints = query.run(as_dict=True)
 	if not sprints:
@@ -68,13 +68,16 @@ def get_data(filters):
 	# 2. Fetch work items (User Story, Task, and Bug only) from those sprints
 	# ------------------------------------------------------------------
 	SprintItem = frappe.qb.DocType("Sprint Work Item")
+	WorkItem = frappe.qb.DocType("Work Item")
 	wi_query = (
 		frappe.qb.from_(SprintItem)
+		.left_join(WorkItem).on(SprintItem.work_item == WorkItem.name)
 		.select(
 			SprintItem.parent.as_("sprint"),
 			SprintItem.assignee_user,
 			SprintItem.story_points,
 			SprintItem.status,
+			WorkItem.orchestrator,
 		)
 		.where(SprintItem.parent.isin(sprint_names))
 		.where(SprintItem.work_item_type.isin(["User Story", "Task", "Bug"]))
@@ -85,6 +88,7 @@ def get_data(filters):
 	# 3. Developer velocity from settings
 	# ------------------------------------------------------------------
 	developer_velocity = flt(frappe.db.get_single_value("Frappe Agile Settings", "developer_velocity"))
+	selected_developers = frappe.parse_json(filters.get("developer") or [])
 
 	# ------------------------------------------------------------------
 	# 4. Aggregate per (developer, sprint)
@@ -98,7 +102,7 @@ def get_data(filters):
 			continue
 
 		# Apply developer filter if set
-		if filters.get("developer") and user != filters.get("developer"):
+		if selected_developers and user not in selected_developers:
 			continue
 
 		sprint_name = wi.sprint
@@ -109,6 +113,7 @@ def get_data(filters):
 				"scoped_points": 0.0,
 				"accepted_points": 0.0,
 				"rejected_points": 0.0,
+				"orchestrator_stories": 0,
 			}
 
 		points = flt(wi.story_points)
@@ -118,6 +123,8 @@ def get_data(filters):
 
 		if wi.status == "Done":
 			dev_sprint_data[user][sprint_name]["accepted_points"] += points
+			if wi.orchestrator:
+				dev_sprint_data[user][sprint_name]["orchestrator_stories"] += 1
 
 		if wi.status == "Rejected":
 			dev_sprint_data[user][sprint_name]["rejected_points"] += points
@@ -203,12 +210,12 @@ def get_data(filters):
 			"sprint_start_date": earliest_start,
 			"sprint_end_date": latest_end,
 			"no_of_sprints": no_of_sprints,
-			"working_days": working_days,
-			"public_holidays": public_holidays,
-			"leave_days": flt(leave_days, 2),
+			"days": "{0} / {1} / {2}".format(working_days, public_holidays, flt(leave_days, 2)),
 			"target_points": target_points,
 			"points_scoped": total_scoped,
+			"percentage_target": flt((total_scoped_raw / prorated_target * 100) if prorated_target else 0.0, 2),
 			"accepted_points": total_accepted,
+			"orchestrator_stories": sum(v["orchestrator_stories"] for v in sprint_dict.values()),
 			"rejected_points": total_rejected,
 			"spillover_points": spillover,
 			"acceptance_rate": flt(acceptance_rate, 2),
