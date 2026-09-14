@@ -19,10 +19,10 @@ def get_columns():
 	return [
 		{"fieldname": "developer", "label": "Developer", "fieldtype": "Data", "width": 180},
 		{"fieldname": "sprints", "label": "Sprint(s)", "fieldtype": "HTML", "width": 200},
-		{"fieldname": "sprint_start_date", "label": "Sprint Start Date", "fieldtype": "Date", "width": 150},
-		{"fieldname": "sprint_end_date", "label": "Sprint End Date", "fieldtype": "Date", "width": 150},
-		{"fieldname": "no_of_sprints", "label": "No. of Sprints", "fieldtype": "Int", "width": 120},
-		{"fieldname": "days", "label": "Working / Holiday / Leave Days", "fieldtype": "Data", "width": 200},
+		{"fieldname": "sprint_start_date", "label": "Sprint Start Date", "fieldtype": "Date", "width": 130},
+		{"fieldname": "sprint_end_date", "label": "Sprint End Date", "fieldtype": "Date", "width": 130},
+		{"fieldname": "no_of_sprints", "label": "No. of Sprints", "fieldtype": "Int", "width": 90},
+		{"fieldname": "days", "label": "Working / Holiday / Leave Days", "fieldtype": "Data", "width": 150},
 		{"fieldname": "target_points", "label": "Target Points", "fieldtype": "Float", "width": 130},
 		{"fieldname": "points_scoped", "label": "Points Scoped", "fieldtype": "Float", "width": 130},
 		{"fieldname": "percentage_target", "label": "Scoped Percentage", "fieldtype": "Percent", "width": 160},
@@ -31,7 +31,7 @@ def get_columns():
 		{"fieldname": "rejected_points", "label": "Rejected Points", "fieldtype": "Float", "width": 140},
 		{"fieldname": "spillover_points", "label": "Spillover Points", "fieldtype": "Float", "width": 140},
 		{"fieldname": "acceptance_rate", "label": "Acceptance Rate Percentage", "fieldtype": "Percent", "width": 150},
-		{"fieldname": "orchestrator_stories", "label": "Orchestrator Stories", "fieldtype": "Int", "width": 150},
+		{"fieldname": "orchestrator_stories", "label": "Orchestrator Stories", "fieldtype": "Int", "width": 100},
 	]
 
 
