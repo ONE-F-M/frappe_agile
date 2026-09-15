@@ -53,7 +53,7 @@ class PriorityBoardPage {
 		// Build UI skeleton, then load
 		this._check_permission().then(() => {
 			this._build_ui();
-			Promise.all([this._load_sprints(), this._load_dev_team()]).then(() => {
+			Promise.all([this._load_sprints(), this._load_assignable_users()]).then(() => {
 				this.refresh();
 			});
 		});
@@ -181,7 +181,7 @@ class PriorityBoardPage {
 				get_query: () => {
 					return {
 						filters: {
-							name: ["in", this._dev_team_users || []],
+							name: ["in", this._assignable_users || []],
 						},
 					};
 				},
@@ -195,7 +195,7 @@ class PriorityBoardPage {
 		});
 		this._assignee_field.$input.addClass("input-xs");
 		this._assignee_field.$input.css("height", "32px");
-		// Disable until dev team list is loaded (null = still loading)
+		// Disable until the assignable users are loaded (null = still loading)
 		this._assignee_field.$input.prop("disabled", true);
 		this.$filters.find("#wi-sel-status").on("change", (e) => {
 			this.filters.status = e.target.value;
@@ -235,19 +235,19 @@ class PriorityBoardPage {
 	}
 
 	// ----------------------------------------------------------
-	// Load development team users for assignee filter
+	// Load assignable users (everyone on a project) for the assignee filter
 	// ----------------------------------------------------------
-	_load_dev_team() {
+	_load_assignable_users() {
 		return new Promise((resolve) => {
 			frappe.call({
-				method: "frappe_agile.frappe_agile.doctype.frappe_agile_settings.frappe_agile_settings.get_development_team_users",
+				method: "frappe_agile.frappe_agile.doctype.work_item.work_item.get_assignable_users",
 				callback: (r) => {
-					this._dev_team_users = r.message || [];
+					this._assignable_users = r.message || [];
 					this._enable_assignee_field();
 					resolve();
 				},
 				error: () => {
-					this._dev_team_users = [];
+					this._assignable_users = [];
 					this._enable_assignee_field();
 					resolve();
 				},
@@ -256,7 +256,7 @@ class PriorityBoardPage {
 	}
 
 	// ----------------------------------------------------------
-	// Enable assignee field after dev team list is loaded
+	// Enable assignee field after the assignable users are loaded
 	// ----------------------------------------------------------
 	_enable_assignee_field() {
 		if (this._assignee_field) {

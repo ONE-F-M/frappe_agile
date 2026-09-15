@@ -206,3 +206,21 @@ def sync_status_from_workflow(doc, method=None):
 
 	if doc.workflow_state in valid_statuses and doc.status != doc.workflow_state:
 		doc.status = doc.workflow_state
+
+
+@frappe.whitelist()
+def get_assignable_users(project=None):
+	"""Who a Work Item may be assigned to: the users on its project.
+
+	A project's Users table is the one list that decides this. With no project
+	to go by — the list view and the priority board filter across every item —
+	it is everyone who is on any project, since whoever ends up assigned has to
+	be on the project the item belongs to. A project that names nobody offers
+	nobody; that is the project's configuration to fix, not a gap to paper over
+	with a different list.
+	"""
+	frappe.has_permission("Work Item", throw=True)
+	filters = {"parenttype": "Project"}
+	if project:
+		filters["parent"] = project
+	return sorted(set(frappe.get_all("Project User", filters=filters, pluck="user")))
