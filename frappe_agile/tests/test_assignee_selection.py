@@ -1,13 +1,13 @@
 # Copyright (c) 2026, One FM and contributors
 # For license information, please see license.txt
 
-"""Who a Work Item may be assigned to, once a project has a say.
+"""Who a Work Item may be assigned to.
 
-The Development Team in Frappe Agile Settings is the standing list. A project
-that names its own users narrows that list to the people on both, so work on a
-Scrum project is only offered to its members. The case that needs guarding is
-the project that names nobody: narrowing by an empty list would leave no
-assignee at all, so the team has to stand instead.
+The project's Users table is the one list. The Development Team in Frappe Agile
+Settings used to be the standing list that a project could only narrow, so a
+project member who was not also on the team could never be assigned; it plays
+no part now. Without a project to go by the answer is everyone on any project,
+because whoever is assigned has to be on the project the item belongs to.
 """
 
 from __future__ import annotations
@@ -15,44 +15,41 @@ from __future__ import annotations
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from frappe_agile.frappe_agile.doctype.frappe_agile_settings.frappe_agile_settings import (
-	get_development_team_users,
-)
+from frappe_agile.frappe_agile.doctype.work_item.work_item import get_assignable_users
 
 PREFIX = "_Test Assignee"
-ON_TEAM = f"{PREFIX.lower().replace(' ', '.')}.on.team@example.com"
-ALSO_ON_TEAM = f"{PREFIX.lower().replace(' ', '.')}.also.on.team@example.com"
-OFF_TEAM = f"{PREFIX.lower().replace(' ', '.')}.off.team@example.com"
+_stem = PREFIX.lower().replace(" ", ".")
+ON_ALPHA = f"{_stem}.on.alpha@example.com"
+ON_BOTH = f"{_stem}.on.both@example.com"
+ON_BETA = f"{_stem}.on.beta@example.com"
+ON_TEAM_ONLY = f"{_stem}.team.only@example.com"
 
 
 class TestAssigneeSelection(FrappeTestCase):
 	@classmethod
 	def setUpClass(cls):
 		super().setUpClass()
-		for email in (ON_TEAM, ALSO_ON_TEAM, OFF_TEAM):
+		for email in (ON_ALPHA, ON_BOTH, ON_BETA, ON_TEAM_ONLY):
 			if not frappe.db.exists("User", email):
 				frappe.get_doc(
-					{
-						"doctype": "User",
-						"email": email,
-						"first_name": email.split("@")[0],
-					}
+					{"doctype": "User", "email": email, "first_name": email.split("@")[0]}
 				).insert(ignore_permissions=True)
 
+		# Someone on the Development Team and on no project: if the team still
+		# had a say, this person would show up.
 		cls.settings = frappe.get_single("Frappe Agile Settings")
 		cls.original_team = [row.user for row in cls.settings.development_team]
 		cls.settings.set("development_team", [])
-		for email in (ON_TEAM, ALSO_ON_TEAM):
-			cls.settings.append("development_team", {"user": email})
+		cls.settings.append("development_team", {"user": ON_TEAM_ONLY})
 		cls.settings.save(ignore_permissions=True)
 
-		cls.shared = cls._project("Shared", [ON_TEAM, OFF_TEAM])
-		cls.strangers = cls._project("Strangers", [OFF_TEAM])
+		cls.alpha = cls._project("Alpha", [ON_ALPHA, ON_BOTH])
+		cls.beta = cls._project("Beta", [ON_BETA, ON_BOTH])
 		cls.empty = cls._project("Empty", [])
 
 	@classmethod
 	def tearDownClass(cls):
-		for project in (cls.shared, cls.strangers, cls.empty):
+		for project in (cls.alpha, cls.beta, cls.empty):
 			frappe.delete_doc("Project", project, force=True, ignore_permissions=True)
 		settings = frappe.get_single("Frappe Agile Settings")
 		settings.set("development_team", [])
@@ -73,39 +70,29 @@ class TestAssigneeSelection(FrappeTestCase):
 		project.insert(ignore_permissions=True)
 		return project.name
 
-	def test_without_a_project_the_whole_team_is_offered(self):
-		self.assertEqual(sorted(get_development_team_users()), sorted([ON_TEAM, ALSO_ON_TEAM]))
+	def _ours(self, users):
+		"""Only the fixture users, so whatever else the site has on its projects
+		does not decide these tests."""
+		return sorted(u for u in users if u.startswith(_stem))
 
-	def test_a_project_narrows_the_team_to_its_own_users(self):
-		"""OFF_TEAM is on the project but not the team, ALSO_ON_TEAM the reverse —
-		only the person on both may be assigned."""
-		self.assertEqual(get_development_team_users(project=self.shared), [ON_TEAM])
+	def test_a_project_offers_exactly_its_own_users(self):
+		self.assertEqual(get_assignable_users(project=self.alpha), sorted([ON_ALPHA, ON_BOTH]))
+		self.assertEqual(get_assignable_users(project=self.beta), sorted([ON_BETA, ON_BOTH]))
 
-	def test_no_overlap_offers_nobody(self):
-		self.assertEqual(get_development_team_users(project=self.strangers), [])
-
-	def test_a_project_naming_nobody_does_not_narrow(self):
-		"""Narrowing by an empty Users table would leave every such project with no
-		assignee at all, which is worse than not narrowing."""
+	def test_without_a_project_everyone_on_any_project_is_offered_once(self):
 		self.assertEqual(
-			sorted(get_development_team_users(project=self.empty)), sorted([ON_TEAM, ALSO_ON_TEAM])
+			self._ours(get_assignable_users()), sorted([ON_ALPHA, ON_BOTH, ON_BETA])
 		)
 
-	def test_an_unknown_project_does_not_narrow(self):
-		self.assertEqual(
-			sorted(get_development_team_users(project="_Test Assignee Nonexistent")),
-			sorted([ON_TEAM, ALSO_ON_TEAM]),
-		)
+	def test_the_development_team_has_no_say(self):
+		"""On the team and on no project: not offered anywhere."""
+		self.assertNotIn(ON_TEAM_ONLY, get_assignable_users())
+		self.assertNotIn(ON_TEAM_ONLY, get_assignable_users(project=self.alpha))
 
-	def test_an_empty_team_stays_empty_whatever_the_project(self):
-		"""The project can only narrow; it can never add someone the team omits."""
-		settings = frappe.get_single("Frappe Agile Settings")
-		settings.set("development_team", [])
-		settings.save(ignore_permissions=True)
-		try:
-			self.assertEqual(get_development_team_users(), [])
-			self.assertEqual(get_development_team_users(project=self.shared), [])
-		finally:
-			for email in (ON_TEAM, ALSO_ON_TEAM):
-				settings.append("development_team", {"user": email})
-			settings.save(ignore_permissions=True)
+	def test_a_project_naming_nobody_offers_nobody(self):
+		"""The old selector fell back to the team here. Falling back hid the
+		real gap, which is that the project has no users."""
+		self.assertEqual(get_assignable_users(project=self.empty), [])
+
+	def test_an_unknown_project_offers_nobody(self):
+		self.assertEqual(get_assignable_users(project="_Test Assignee Nonexistent"), [])

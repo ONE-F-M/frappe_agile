@@ -35,13 +35,13 @@ frappe.ui.form.on("Work Item", {
 		// status or project. _validate_sprint_status() in work_item.py is the single
 		// source of truth for which Sprints a Work Item may actually be saved against.
 
-		apply_team_filters(frm);
+		apply_project_user_filters(frm);
 	},
 
 	project: function (frm) {
 		// The offered users depend on the project, and setup ran before it was
 		// picked — so the filter has to be built again whenever it changes.
-		apply_team_filters(frm);
+		apply_project_user_filters(frm);
 	},
 
 	onload: function (frm) {
@@ -114,12 +114,11 @@ frappe.ui.form.on("Work Item", {
 
 });
 
-// Offer Assignee User and PR Reviewer User only to the Development Team, and on
-// a project that names its own users, only to those of them on that project.
-function apply_team_filters(frm) {
+// Offer Assignee User and PR Reviewer User only to the users on the item's
+// project. Without a project yet, to anyone who is on some project.
+function apply_project_user_filters(frm) {
 	frappe.call({
-		method:
-			"frappe_agile.frappe_agile.doctype.frappe_agile_settings.frappe_agile_settings.get_development_team_users",
+		method: "frappe_agile.frappe_agile.doctype.work_item.work_item.get_assignable_users",
 		args: { project: frm.doc.project || "" },
 		callback: function (r) {
 			const users = r.message || [];
@@ -137,15 +136,12 @@ function apply_team_filters(frm) {
 				return;
 			}
 			// An empty list is a configuration gap, not a state to puzzle over —
-			// name the place to fix, and the project when one narrowed it away.
+			// name the place to fix.
 			const message = frm.doc.project
-				? __("No Development Team member is a user on project {0}. Add them to the project, or to the Development Team in {1}.", [
-						frm.doc.project,
-						'<a href="/app/frappe-agile-settings">Frappe Agile Settings</a>',
+				? __("Project {0} has no users. Add them in its Users table to enable Assignee and PR Reviewer selection.", [
+						`<a href="/app/project/${encodeURIComponent(frm.doc.project)}">${frappe.utils.escape_html(frm.doc.project)}</a>`,
 				  ])
-				: __("Please configure the Development Team in {0} to enable Assignee and PR Reviewer selection.", [
-						'<a href="/app/frappe-agile-settings">Frappe Agile Settings</a>',
-				  ]);
+				: __("No project has any users yet. Add users to a project to enable Assignee and PR Reviewer selection.");
 			frappe.show_alert({ message: message, indicator: "orange" }, 10);
 		},
 	});
