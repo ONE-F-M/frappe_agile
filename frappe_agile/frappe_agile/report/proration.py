@@ -6,9 +6,12 @@
 A velocity target (points per sprint) is earned over the days a person would
 normally be at work, so that is what the target is measured against:
 
-    working_days = sprint calendar days - the person's weekly offs
-    factor       = (working_days - holiday_days - leave_days) / working_days
-    target       = velocity * factor
+    working_days = calendar days across the sprints - weekly offs
+                   - public holidays - approved leave
+    target       = velocity * working_days / 5
+
+Sprints overlap, so the windows are merged before any of it is counted: a week
+covered by three sprints is worked once, not three times.
 
 `holiday_days` are the entries on the employee's Holiday List that are *not*
 flagged as a weekly off - public holidays. Weekly offs themselves never reduce
@@ -33,6 +36,25 @@ NO_PRORATION = 1.0
 # A sprint is a working week, and velocity is quoted per sprint. Days are
 # converted to a target against this.
 SPRINT_WORKING_DAYS = 5
+
+
+def as_list(value):
+	"""A filter value as a list of names.
+
+	A MultiSelectList sends a JSON array, but a saved filter, a direct API call
+	or a link from elsewhere may still send a single name. Production's parse
+	assumes the array and raises on the bare string.
+	"""
+	if not value:
+		return []
+	if isinstance(value, str):
+		try:
+			value = frappe.parse_json(value)
+		except Exception:
+			return [value]
+	if isinstance(value, (list, tuple, set)):
+		return [v for v in value if v]
+	return [value]
 
 
 def merge_periods(periods):

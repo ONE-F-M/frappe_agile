@@ -429,12 +429,13 @@ class TestSprintReportProration(FrappeTestCase):
 			{"start_date": PERIOD[0], "end_date": PERIOD[1], "developer": DEV_USER}
 		)
 		fieldnames = [column["fieldname"] for column in columns]
-		for fieldname in ("working_days", "target_points"):
+		for fieldname in ("days", "target_points"):
 			self.assertIn(fieldname, fieldnames)
 
 		row = self._row_for(rows, "developer", frappe.db.get_value("User", DEV_USER, "full_name"))
 		self.assertIsNotNone(row, f"no row for {DEV_USER} in {rows}")
-		self.assertEqual(row["working_days"], WORKING_DAYS - 1)
+		# Working / Holiday / Leave, as Production renders it.
+		self.assertEqual(row["days"], "4.0 / 1 / 0.0")
 		self.assertEqual(row["target_points"], 64.0)
 		self.assertEqual(row["points_scoped"], 12.0)
 		# 12 scoped against a 64-point target, not against 80.
@@ -461,7 +462,7 @@ class TestSprintReportProration(FrappeTestCase):
 			{"start_date": PERIOD[0], "end_date": PERIOD[1], "business_analyst": BA_USER}
 		)
 		fieldnames = [column["fieldname"] for column in columns]
-		for fieldname in ("working_days", "expected_velocity"):
+		for fieldname in ("days", "expected_velocity"):
 			self.assertIn(fieldname, fieldnames)
 
 		row = self._row_for(
@@ -469,7 +470,8 @@ class TestSprintReportProration(FrappeTestCase):
 		)
 		self.assertIsNotNone(row, f"no row for {BA_USER} in {rows}")
 		# Net of the public holiday in the window.
-		self.assertEqual(row["working_days"], WORKING_DAYS - 1)
+		# Working / Holiday / Leave, as Production renders it.
+		self.assertEqual(row["days"], "4.0 / 1 / 0.0")
 		self.assertEqual(row["expected_velocity"], 80.0)  # 100 × 4/5
 		self.assertEqual(row["points_scoped"], 10.0)
 		self.assertEqual(row["percentage_target"], 12.5)

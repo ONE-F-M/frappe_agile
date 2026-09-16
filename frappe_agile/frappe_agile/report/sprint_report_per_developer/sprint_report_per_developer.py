@@ -5,6 +5,7 @@ import frappe
 from frappe.utils import flt
 
 from frappe_agile.frappe_agile.report.proration import (
+	as_list,
 	get_employee_map,
 	get_proration,
 	get_target,
@@ -26,7 +27,7 @@ def get_columns():
 		{"fieldname": "sprint_start_date", "label": "Sprint Start Date", "fieldtype": "Date", "width": 150},
 		{"fieldname": "sprint_end_date", "label": "Sprint End Date", "fieldtype": "Date", "width": 150},
 		{"fieldname": "no_of_sprints", "label": "No. of Sprints", "fieldtype": "Int", "width": 120},
-		{"fieldname": "working_days", "label": "Working Days", "fieldtype": "Float", "width": 120},
+		{"fieldname": "days", "label": "Working / Holiday / Leave Days", "fieldtype": "Data", "width": 200},
 		{"fieldname": "target_points", "label": "Target Points", "fieldtype": "Float", "width": 130},
 		{"fieldname": "points_scoped", "label": "Points Scoped", "fieldtype": "Float", "width": 130},
 		{"fieldname": "percentage_target", "label": "Scoped Percentage", "fieldtype": "Percent", "width": 160},
@@ -56,8 +57,9 @@ def get_data(filters):
 		query = query.where(Sprint.start_date <= filters.get("end_date"))
 		query = query.where(Sprint.end_date >= filters.get("start_date"))
 
-	if filters.get("sprint"):
-		query = query.where(Sprint.name == filters.get("sprint"))
+	selected_sprints = as_list(filters.get("sprint"))
+	if selected_sprints:
+		query = query.where(Sprint.name.isin(selected_sprints))
 
 	sprints = query.run(as_dict=True)
 	if not sprints:
@@ -87,6 +89,7 @@ def get_data(filters):
 	# 3. Developer velocity from settings
 	# ------------------------------------------------------------------
 	developer_velocity = flt(frappe.db.get_single_value("Frappe Agile Settings", "developer_velocity"))
+	selected_developers = as_list(filters.get("developer"))
 
 	# ------------------------------------------------------------------
 	# 4. Aggregate per (developer, sprint)
@@ -100,7 +103,7 @@ def get_data(filters):
 			continue
 
 		# Apply developer filter if set
-		if filters.get("developer") and user != filters.get("developer"):
+		if selected_developers and user not in selected_developers:
 			continue
 
 		sprint_name = wi.sprint
@@ -205,7 +208,7 @@ def get_data(filters):
 			"sprint_start_date": earliest_start,
 			"sprint_end_date": latest_end,
 			"no_of_sprints": no_of_sprints,
-			"working_days": working_days,
+			"days": "{0} / {1} / {2}".format(working_days, public_holidays, flt(leave_days, 2)),
 			"target_points": target_points,
 			"points_scoped": total_scoped,
 			"percentage_target": flt((total_scoped_raw / prorated_target * 100) if prorated_target else 0.0, 2),

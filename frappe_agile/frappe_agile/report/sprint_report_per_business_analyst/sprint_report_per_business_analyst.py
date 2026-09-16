@@ -5,6 +5,7 @@ import frappe
 from frappe.utils import flt
 
 from frappe_agile.frappe_agile.report.proration import (
+	as_list,
 	get_employee_map,
 	get_proration,
 	get_target,
@@ -26,7 +27,7 @@ def get_columns():
 		{"fieldname": "sprint_start_date", "label": "Start Date", "fieldtype": "Date", "width": 150},
 		{"fieldname": "sprint_end_date", "label": "End Date", "fieldtype": "Date", "width": 150},
 		{"fieldname": "no_of_sprints", "label": "No. of Sprints", "fieldtype": "Int", "width": 120},
-		{"fieldname": "working_days", "label": "Working Days", "fieldtype": "Float", "width": 120},
+		{"fieldname": "days", "label": "Working / Holiday / Leave Days", "fieldtype": "Data", "width": 200},
 		{"fieldname": "expected_velocity", "label": "Expected Velocity", "fieldtype": "Float", "width": 150},
 		{"fieldname": "points_scoped", "label": "Points Scoped", "fieldtype": "Float", "width": 130},
 		{"fieldname": "percentage_target", "label": "Percentage Target %", "fieldtype": "Percent", "width": 160},
@@ -55,11 +56,13 @@ def get_data(filters):
 		query = query.where(Sprint.start_date <= filters.get("end_date"))
 		query = query.where(Sprint.end_date >= filters.get("start_date"))
 
-	if filters.get("sprint"):
-		query = query.where(Sprint.name == filters.get("sprint"))
+	selected_sprints = as_list(filters.get("sprint"))
+	if selected_sprints:
+		query = query.where(Sprint.name.isin(selected_sprints))
 
-	if filters.get("business_analyst"):
-		query = query.where(Sprint.business_analyst == filters.get("business_analyst"))
+	selected_bas = as_list(filters.get("business_analyst"))
+	if selected_bas:
+		query = query.where(Sprint.business_analyst.isin(selected_bas))
 	else:
 		# Only include sprints that have a Business Analyst set
 		query = query.where(Sprint.business_analyst.isnotnull())
@@ -224,7 +227,7 @@ def get_data(filters):
 			"sprint_start_date": earliest_start,
 			"sprint_end_date": latest_end,
 			"no_of_sprints": no_of_sprints,
-			"working_days": working_days,
+			"days": "{0} / {1} / {2}".format(working_days, public_holidays, flt(leave_days, 2)),
 			"expected_velocity": expected_velocity,
 			"points_scoped": total_scoped,
 			"percentage_target": flt((total_scoped_raw / prorated_target * 100) if prorated_target else 0.0, 2),
