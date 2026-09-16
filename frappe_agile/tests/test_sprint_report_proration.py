@@ -29,7 +29,12 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_days, flt, getdate
 
-from frappe_agile.frappe_agile.report.proration import get_period_breakdown, get_proration
+from frappe_agile.frappe_agile.report.proration import (
+	SPRINT_WORKING_DAYS,
+	get_period_breakdown,
+	get_proration,
+	get_target,
+)
 from frappe_agile.frappe_agile.report.sprint_report_per_business_analyst.sprint_report_per_business_analyst import (
 	execute as ba_report,
 )
@@ -335,13 +340,23 @@ class TestSprintReportProration(FrappeTestCase):
 
 	def test_periods_add_up(self):
 		"""Two sprints, one with a holiday: one whole target plus four fifths."""
-		factor, working_days, holiday_days, leave_days = get_proration(
+		working_days, holiday_days, leave_days = get_proration(
 			self.dev_employee, [PERIOD, CLEAN_PERIOD]
 		)
-		self.assertEqual(working_days, 2 * WORKING_DAYS)
+		# Working days are already net of the holiday.
+		self.assertEqual(working_days, 2 * WORKING_DAYS - 1)
 		self.assertEqual(holiday_days, 1)
 		self.assertEqual(leave_days, 0.0)
-		self.assertEqual(flt(DEV_VELOCITY * factor, 1), 144.0)
+		self.assertEqual(flt(get_target(DEV_VELOCITY, working_days), 1), 144.0)
+
+	def test_overlapping_sprints_do_not_charge_a_day_twice(self):
+		"""The defect: a BA on sprints that share a week worked it once."""
+		overlapping = [PERIOD, (PERIOD[0], CLEAN_PERIOD[1])]
+		working_days, _holidays, _leave = get_proration(self.dev_employee, overlapping)
+		merged, _h, _l = get_proration(self.dev_employee, [(PERIOD[0], CLEAN_PERIOD[1])])
+
+		self.assertEqual(working_days, merged)
+		self.assertLess(working_days, 2 * WORKING_DAYS)
 
 	# ------------------------------------------------------------------
 	# Leave, and not charging a day twice
@@ -396,8 +411,11 @@ class TestSprintReportProration(FrappeTestCase):
 		period = get_period_breakdown(None, *PERIOD)
 		self.assertEqual(period["factor"], 1.0)
 		self.assertEqual(period["holiday_days"], 0)
-		# Every calendar day counted as a working day, since there is no calendar.
-		self.assertEqual(period["working_days"], 7)
+		# A whole sprint's working days, so the target comes out at the velocity
+		# itself. Counting calendar days here would have inflated it by the
+		# weekend now that the target is derived from days rather than a ratio.
+		self.assertEqual(period["working_days"], SPRINT_WORKING_DAYS)
+		self.assertEqual(get_target(DEV_VELOCITY, period["working_days"]), DEV_VELOCITY)
 
 	# ------------------------------------------------------------------
 	# End to end, through the reports themselves
@@ -411,14 +429,13 @@ class TestSprintReportProration(FrappeTestCase):
 			{"start_date": PERIOD[0], "end_date": PERIOD[1], "developer": DEV_USER}
 		)
 		fieldnames = [column["fieldname"] for column in columns]
-		for fieldname in ("working_days", "public_holidays", "leave_days", "target_points"):
+		for fieldname in ("days", "target_points"):
 			self.assertIn(fieldname, fieldnames)
 
 		row = self._row_for(rows, "developer", frappe.db.get_value("User", DEV_USER, "full_name"))
 		self.assertIsNotNone(row, f"no row for {DEV_USER} in {rows}")
-		self.assertEqual(row["working_days"], WORKING_DAYS)
-		self.assertEqual(row["public_holidays"], 1)
-		self.assertEqual(row["leave_days"], 0.0)
+		# Working / Holiday / Leave, as Production renders it.
+		self.assertEqual(row["days"], "4.0 / 1 / 0.0")
 		self.assertEqual(row["target_points"], 64.0)
 		self.assertEqual(row["points_scoped"], 12.0)
 		# 12 scoped against a 64-point target, not against 80.
@@ -435,7 +452,6 @@ class TestSprintReportProration(FrappeTestCase):
 			rows, "developer", frappe.db.get_value("User", UNLINKED_USER, "full_name")
 		)
 		self.assertIsNotNone(row, f"no row for {UNLINKED_USER} in {rows}")
-		self.assertEqual(row["public_holidays"], 0)
 		self.assertEqual(row["target_points"], DEV_VELOCITY)
 
 	def test_business_analyst_report_prorates_the_target(self):
@@ -446,15 +462,16 @@ class TestSprintReportProration(FrappeTestCase):
 			{"start_date": PERIOD[0], "end_date": PERIOD[1], "business_analyst": BA_USER}
 		)
 		fieldnames = [column["fieldname"] for column in columns]
-		for fieldname in ("working_days", "public_holidays", "leave_days", "expected_velocity"):
+		for fieldname in ("days", "expected_velocity"):
 			self.assertIn(fieldname, fieldnames)
 
 		row = self._row_for(
 			rows, "business_analyst", frappe.db.get_value("User", BA_USER, "full_name")
 		)
 		self.assertIsNotNone(row, f"no row for {BA_USER} in {rows}")
-		self.assertEqual(row["working_days"], WORKING_DAYS)
-		self.assertEqual(row["public_holidays"], 1)
+		# Net of the public holiday in the window.
+		# Working / Holiday / Leave, as Production renders it.
+		self.assertEqual(row["days"], "4.0 / 1 / 0.0")
 		self.assertEqual(row["expected_velocity"], 80.0)  # 100 × 4/5
 		self.assertEqual(row["points_scoped"], 10.0)
 		self.assertEqual(row["percentage_target"], 12.5)
@@ -473,5 +490,4 @@ class TestSprintReportProration(FrappeTestCase):
 			rows, "business_analyst", frappe.db.get_value("User", BA_USER, "full_name")
 		)
 		self.assertIsNotNone(row, f"no row for {BA_USER} in {rows}")
-		self.assertEqual(row["leave_days"], 1.0)
 		self.assertEqual(row["expected_velocity"], 60.0)  # 100 × 3/5

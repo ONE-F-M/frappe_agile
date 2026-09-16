@@ -6,9 +6,12 @@
 A velocity target (points per sprint) is earned over the days a person would
 normally be at work, so that is what the target is measured against:
 
-    working_days = sprint calendar days - the person's weekly offs
-    factor       = (working_days - holiday_days - leave_days) / working_days
-    target       = velocity * factor
+    working_days = calendar days across the sprints - weekly offs
+                   - public holidays - approved leave
+    target       = velocity * working_days / 5
+
+Sprints overlap, so the windows are merged before any of it is counted: a week
+covered by three sprints is worked once, not three times.
 
 `holiday_days` are the entries on the employee's Holiday List that are *not*
 flagged as a weekly off - public holidays. Weekly offs themselves never reduce
@@ -22,11 +25,58 @@ Where the calendar cannot be determined - no linked Employee, no Holiday List,
 or HRMS not installed - the target is left alone.
 """
 
+import datetime
+
 import frappe
 from frappe.utils import cint, date_diff, flt, getdate
 
 # Multiplier applied when the target should not be prorated at all.
 NO_PRORATION = 1.0
+
+# A sprint is a working week, and velocity is quoted per sprint. Days are
+# converted to a target against this.
+SPRINT_WORKING_DAYS = 5
+
+
+def as_list(value):
+	"""A filter value as a list of names.
+
+	A MultiSelectList sends a JSON array, but a saved filter, a direct API call
+	or a link from elsewhere may still send a single name. Production's parse
+	assumes the array and raises on the bare string.
+	"""
+	if not value:
+		return []
+	if isinstance(value, str):
+		try:
+			value = frappe.parse_json(value)
+		except Exception:
+			return [value]
+	if isinstance(value, (list, tuple, set)):
+		return [v for v in value if v]
+	return [value]
+
+
+def merge_periods(periods):
+	"""Overlapping sprint windows reduced to disjoint date ranges.
+
+	Sprints overlap: a BA running three of them that share a week works that
+	week once, not three times. Counting each window separately charged the same
+	Tuesday twice and doubled the target along with it.
+	"""
+	ranges = sorted(
+		(getdate(start), getdate(end))
+		for start, end in periods
+		if start and end and getdate(end) >= getdate(start)
+	)
+
+	merged = []
+	for start, end in ranges:
+		if merged and start <= merged[-1][1] + datetime.timedelta(days=1):
+			merged[-1][1] = max(merged[-1][1], end)
+		else:
+			merged.append([start, end])
+	return [(start, end) for start, end in merged]
 
 
 def get_employee_map(users):
@@ -51,28 +101,36 @@ def get_employee_map(users):
 
 
 def get_proration(employee, periods):
-	"""Aggregate the working-day breakdown across several sprint periods.
+	"""The working-day breakdown across several sprint periods.
 
-	`periods` is an iterable of (start_date, end_date) pairs, one per distinct
-	sprint period the person worked.
+	`periods` is an iterable of (start_date, end_date) pairs. They may overlap;
+	the windows are merged first so every calendar date is counted once.
 
-	Returns (factor, working_days, holiday_days, leave_days), where `factor` is
-	what the velocity is multiplied by: one whole sprint per period, less the
-	days lost within each.
+	Returns (working_days, holiday_days, leave_days), where `working_days` is
+	the number of days the person could actually work — already net of the
+	public holidays and approved leave that fell inside them.
 	"""
-	factor = 0.0
-	working_days = 0
+	gross = 0
 	holiday_days = 0
 	leave_days = 0.0
 
-	for start_date, end_date in periods:
+	for start_date, end_date in merge_periods(periods):
 		period = get_period_breakdown(employee, start_date, end_date)
-		working_days += period["working_days"]
+		gross += period["working_days"]
 		holiday_days += period["holiday_days"]
 		leave_days += period["leave_days"]
-		factor += period["factor"]
 
-	return factor, working_days, holiday_days, flt(leave_days, 2)
+	working_days = max(gross - holiday_days - leave_days, 0.0)
+	return flt(working_days, 2), holiday_days, flt(leave_days, 2)
+
+
+def get_target(velocity, working_days):
+	"""The points a velocity implies over this many working days.
+
+	Velocity is quoted per sprint and a sprint is a working week, so the days
+	are scaled against that rather than against the length of any one sprint.
+	"""
+	return flt(velocity) * flt(working_days) / SPRINT_WORKING_DAYS
 
 
 def get_period_breakdown(employee, start_date, end_date):
@@ -88,9 +146,10 @@ def get_period_breakdown(employee, start_date, end_date):
 		return _breakdown(0, 0, 0.0, NO_PRORATION)
 
 	if not employee:
-		# No staff record to look a calendar up against, so every calendar day
-		# counts as a working day and the target stands as it is.
-		return _breakdown(calendar_days, 0, 0.0, NO_PRORATION)
+		# No staff record to look a calendar up against, so the target is left
+		# alone: one sprint's worth of working days for the window, rather than
+		# every calendar day in it — weekends included.
+		return _breakdown(SPRINT_WORKING_DAYS, 0, 0.0, NO_PRORATION)
 
 	holiday_list = _get_holiday_list(employee)
 	weekly_offs, holiday_days = _split_holidays(holiday_list, start_date, end_date)
