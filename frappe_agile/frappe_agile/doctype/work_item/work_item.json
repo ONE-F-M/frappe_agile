@@ -28,6 +28,7 @@
   "research_required",
   "column_break_gxds",
   "epic",
+  "blocked_by",
   "small_text_yecv",
   "implementation_details_section",
   "orchestrator",
@@ -206,6 +207,12 @@
    "fieldname": "epic",
    "fieldtype": "Link",
    "label": "Epic",
+   "options": "Work Item"
+  },
+  {
+   "fieldname": "blocked_by",
+   "fieldtype": "Link",
+   "label": "Blocked By",
    "options": "Work Item"
   },
   {
