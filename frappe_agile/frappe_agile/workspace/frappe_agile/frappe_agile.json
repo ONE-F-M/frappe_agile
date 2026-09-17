@@ -84,9 +84,9 @@
         {
             "hidden": 0,
             "is_query_report": 1,
-            "label": "Sprint Report per BA",
+            "label": "Sprint Report per Scrum Master",
             "link_count": 0,
-            "link_to": "Sprint Report per Business Analyst",
+            "link_to": "Sprint Report per Scrum Master",
             "link_type": "Report",
             "onboard": 0,
             "type": "Link"

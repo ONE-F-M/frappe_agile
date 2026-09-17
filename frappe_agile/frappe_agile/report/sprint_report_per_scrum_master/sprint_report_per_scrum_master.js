@@ -1,7 +1,17 @@
 // Copyright (c) 2026, One FM and contributors
 // For license information, please see license.txt
 
-frappe.query_reports["Sprint Report per Business Analyst"] = {
+const REPORT_METHOD = "frappe_agile.frappe_agile.report.sprint_report_per_scrum_master.sprint_report_per_scrum_master";
+
+// A project is only on the report once it is on the Roadmap, which is the
+// Roadmap board's own membership rule.
+const ROADMAP_PROJECT_FILTERS = {
+	project_type: "SCRUM Project",
+	is_active: "Yes",
+	custom_show_in_roadmap: "Yes",
+};
+
+frappe.query_reports["Sprint Report per Scrum Master"] = {
 	"filters": [
 		{
 			"fieldname": "start_date",
@@ -58,19 +68,29 @@ frappe.query_reports["Sprint Report per Business Analyst"] = {
 			"reqd": 1
 		},
 		{
+			"fieldname": "project",
+			"label": __("Project"),
+			"fieldtype": "MultiSelectList",
+			"get_data": function (txt) {
+				// Only roadmap SCRUM projects — the same set the report rows come from.
+				return get_link_options_selected_first("Project", "project", txt, ROADMAP_PROJECT_FILTERS);
+			}
+		},
+		{
 			"fieldname": "sprint",
 			"label": __("Sprint"),
 			"fieldtype": "MultiSelectList",
 			"get_data": function (txt) {
-				return get_options_selected_first("Sprint", "sprint", txt);
+				return get_link_options_selected_first("Sprint", "sprint", txt);
 			}
 		},
 		{
-			"fieldname": "business_analyst",
-			"label": __("Business Analyst"),
+			"fieldname": "scrum_master",
+			"label": __("Scrum Master"),
 			"fieldtype": "MultiSelectList",
 			"get_data": function (txt) {
-				return get_options_selected_first("User", "business_analyst", txt);
+				// Only the Employees who are Project Manager on a roadmap SCRUM project.
+				return get_options_selected_first("scrum_master", txt, `${REPORT_METHOD}.scrum_master_options`);
 			}
 		}
 	],
@@ -84,14 +104,22 @@ frappe.query_reports["Sprint Report per Business Analyst"] = {
 
 
 // Put selected values first, then the search results.
-function get_options_selected_first(doctype, fieldname, txt) {
+function selected_first(fieldname, options) {
 	const selected = frappe.query_report.get_filter_value(fieldname) || [];
-	return frappe.db.get_link_options(doctype, txt).then((options) => {
-		const by_value = Object.fromEntries(options.map((o) => [o.value, o]));
-		const selected_options = selected.map(
-			(v) => by_value[v] || { value: v, label: v, description: "" }
-		);
-		const rest = options.filter((o) => !selected.includes(o.value));
-		return selected_options.concat(rest);
-	});
+	const by_value = Object.fromEntries(options.map((o) => [o.value, o]));
+	const selected_options = selected.map(
+		(v) => by_value[v] || { value: v, label: v, description: "" }
+	);
+	const rest = options.filter((o) => !selected.includes(o.value));
+	return selected_options.concat(rest);
+}
+
+function get_link_options_selected_first(doctype, fieldname, txt, filters = {}) {
+	return frappe.db
+		.get_link_options(doctype, txt, filters)
+		.then((options) => selected_first(fieldname, options));
+}
+
+function get_options_selected_first(fieldname, txt, method) {
+	return frappe.xcall(method, { txt: txt }).then((options) => selected_first(fieldname, options));
 }

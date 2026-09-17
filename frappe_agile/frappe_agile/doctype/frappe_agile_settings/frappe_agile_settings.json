@@ -37,7 +37,7 @@
    "options": "Development Team Member"
   },
   {
-   "description": "Used as the Expected Velocity for Business Analysts in the Sprint Report per Business Analyst",
+   "description": "Used as the Expected Velocity in the Sprint Report per Scrum Master",
    "fieldname": "ba_velocity",
    "fieldtype": "Float",
    "label": "BA Velocity"
