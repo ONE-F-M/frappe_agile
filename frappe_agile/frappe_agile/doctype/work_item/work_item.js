@@ -13,6 +13,18 @@ frappe.ui.form.on("Work Item", {
 		};
 	},
 
+	// Filter Blocked By link field to exclude Epics and the current record itself
+	blocked_by: function (frm) {
+		frm.fields_dict.blocked_by.get_query = function () {
+			return {
+				filters: {
+					work_item_type: ["!=", "Epic"],
+					name: ["!=", frm.doc.name],
+				},
+			};
+		};
+	},
+
 	setup: function (frm) {
 		frm.set_query("work_item_template", function () {
 			return {
