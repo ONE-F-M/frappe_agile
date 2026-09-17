@@ -163,6 +163,29 @@ class WorkItem(Document):
 				title=_("Invalid Orchestrator Target"),
 			)
 
+	def _validate_blocked_by(self):
+		"""Blocked By must point to a real, schedulable Work Item.
+
+		Epics are containers, not schedulable work \u2014 the same reason they carry
+		no story points, need no sprint, and cannot be handed to the orchestrator \u2014
+		so one cannot block another item. A Work Item also cannot block itself.
+		"""
+		if not self.blocked_by:
+			return
+
+		if self.blocked_by == self.name:
+			frappe.throw(
+				_("A Work Item cannot be blocked by itself."),
+				title=_("Invalid Blocked By"),
+			)
+
+		blocked_by_type = frappe.db.get_value("Work Item", self.blocked_by, "work_item_type")
+		if blocked_by_type == "Epic":
+			frappe.throw(
+				_("An Epic cannot be used as a blocker. Epics are containers \u2014 select the individual Work Item that is actually blocking this one."),
+				title=_("Invalid Blocked By"),
+			)
+
 	def _validate_sprint_status(self):
 		"""Ensure the Work Item can only be linked to an Active or Draft Sprint."""
 
