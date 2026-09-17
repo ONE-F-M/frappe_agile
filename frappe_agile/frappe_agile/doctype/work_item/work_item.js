@@ -87,6 +87,16 @@ frappe.ui.form.on("Work Item", {
 			};
 		};
 
+		// Apply blocked_by filter on form load too, so the filter survives form reload
+		frm.fields_dict.blocked_by.get_query = function () {
+			return {
+				filters: {
+					work_item_type: ["!=", "Epic"],
+					name: ["!=", frm.doc.name],
+				},
+			};
+		};
+
 		// Add "Add Rejection Note" button when in Rejected state
 		if (frm.doc.workflow_state === "Rejected") {
 			frm.add_custom_button(__("Add Rejection Note"), function () {
