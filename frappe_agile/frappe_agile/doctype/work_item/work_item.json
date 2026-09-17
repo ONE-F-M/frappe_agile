@@ -210,6 +210,12 @@
    "options": "Work Item"
   },
   {
+   "fieldname": "blocked_by",
+   "fieldtype": "Link",
+   "label": "Blocked By",
+   "options": "Work Item"
+  },
+  {
    "fieldname": "implementation_details_section",
    "fieldtype": "Section Break",
    "label": "Implementation Details"
