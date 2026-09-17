@@ -15,6 +15,7 @@ class WorkItem(Document):
 		self._validate_sprint_required()
 		self._validate_sprint_status()
 		self._validate_orchestrator_target()
+		self._validate_blocked_by()
 
 
 	def before_save(self):
