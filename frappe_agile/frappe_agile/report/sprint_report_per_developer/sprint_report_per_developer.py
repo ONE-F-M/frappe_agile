@@ -208,7 +208,6 @@ def get_data(filters):
 			"leave_days": flt(leave_days, 2),
 			"target_points": target_points,
 			"points_scoped": total_scoped,
-			"percentage_target": flt((total_scoped_raw / prorated_target * 100) if prorated_target else 0.0, 2),
 			"accepted_points": total_accepted,
 			"rejected_points": total_rejected,
 			"spillover_points": spillover,
