@@ -1,6 +1,7 @@
 // Copyright (c) 2026, One FM and contributors
 // For license information, please see license.txt
 
+
 frappe.query_reports["Sprint Report per Developer"] = {
 	"filters": [
 		{
@@ -35,14 +36,42 @@ frappe.query_reports["Sprint Report per Developer"] = {
 		{
 			"fieldname": "sprint",
 			"label": __("Sprint"),
-			"fieldtype": "Link",
-			"options": "Sprint"
+			"fieldtype": "MultiSelectList",
+			"get_data": function (txt) {
+				return get_options_selected_first("Sprint", "sprint", txt);
+			}
 		},
 		{
 			"fieldname": "developer",
 			"label": __("Developer"),
-			"fieldtype": "Link",
-			"options": "User"
+			"fieldtype": "MultiSelectList",
+			"get_data": function (txt) {
+				return get_options_selected_first("User", "developer", txt);
+			}
 		}
-	]
+	],
+	"onload": function (report) {
+		frappe.call({
+			method: "frappe_agile.frappe_agile.doctype.frappe_agile_settings.frappe_agile_settings.get_development_team_users",
+			callback: function (r) {
+				if (r.message && r.message.length) {
+					report.set_filter_value("developer", r.message);
+				}
+			}
+		});
+	}
 };
+
+
+// Put selected values first, then the search results.
+function get_options_selected_first(doctype, fieldname, txt) {
+	const selected = frappe.query_report.get_filter_value(fieldname) || [];
+	return frappe.db.get_link_options(doctype, txt).then((options) => {
+		const by_value = Object.fromEntries(options.map((o) => [o.value, o]));
+		const selected_options = selected.map(
+			(v) => by_value[v] || { value: v, label: v, description: "" }
+		);
+		const rest = options.filter((o) => !selected.includes(o.value));
+		return selected_options.concat(rest);
+	});
+}
