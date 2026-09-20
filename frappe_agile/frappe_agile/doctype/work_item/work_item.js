@@ -35,51 +35,13 @@ frappe.ui.form.on("Work Item", {
 		// status or project. _validate_sprint_status() in work_item.py is the single
 		// source of truth for which Sprints a Work Item may actually be saved against.
 
-		// Filter Assignee User and PR Reviewer User to Development Team members
-		frappe.call({
-			method:
-				"frappe_agile.frappe_agile.doctype.frappe_agile_settings.frappe_agile_settings.get_development_team_users",
-			callback: function (r) {
-				const team_users = r.message || [];
+		apply_project_user_filters(frm);
+	},
 
-				if (team_users.length > 0) {
-					frm.set_query("assignee_user", function () {
-						return {
-							filters: {
-								name: ["in", team_users],
-							},
-						};
-					});
-
-					frm.set_query("pr_reviewer_user", function () {
-						return {
-							filters: {
-								name: ["in", team_users],
-							},
-						};
-					});
-				} else {
-					// No Development Team configured — restrict selection and notify
-					const empty_filter = function () {
-						return {
-							filters: {
-								name: ["in", []],
-							},
-						};
-					};
-					frm.set_query("assignee_user", empty_filter);
-					frm.set_query("pr_reviewer_user", empty_filter);
-
-					frappe.show_alert({
-						message: __("Please configure the Development Team in {0} to enable Assignee and PR Reviewer selection.", [
-							'<a href="/app/frappe-agile-settings">Frappe Agile Settings</a>'
-						]),
-						indicator: "orange",
-					}, 10);
-				}
-			},
-		});
-
+	project: function (frm) {
+		// The offered users depend on the project, and setup ran before it was
+		// picked — so the filter has to be built again whenever it changes.
+		apply_project_user_filters(frm);
 	},
 
 	onload: function (frm) {
@@ -151,3 +113,36 @@ frappe.ui.form.on("Work Item", {
 	},
 
 });
+
+// Offer Assignee User and PR Reviewer User only to the users on the item's
+// project. Without a project yet, to anyone who is on some project.
+function apply_project_user_filters(frm) {
+	frappe.call({
+		method: "frappe_agile.frappe_agile.doctype.work_item.work_item.get_assignable_users",
+		args: { project: frm.doc.project || "" },
+		callback: function (r) {
+			const users = r.message || [];
+			const query = function () {
+				return {
+					filters: {
+						name: ["in", users],
+					},
+				};
+			};
+			frm.set_query("assignee_user", query);
+			frm.set_query("pr_reviewer_user", query);
+
+			if (users.length) {
+				return;
+			}
+			// An empty list is a configuration gap, not a state to puzzle over —
+			// name the place to fix.
+			const message = frm.doc.project
+				? __("Project {0} has no users. Add them in its Users table to enable Assignee and PR Reviewer selection.", [
+						`<a href="/app/project/${encodeURIComponent(frm.doc.project)}">${frappe.utils.escape_html(frm.doc.project)}</a>`,
+				  ])
+				: __("No project has any users yet. Add users to a project to enable Assignee and PR Reviewer selection.");
+			frappe.show_alert({ message: message, indicator: "orange" }, 10);
+		},
+	});
+}

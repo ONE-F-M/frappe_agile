@@ -11,33 +11,33 @@
 //   2. Note: "Backlog" filter behavior is natively handled by standard Frappe 
 //      List Filter DocType managed in setup.py
 
-// Cache for Development Team users (loaded once per page lifecycle)
-let _team_users_cache = null;
-let _team_users_loading = false;
-let _team_users_callbacks = [];
+// Cache for assignable users — everyone on a project (loaded once per page lifecycle)
+let _assignable_users_cache = null;
+let _assignable_users_loading = false;
+let _assignable_users_callbacks = [];
 
-function fetchDevelopmentTeamUsers(callback) {
-	if (_team_users_cache !== null) {
-		callback(_team_users_cache);
+function fetchAssignableUsers(callback) {
+	if (_assignable_users_cache !== null) {
+		callback(_assignable_users_cache);
 		return;
 	}
-	_team_users_callbacks.push(callback);
-	if (_team_users_loading) return;
-	_team_users_loading = true;
+	_assignable_users_callbacks.push(callback);
+	if (_assignable_users_loading) return;
+	_assignable_users_loading = true;
 
 	frappe.call({
-		method: "frappe_agile.frappe_agile.doctype.frappe_agile_settings.frappe_agile_settings.get_development_team_users",
+		method: "frappe_agile.frappe_agile.doctype.work_item.work_item.get_assignable_users",
 		callback: function (r) {
-			_team_users_cache = r.message || [];
-			_team_users_loading = false;
-			_team_users_callbacks.forEach(cb => cb(_team_users_cache));
-			_team_users_callbacks = [];
+			_assignable_users_cache = r.message || [];
+			_assignable_users_loading = false;
+			_assignable_users_callbacks.forEach(cb => cb(_assignable_users_cache));
+			_assignable_users_callbacks = [];
 		},
 		error: function () {
-			_team_users_cache = [];
-			_team_users_loading = false;
-			_team_users_callbacks.forEach(cb => cb(_team_users_cache));
-			_team_users_callbacks = [];
+			_assignable_users_cache = [];
+			_assignable_users_loading = false;
+			_assignable_users_callbacks.forEach(cb => cb(_assignable_users_cache));
+			_assignable_users_callbacks = [];
 		}
 	});
 }
@@ -205,12 +205,12 @@ function setupListViewFilters(listview) {
 			control.$wrapper.css({'min-width': '20%', 'margin-bottom': '0', 'flex': '1'});
 			listview.custom_list_controls[df.fieldname] = control;
 		});
-		// Apply team-user restriction on the Assignee User filter
-		fetchDevelopmentTeamUsers(function (team_users) {
+		// Offer only assignable users on the Assignee User filter
+		fetchAssignableUsers(function (assignable_users) {
 			let assignee_ctrl = listview.custom_list_controls["assignee_user"];
 			if (assignee_ctrl) {
 				assignee_ctrl.df.get_query = function () {
-					return { filters: { name: ["in", team_users] } };
+					return { filters: { name: ["in", assignable_users] } };
 				};
 			}
 		});
@@ -270,11 +270,11 @@ function setupKanbanFilters(listview) {
 
 		// Apply team-user restriction on the Kanban Assignee filter after controls are created
 		setTimeout(function() {
-			fetchDevelopmentTeamUsers(function (team_users) {
+			fetchAssignableUsers(function (assignable_users) {
 				let assignee_ctrl = listview.custom_kanban_controls["assignee_user"];
 				if (assignee_ctrl) {
 					assignee_ctrl.df.get_query = function () {
-						return { filters: { name: ["in", team_users] } };
+						return { filters: { name: ["in", assignable_users] } };
 					};
 				}
 			});
