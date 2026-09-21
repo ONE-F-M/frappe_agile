@@ -1,18 +1,16 @@
 # Copyright (c) 2026, One FM and contributors
 # For license information, please see license.txt
 
-"""Who a Work Item may be assigned to, and who may review its PR.
+"""Who a Work Item may be assigned to.
 
-Assigning: the project's Users table is the one list. The Development Team in
+The project's Users table is the one list. The Development Team in
 Frappe Agile Settings used to be the standing list that a project could only
 narrow, so a project member who was not also on the team could never be
 assigned; it plays no part in assigning now. Without a project to go by the
 answer is everyone on any project, because whoever is assigned has to be on the
 project the item belongs to.
 
-Reviewing is the other way round: it is the Development Team's job wherever the
-work came from, and the GitHub webhook already resolves a reviewer through that
-table, so the picker has to offer what the webhook can write.
+Reviewing is the other way round and lives in test_pr_reviewer_selection.
 """
 
 from __future__ import annotations
@@ -20,9 +18,6 @@ from __future__ import annotations
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from frappe_agile.frappe_agile.doctype.frappe_agile_settings.frappe_agile_settings import (
-	get_development_team_users,
-)
 from frappe_agile.frappe_agile.doctype.work_item.work_item import get_assignable_users
 
 PREFIX = "_Test Assignee"
@@ -105,9 +100,3 @@ class TestAssigneeSelection(FrappeTestCase):
 	def test_an_unknown_project_offers_nobody(self):
 		self.assertEqual(get_assignable_users(project="_Test Assignee Nonexistent"), [])
 
-	def test_the_reviewers_are_the_development_team(self):
-		"""Reviewing does not go through the project."""
-		self.assertEqual(get_development_team_users(), [ON_TEAM_ONLY])
-
-	def test_a_project_user_is_not_a_reviewer_by_itself(self):
-		self.assertNotIn(ON_ALPHA, get_development_team_users())
