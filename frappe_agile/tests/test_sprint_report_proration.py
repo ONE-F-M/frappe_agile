@@ -72,10 +72,12 @@ class TestSprintReportProration(FrappeTestCase):
 		cls._make_user(UNLINKED_USER)
 		cls.project = cls._make_project()
 		cls.previous_velocities = cls._set_velocities(DEV_VELOCITY, BA_VELOCITY)
+		cls.previous_team = cls._set_development_team([DEV_USER, UNLINKED_USER])
 		frappe.db.commit()
 
 	@classmethod
 	def tearDownClass(cls):
+		cls._set_development_team(cls.previous_team)
 		cls._set_velocities(*cls.previous_velocities)
 		cls._cleanup()
 		super().tearDownClass()
@@ -255,6 +257,21 @@ class TestSprintReportProration(FrappeTestCase):
 		settings.save(ignore_permissions=True)
 		return previous
 
+	@classmethod
+	def _set_development_team(cls, users):
+		"""Put these users on the Development Team, returning the previous members.
+
+		The developer report reports on that team, so a test developer who is not
+		on it has no row at all.
+		"""
+		settings = frappe.get_single("Frappe Agile Settings")
+		previous = [row.user for row in settings.development_team if row.user]
+		settings.set("development_team", [])
+		for user in users:
+			settings.append("development_team", {"user": user})
+		settings.save(ignore_permissions=True)
+		return previous
+
 	def _make_leave(
 		self, leave_type, from_date, to_date, half_day=0, half_day_date=None, employee=None
 	):
@@ -411,18 +428,28 @@ class TestSprintReportProration(FrappeTestCase):
 			{"start_date": PERIOD[0], "end_date": PERIOD[1], "developer": DEV_USER}
 		)
 		fieldnames = [column["fieldname"] for column in columns]
-		for fieldname in ("working_days", "public_holidays", "leave_days", "target_points"):
+		for fieldname in ("days", "target_points"):
 			self.assertIn(fieldname, fieldnames)
 
 		row = self._row_for(rows, "developer", frappe.db.get_value("User", DEV_USER, "full_name"))
 		self.assertIsNotNone(row, f"no row for {DEV_USER} in {rows}")
-		self.assertEqual(row["working_days"], WORKING_DAYS)
-		self.assertEqual(row["public_holidays"], 1)
-		self.assertEqual(row["leave_days"], 0.0)
+		# Working / Holiday / Leave, as the report renders it.
+		self.assertEqual(row["days"], f"{WORKING_DAYS} / 1 / 0.0")
 		self.assertEqual(row["target_points"], 64.0)
 		self.assertEqual(row["points_scoped"], 12.0)
 		# 12 scoped against a 64-point target, not against 80.
 		self.assertEqual(row["percentage_target"], 18.75)
+
+	def test_developer_report_reports_only_on_the_development_team(self):
+		"""An assignee who is not on the team is not a developer."""
+		sprint = self._make_sprint(PERIOD)
+		self._make_work_item(sprint.name, "off team", 8, assignee_user=BA_USER)
+		self._make_work_item(sprint.name, "on team", 4, assignee_user=DEV_USER)
+
+		_columns, rows = developer_report({"start_date": PERIOD[0], "end_date": PERIOD[1]})
+		names = [row["developer"] for row in rows]
+		self.assertIn(frappe.db.get_value("User", DEV_USER, "full_name"), names)
+		self.assertNotIn(frappe.db.get_value("User", BA_USER, "full_name"), names)
 
 	def test_developer_report_leaves_an_unlinked_user_alone(self):
 		sprint = self._make_sprint(PERIOD)
@@ -435,7 +462,9 @@ class TestSprintReportProration(FrappeTestCase):
 			rows, "developer", frappe.db.get_value("User", UNLINKED_USER, "full_name")
 		)
 		self.assertIsNotNone(row, f"no row for {UNLINKED_USER} in {rows}")
-		self.assertEqual(row["public_holidays"], 0)
+		# No staff record to look a calendar up against: nothing is lost, so the
+		# whole window counts and the target stands.
+		self.assertEqual(row["days"], "7 / 0 / 0.0")
 		self.assertEqual(row["target_points"], DEV_VELOCITY)
 
 	def test_business_analyst_report_prorates_the_target(self):
