@@ -44,3 +44,12 @@ class FrappeAgileSettings(Document):
 			title=_("Invalid Backlog Status"),
 		)
 
+
+def development_team_users():
+	"""The users on the Development Team table.
+
+	Empty when nobody is configured, which the callers read as "nobody" rather
+	than as "everybody".
+	"""
+	settings = frappe.get_single("Frappe Agile Settings")
+	return [row.user for row in settings.development_team if row.user]
