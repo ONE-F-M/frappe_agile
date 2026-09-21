@@ -4,6 +4,9 @@
 import frappe
 from frappe.utils import flt
 
+from frappe_agile.frappe_agile.doctype.frappe_agile_settings.frappe_agile_settings import (
+	development_team_users,
+)
 from frappe_agile.frappe_agile.report.proration import (
 	as_list,
 	get_employee_map,
@@ -89,7 +92,14 @@ def get_data(filters):
 	# 3. Developer velocity from settings
 	# ------------------------------------------------------------------
 	developer_velocity = flt(frappe.db.get_single_value("Frappe Agile Settings", "developer_velocity"))
-	selected_developers = as_list(filters.get("developer"))
+
+	# The Development Team decides who is a developer. Without it the rows were
+	# whoever happened to be assigned a work item — Administrator, an agent's
+	# login, a manager who picked one up — each given a velocity target.
+	team = development_team_users()
+	selected_developers = [user for user in as_list(filters.get("developer")) or team if user in team]
+	if not selected_developers:
+		return []
 
 	# ------------------------------------------------------------------
 	# 4. Aggregate per (developer, sprint)
@@ -102,8 +112,7 @@ def get_data(filters):
 		if not user:
 			continue
 
-		# Apply developer filter if set
-		if selected_developers and user not in selected_developers:
+		if user not in selected_developers:
 			continue
 
 		sprint_name = wi.sprint
@@ -222,3 +231,28 @@ def get_data(filters):
 	# Sort by developer name
 	data.sort(key=lambda x: x.get("developer") or "")
 	return data
+
+
+@frappe.whitelist()
+def developer_options(txt=None):
+	"""The Development Team, for the Developer filter.
+
+	Only these can produce a row, and they are offered by name rather than by
+	email address.
+	"""
+	frappe.has_permission("Sprint", "read", throw=True)
+
+	team = development_team_users()
+	if not team:
+		return []
+
+	filters = {"name": ["in", team]}
+	if txt:
+		filters["full_name"] = ["like", f"%{txt}%"]
+
+	return [
+		{"value": u.name, "description": u.full_name or u.name}
+		for u in frappe.get_all(
+			"User", filters=filters, fields=["name", "full_name"], order_by="full_name asc"
+		)
+	]
