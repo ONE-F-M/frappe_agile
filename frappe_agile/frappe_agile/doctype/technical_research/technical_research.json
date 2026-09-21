@@ -7,6 +7,7 @@
  "engine": "InnoDB",
  "field_order": [
   "title",
+  "source_work_item",
   "column_break_ogep",
   "assignee",
   "column_break_rtro",
@@ -55,6 +56,14 @@
    "in_list_view": 1,
    "label": "Title",
    "reqd": 1
+  },
+  {
+   "description": "The Work Item this research was raised for. Submitted work items are planned into the sprint after that item's own.",
+   "fieldname": "source_work_item",
+   "fieldtype": "Link",
+   "label": "Source Work Item",
+   "options": "Work Item",
+   "read_only": 1
   },
   {
    "fieldname": "column_break_ogep",
@@ -193,7 +202,7 @@
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-06-18 10:03:25.066480",
+ "modified": "2026-09-09 09:45:37.887252",
  "modified_by": "Administrator",
  "module": "Frappe Agile",
  "name": "Technical Research",
