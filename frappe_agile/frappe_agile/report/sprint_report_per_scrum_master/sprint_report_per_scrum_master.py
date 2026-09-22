@@ -10,8 +10,9 @@ overlap the reported window by at least one day, and the money columns are those
 sprints added up.
 
 Rows are the people with at least one such sprint: a row with no sprint has no
-date range, and the proration and the New Work Items count are both measured
-over the row's own sprints rather than over the filter's dates.
+date range, and the proration is measured over the row's own sprints. New Work
+Items is the one column measured over the filter's dates instead — it counts
+what the person created in the reported window, whichever sprint it went to.
 """
 
 import frappe
@@ -175,13 +176,13 @@ def get_data(filters):
 			"sprint_start_date": earliest_start,
 			"sprint_end_date": latest_end,
 			"no_of_sprints": len(sprint_docs),
-			# Counted over the row's own range, not the filter's, and over the
-			# sprints the row actually lists.
+			# Counted over the reported window, not the row's sprints: it answers
+			# "how much did this person raise in the period", whatever it was
+			# filed under. Falls back to the row's own range on a call with no dates.
 			"new_work_items": count_new_work_items(
 				employee.user_id if employee else None,
-				earliest_start,
-				latest_end,
-				[s.name for s in sprint_docs],
+				filters.get("start_date") or earliest_start,
+				filters.get("end_date") or latest_end,
 			),
 			"days": "{0} / {1} / {2}".format(working_days, public_holidays, flt(leave_days, 2)),
 			"expected_velocity": flt(prorated_target, 1),
@@ -251,24 +252,22 @@ def get_sprint_points(sprint_names):
 	return points
 
 
-def count_new_work_items(user, start_date, end_date, sprint_names):
-	"""Work items this person created inside the row's date range and sprints.
+def count_new_work_items(user, start_date, end_date):
+	"""Work items this person created between the two dates, in any sprint or none.
 
-	Scoped to the row's own sprints so the number reconciles with the Sprint(s)
-	column: without it, work the person did on another project they manage — or
-	on nothing at all, an Epic in no sprint — landed in a row whose sprints the
-	user had filtered down to one.
+	Deliberately not tied to the row's sprints: an Epic in no sprint, or an item
+	filed under a project the filter left out, is still work this person raised in
+	the period, and that is what the column reports.
 	"""
-	if not (user and start_date and end_date and sprint_names):
+	if not (user and start_date and end_date):
 		return 0
 
 	# creation is a datetime, so the bounds are spelled out: a bare end date
-	# would drop everything created on the row's last day after midnight.
+	# would drop everything created on the last day after midnight.
 	return frappe.db.count(
 		"Work Item",
 		{
 			"owner": user,
-			"sprint": ["in", sprint_names],
 			"creation": [
 				"between",
 				[f"{getdate(start_date)} 00:00:00", f"{getdate(end_date)} 23:59:59.999999"],
