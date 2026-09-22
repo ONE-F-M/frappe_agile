@@ -569,7 +569,7 @@ class TestSprintReportProration(FrappeTestCase):
 		self.assertNotIn(self.dev_employee, values)
 
 	# ------------------------------------------------------------------
-	# New Work Items — counted over the row's range, not the filter's
+	# New Work Items — counted over the filter's dates, whatever the sprint
 	# ------------------------------------------------------------------
 
 	def test_new_work_items_counts_what_the_scrum_master_created_in_range(self):
@@ -584,8 +584,11 @@ class TestSprintReportProration(FrappeTestCase):
 		row = self._scrum_master_row(rows)
 		self.assertEqual(row["new_work_items"], 1)
 
-	def test_new_work_items_ignores_a_sprint_the_row_does_not_list(self):
-		"""Created in the range, but on a sprint outside the reported window."""
+	def test_new_work_items_counts_a_sprint_the_row_does_not_list(self):
+		"""Created in the range, filed under a sprint outside the reported window.
+
+		The column answers how much this person raised in the period, not where
+		it was filed, so this one counts alongside the item in the listed sprint."""
 		sprint = self._make_sprint(PERIOD)
 		self._make_work_item(sprint.name, "counted", 3)
 		elsewhere = self._make_sprint(CLEAN_PERIOD)
@@ -599,7 +602,7 @@ class TestSprintReportProration(FrappeTestCase):
 
 		_columns, rows = scrum_master_report({"start_date": PERIOD[0], "end_date": PERIOD[1]})
 		row = self._scrum_master_row(rows)
-		self.assertEqual(row["new_work_items"], 1)
+		self.assertEqual(row["new_work_items"], 2)
 
 	def test_new_work_items_ignores_another_persons_items(self):
 		sprint = self._make_sprint(PERIOD)
