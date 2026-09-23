@@ -31,9 +31,11 @@ from frappe.utils import add_days, flt, getdate
 
 from frappe_agile.frappe_agile.report.proration import (
 	SPRINT_WORKING_DAYS,
+	as_list,
 	get_period_breakdown,
 	get_proration,
 	get_target,
+	merge_periods,
 )
 from frappe_agile.frappe_agile.report.sprint_report_per_scrum_master.sprint_report_per_scrum_master import (
 	execute as scrum_master_report,
