@@ -31,9 +31,11 @@ from frappe.utils import add_days, flt, getdate
 
 from frappe_agile.frappe_agile.report.proration import (
 	SPRINT_WORKING_DAYS,
+	as_list,
 	get_period_breakdown,
 	get_proration,
 	get_target,
+	merge_periods,
 )
 from frappe_agile.frappe_agile.report.sprint_report_per_scrum_master.sprint_report_per_scrum_master import (
 	execute as scrum_master_report,
@@ -622,4 +624,64 @@ class TestSprintReportProration(FrappeTestCase):
 		"""Who created a work item and when — the report reads owner and creation."""
 		frappe.db.set_value(
 			"Work Item", work_item, {"owner": user, "creation": created_at}, update_modified=False
+		)
+
+
+class TestProrationHelpers(FrappeTestCase):
+	"""`as_list` and `merge_periods` are pure functions: no fixtures, no database."""
+
+	# ------------------------------------------------------------------
+	# as_list
+	# ------------------------------------------------------------------
+
+	def test_empty_string_is_an_empty_list(self):
+		self.assertEqual(as_list(""), [])
+
+	def test_none_is_an_empty_list(self):
+		self.assertEqual(as_list(None), [])
+
+	def test_a_json_array_string_is_parsed_into_names(self):
+		self.assertEqual(
+			as_list('["HR-EMP-001","HR-EMP-002"]'), ["HR-EMP-001", "HR-EMP-002"]
+		)
+
+	def test_a_bare_name_that_is_not_json_stays_a_single_item_list(self):
+		self.assertEqual(as_list("HR-EMP-001"), ["HR-EMP-001"])
+
+	def test_empty_entries_in_a_list_are_dropped(self):
+		self.assertEqual(as_list(["HR-EMP-001", "", None]), ["HR-EMP-001"])
+
+	# ------------------------------------------------------------------
+	# merge_periods
+	# ------------------------------------------------------------------
+
+	def test_overlapping_windows_merge_into_one_range(self):
+		periods = [("2026-08-01", "2026-08-10"), ("2026-08-05", "2026-08-15")]
+		self.assertEqual(
+			merge_periods(periods),
+			[(getdate("2026-08-01"), getdate("2026-08-15"))],
+		)
+
+	def test_windows_a_single_day_apart_are_merged(self):
+		periods = [("2026-08-01", "2026-08-10"), ("2026-08-11", "2026-08-20")]
+		self.assertEqual(
+			merge_periods(periods),
+			[(getdate("2026-08-01"), getdate("2026-08-20"))],
+		)
+
+	def test_windows_a_week_apart_stay_separate(self):
+		periods = [("2026-08-01", "2026-08-10"), ("2026-08-18", "2026-08-25")]
+		self.assertEqual(
+			merge_periods(periods),
+			[
+				(getdate("2026-08-01"), getdate("2026-08-10")),
+				(getdate("2026-08-18"), getdate("2026-08-25")),
+			],
+		)
+
+	def test_a_window_ending_before_it_starts_is_dropped(self):
+		periods = [("2026-08-10", "2026-08-01"), ("2026-08-15", "2026-08-20")]
+		self.assertEqual(
+			merge_periods(periods),
+			[(getdate("2026-08-15"), getdate("2026-08-20"))],
 		)
