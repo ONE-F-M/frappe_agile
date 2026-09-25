@@ -615,6 +615,34 @@ class TestSprintReportProration(FrappeTestCase):
 		row = self._scrum_master_row(rows)
 		self.assertEqual(row["new_work_items"], 0)
 
+	def test_developer_report_counts_new_work_items_in_range(self):
+		sprint = self._make_sprint(PERIOD)
+		inside = self._make_work_item(sprint.name, "dev inside", 3, assignee_user=DEV_USER)
+		outside = self._make_work_item(sprint.name, "dev outside", 3, assignee_user=DEV_USER)
+		self._set_creator(inside.name, DEV_USER, f"{PERIOD[1]} 09:00:00")
+		self._set_creator(outside.name, DEV_USER, f"{CLEAN_PERIOD[0]} 09:00:00")
+
+		_columns, rows = developer_report(
+			{"start_date": PERIOD[0], "end_date": PERIOD[1], "developer": DEV_USER}
+		)
+		row = self._row_for(rows, "developer", frappe.db.get_value("User", DEV_USER, "full_name"))
+		self.assertEqual(row["new_work_items"], 1)
+
+	def test_developer_report_counts_done_orchestrator_stories(self):
+		sprint = self._make_sprint(PERIOD)
+		done = self._make_work_item(sprint.name, "orchestrated done", 3, assignee_user=DEV_USER)
+		self._make_work_item(sprint.name, "orchestrated open", 3, assignee_user=DEV_USER)
+		frappe.db.set_value(
+			"Work Item", {"title": ("like", f"{TITLE_PREFIX} orchestrated%")}, "orchestrator", 1
+		)
+		frappe.db.set_value("Sprint Work Item", {"work_item": done.name}, "status", "Done")
+
+		_columns, rows = developer_report(
+			{"start_date": PERIOD[0], "end_date": PERIOD[1], "developer": DEV_USER}
+		)
+		row = self._row_for(rows, "developer", frappe.db.get_value("User", DEV_USER, "full_name"))
+		self.assertEqual(row["orchestrator_stories"], 1)
+
 	def _scrum_master_row(self, rows):
 		full_name = frappe.db.get_value("Employee", self.sm_employee, "employee_name")
 		return self._row_for(rows, "scrum_master", full_name)
