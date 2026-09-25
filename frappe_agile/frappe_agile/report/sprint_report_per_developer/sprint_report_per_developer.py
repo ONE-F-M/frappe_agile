@@ -13,6 +13,9 @@ from frappe_agile.frappe_agile.report.proration import (
 	get_proration,
 	get_target,
 )
+from frappe_agile.frappe_agile.report.sprint_report_per_scrum_master.sprint_report_per_scrum_master import (
+	count_new_work_items,
+)
 
 
 def execute(filters=None):
@@ -27,10 +30,10 @@ def get_columns():
 	return [
 		{"fieldname": "developer", "label": "Developer", "fieldtype": "Data", "width": 180},
 		{"fieldname": "sprints", "label": "Sprint(s)", "fieldtype": "HTML", "width": 200},
-		{"fieldname": "sprint_start_date", "label": "Sprint Start Date", "fieldtype": "Date", "width": 150},
-		{"fieldname": "sprint_end_date", "label": "Sprint End Date", "fieldtype": "Date", "width": 150},
-		{"fieldname": "no_of_sprints", "label": "No. of Sprints", "fieldtype": "Int", "width": 120},
-		{"fieldname": "days", "label": "Working / Holiday / Leave Days", "fieldtype": "Data", "width": 200},
+		{"fieldname": "sprint_start_date", "label": "Sprint Start Date", "fieldtype": "Date", "width": 130},
+		{"fieldname": "sprint_end_date", "label": "Sprint End Date", "fieldtype": "Date", "width": 130},
+		{"fieldname": "no_of_sprints", "label": "No. of Sprints", "fieldtype": "Int", "width": 90},
+		{"fieldname": "days", "label": "Working / Holiday / Leave Days", "fieldtype": "Data", "width": 150},
 		{"fieldname": "target_points", "label": "Target Points", "fieldtype": "Float", "width": 130},
 		{"fieldname": "points_scoped", "label": "Points Scoped", "fieldtype": "Float", "width": 130},
 		{"fieldname": "percentage_target", "label": "Scoped Percentage", "fieldtype": "Percent", "width": 160},
@@ -39,6 +42,8 @@ def get_columns():
 		{"fieldname": "rejected_points", "label": "Rejected Points", "fieldtype": "Float", "width": 140},
 		{"fieldname": "spillover_points", "label": "Spillover Points", "fieldtype": "Float", "width": 140},
 		{"fieldname": "acceptance_rate", "label": "Acceptance Rate Percentage", "fieldtype": "Percent", "width": 150},
+		{"fieldname": "orchestrator_stories", "label": "Orchestrator Stories", "fieldtype": "Int", "width": 100},
+		{"fieldname": "new_work_items", "label": "Work Items Created", "fieldtype": "Int", "width": 120},
 	]
 
 
@@ -75,13 +80,16 @@ def get_data(filters):
 	# 2. Fetch work items (User Story, Task, and Bug only) from those sprints
 	# ------------------------------------------------------------------
 	SprintItem = frappe.qb.DocType("Sprint Work Item")
+	WorkItem = frappe.qb.DocType("Work Item")
 	wi_query = (
 		frappe.qb.from_(SprintItem)
+		.left_join(WorkItem).on(SprintItem.work_item == WorkItem.name)
 		.select(
 			SprintItem.parent.as_("sprint"),
 			SprintItem.assignee_user,
 			SprintItem.story_points,
 			SprintItem.status,
+			WorkItem.orchestrator,
 		)
 		.where(SprintItem.parent.isin(sprint_names))
 		.where(SprintItem.work_item_type.isin(["User Story", "Task", "Bug"]))
@@ -123,6 +131,7 @@ def get_data(filters):
 				"scoped_points": 0.0,
 				"accepted_points": 0.0,
 				"rejected_points": 0.0,
+				"orchestrator_stories": 0,
 			}
 
 		points = flt(wi.story_points)
@@ -132,6 +141,8 @@ def get_data(filters):
 
 		if wi.status == "Done":
 			dev_sprint_data[user][sprint_name]["accepted_points"] += points
+			if wi.orchestrator:
+				dev_sprint_data[user][sprint_name]["orchestrator_stories"] += 1
 
 		if wi.status == "Rejected":
 			dev_sprint_data[user][sprint_name]["rejected_points"] += points
@@ -217,11 +228,17 @@ def get_data(filters):
 			"sprint_start_date": earliest_start,
 			"sprint_end_date": latest_end,
 			"no_of_sprints": no_of_sprints,
+			"new_work_items": count_new_work_items(
+				user,
+				filters.get("start_date") or earliest_start,
+				filters.get("end_date") or latest_end,
+			),
 			"days": "{0} / {1} / {2}".format(working_days, public_holidays, flt(leave_days, 2)),
 			"target_points": target_points,
 			"points_scoped": total_scoped,
 			"percentage_target": flt((total_scoped_raw / prorated_target * 100) if prorated_target else 0.0, 2),
 			"accepted_points": total_accepted,
+			"orchestrator_stories": sum(v["orchestrator_stories"] for v in sprint_dict.values()),
 			"rejected_points": total_rejected,
 			"spillover_points": spillover,
 			"acceptance_rate": flt(acceptance_rate, 2),
