@@ -4,6 +4,8 @@
 import frappe
 from frappe.utils import flt
 
+from frappe_agile.frappe_agile.report.proration import as_list
+
 
 def execute(filters=None):
 	if not filters:
@@ -38,17 +40,19 @@ def get_data(filters):
 	)
 
 	# Server-side guard: require date range when no explicit sprint is given
-	if not filters.get("sprint") and (
+	selected_sprints = as_list(filters.get("sprint"))
+	if not selected_sprints and (
 		not filters.get("start_date") or not filters.get("end_date")
 	):
 		return []
 
+	# Only sprints that sit wholly inside the range, not ones that merely overlap it
 	if filters.get("start_date") and filters.get("end_date"):
-		sprint_query = sprint_query.where(Sprint.start_date <= filters.get("end_date"))
-		sprint_query = sprint_query.where(Sprint.end_date >= filters.get("start_date"))
+		sprint_query = sprint_query.where(Sprint.start_date >= filters.get("start_date"))
+		sprint_query = sprint_query.where(Sprint.end_date <= filters.get("end_date"))
 
-	if filters.get("sprint"):
-		sprint_query = sprint_query.where(Sprint.name == filters.get("sprint"))
+	if selected_sprints:
+		sprint_query = sprint_query.where(Sprint.name.isin(selected_sprints))
 
 	sprint_rows = sprint_query.run(as_dict=True)
 	if not sprint_rows:
@@ -57,15 +61,14 @@ def get_data(filters):
 	sprint_names = [s.name for s in sprint_rows]
 
 	# ------------------------------------------------------------------
-	# 2. Fetch Work Items (User Story and Task) linked to those sprints
+	# 2. Fetch Work Items (User Story, Task and Bug) currently in those sprints
 	# ------------------------------------------------------------------
-	SWI = frappe.qb.DocType("Sprint Work Item")
+	WI = frappe.qb.DocType("Work Item")
 	wi_rows = (
-		frappe.qb.from_(SWI)
-		.select(SWI.work_item.as_("name"), SWI.story_points)
-		.where(SWI.parent.isin(sprint_names))
-		.where(SWI.parenttype == "Sprint")
-		.where(SWI.work_item_type.isin(["User Story", "Task", "Bug"]))
+		frappe.qb.from_(WI)
+		.select(WI.name, WI.story_points, WI.ai_tools_feedback)
+		.where(WI.sprint.isin(sprint_names))
+		.where(WI.work_item_type.isin(["User Story", "Task", "Bug"]))
 	).run(as_dict=True)
 
 	if not wi_rows:
@@ -73,24 +76,14 @@ def get_data(filters):
 
 	wi_names = [w.name for w in wi_rows]
 	wi_points_map = {w.name: flt(w.story_points) for w in wi_rows}
+	wi_feedback_map = {
+		w.name: w.ai_tools_feedback.strip()
+		for w in wi_rows
+		if w.ai_tools_feedback and w.ai_tools_feedback.strip()
+	}
 
 	# ------------------------------------------------------------------
-	# 3. Fetch ai_tools_feedback from the Work Item doctype
-	# ------------------------------------------------------------------
-	WI = frappe.qb.DocType("Work Item")
-	feedback_rows = (
-		frappe.qb.from_(WI)
-		.select(WI.name, WI.ai_tools_feedback)
-		.where(WI.name.isin(wi_names))
-	).run(as_dict=True)
-
-	wi_feedback_map = {}
-	for row in feedback_rows:
-		if row.ai_tools_feedback and row.ai_tools_feedback.strip():
-			wi_feedback_map[row.name] = row.ai_tools_feedback.strip()
-
-	# ------------------------------------------------------------------
-	# 4. Fetch all Work Item Label rows for those work items
+	# 3. Fetch all Work Item Label rows for those work items
 	# ------------------------------------------------------------------
 	WILabel = frappe.qb.DocType("Work Item Label")
 	label_rows = (
@@ -100,7 +93,7 @@ def get_data(filters):
 	).run(as_dict=True)
 
 	# ------------------------------------------------------------------
-	# 5. Build label combination per work item
+	# 4. Build label combination per work item
 	# ------------------------------------------------------------------
 	# wi_name -> sorted list of labels
 	wi_label_map = {}
@@ -120,7 +113,7 @@ def get_data(filters):
 			wi_combo_map[wi_name] = "(No Labels)"
 
 	# ------------------------------------------------------------------
-	# 6. Aggregate by label combination
+	# 5. Aggregate by label combination
 	# ------------------------------------------------------------------
 	combo_data = {}
 	for wi_name, combo in wi_combo_map.items():
@@ -134,7 +127,7 @@ def get_data(filters):
 			combo_data[combo]["feedbacks"].append(feedback)
 
 	# ------------------------------------------------------------------
-	# 7. Compute totals and build rows
+	# 6. Compute totals and build rows
 	# ------------------------------------------------------------------
 	total_stories = sum(v["story_count"] for v in combo_data.values())
 	total_points = sum(v["story_points"] for v in combo_data.values())
