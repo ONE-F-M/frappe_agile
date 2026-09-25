@@ -1,0 +1,263 @@
+{
+ "actions": [],
+ "autoname": "naming_series:",
+ "creation": "2026-09-23 16:10:28.474035",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "from_date",
+  "to_date",
+  "column_break_head",
+  "submitted_by",
+  "naming_series",
+  "amended_from",
+  "ratings_section",
+  "delivery_rating",
+  "requirements_rating",
+  "column_break_ratings",
+  "communication_rating",
+  "next_sprint_rating",
+  "quick_answers_section",
+  "workload",
+  "answer_speed",
+  "meetings",
+  "column_break_quick",
+  "timezone_impact",
+  "blocked_by",
+  "blocker_details",
+  "feedback_section",
+  "went_well",
+  "did_not_go_well",
+  "column_break_ktvr",
+  "change_next_sprint",
+  "kudos"
+ ],
+ "fields": [
+  {
+   "fieldname": "from_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "From Date",
+   "reqd": 1
+  },
+  {
+   "default": "Today",
+   "fieldname": "to_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "To Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_head",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "__user",
+   "fieldname": "submitted_by",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Submitted By",
+   "options": "User",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "default": "RETRO-.YYYY.-.####",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Naming Series",
+   "options": "RETRO-.YYYY.-.####",
+   "read_only": 1
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "no_copy": 1,
+   "options": "Sprint Retro",
+   "print_hide": 1,
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "ratings_section",
+   "fieldtype": "Section Break",
+   "label": "Ratings"
+  },
+  {
+   "fieldname": "delivery_rating",
+   "fieldtype": "Rating",
+   "label": "How satisfied are you with what you delivered this sprint?",
+   "reqd": 1
+  },
+  {
+   "fieldname": "requirements_rating",
+   "fieldtype": "Rating",
+   "label": "How clear were the requirements when you started?",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_ratings",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "communication_rating",
+   "fieldtype": "Rating",
+   "label": "How well did the team communicate this sprint?",
+   "reqd": 1
+  },
+  {
+   "fieldname": "next_sprint_rating",
+   "fieldtype": "Rating",
+   "label": "How confident are you about the next sprint?",
+   "reqd": 1
+  },
+  {
+   "fieldname": "quick_answers_section",
+   "fieldtype": "Section Break",
+   "label": "Quick Answers"
+  },
+  {
+   "fieldname": "workload",
+   "fieldtype": "Select",
+   "label": "How was your workload?",
+   "options": "\nToo light\nAbout right\nToo heavy",
+   "reqd": 1
+  },
+  {
+   "fieldname": "answer_speed",
+   "fieldtype": "Select",
+   "label": "How fast did you get answers to your questions?",
+   "options": "\nSame day\nNext day\nLonger",
+   "reqd": 1
+  },
+  {
+   "fieldname": "meetings",
+   "fieldtype": "Select",
+   "label": "How were the meetings?",
+   "options": "\nToo few\nAbout right\nToo many",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_quick",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "timezone_impact",
+   "fieldtype": "Select",
+   "label": "Did timezone differences slow you down?",
+   "options": "\nNo\nSometimes\nOften",
+   "reqd": 1
+  },
+  {
+   "fieldname": "blocked_by",
+   "fieldtype": "Select",
+   "label": "What blocked you most?",
+   "options": "\nNothing\nRequirements\nCode Review\nAnother Developer\nAccess or Environment\nExternal Team\nOther",
+   "reqd": 1
+  },
+  {
+   "depends_on": "eval:doc.blocked_by && doc.blocked_by != \"Nothing\"",
+   "fieldname": "blocker_details",
+   "fieldtype": "Small Text",
+   "label": "What blocked you, and for how long?"
+  },
+  {
+   "fieldname": "feedback_section",
+   "fieldtype": "Section Break",
+   "label": "Feedback"
+  },
+  {
+   "fieldname": "went_well",
+   "fieldtype": "Small Text",
+   "label": "What went well?",
+   "reqd": 1
+  },
+  {
+   "fieldname": "did_not_go_well",
+   "fieldtype": "Small Text",
+   "label": "What did not go well?",
+   "reqd": 1
+  },
+  {
+   "fieldname": "change_next_sprint",
+   "fieldtype": "Small Text",
+   "label": "What should we change next sprint?",
+   "reqd": 1
+  },
+  {
+   "fieldname": "kudos",
+   "fieldtype": "Small Text",
+   "label": "Who would you like to thank, and for what?"
+  },
+  {
+   "fieldname": "column_break_ktvr",
+   "fieldtype": "Column Break"
+  }
+ ],
+ "is_submittable": 1,
+ "links": [],
+ "modified": "2026-09-25 15:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Frappe Agile",
+ "name": "Sprint Retro",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "amend": 1,
+   "cancel": 1,
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Developer",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Business Analyst",
+   "create": 1,
+   "write": 1,
+   "submit": 1,
+   "email": 1,
+   "share": 1
+  },
+  {
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Director"
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

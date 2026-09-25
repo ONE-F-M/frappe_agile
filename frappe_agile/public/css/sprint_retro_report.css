@@ -1,0 +1,10 @@
+/* Sprint Retro Report: wrap long question headers instead of widening columns */
+body[data-route="query-report/Sprint Retro Report"] .dt-header .dt-row,
+body[data-route="query-report/Sprint Retro Report"] .dt-header .dt-cell {
+	height: auto;
+}
+
+body[data-route="query-report/Sprint Retro Report"] .dt-cell--header .dt-cell__content {
+	white-space: normal;
+	line-height: 1.3;
+}
