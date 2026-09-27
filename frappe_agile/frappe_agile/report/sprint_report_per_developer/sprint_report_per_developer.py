@@ -7,7 +7,15 @@ from frappe.utils import flt
 from frappe_agile.frappe_agile.doctype.frappe_agile_settings.frappe_agile_settings import (
 	development_team_users,
 )
-from frappe_agile.frappe_agile.report.proration import as_list, get_employee_map, get_proration
+from frappe_agile.frappe_agile.report.proration import (
+	as_list,
+	get_employee_map,
+	get_proration,
+	get_target,
+)
+from frappe_agile.frappe_agile.report.sprint_report_per_scrum_master.sprint_report_per_scrum_master import (
+	count_new_work_items,
+)
 
 
 def execute(filters=None):
@@ -35,6 +43,7 @@ def get_columns():
 		{"fieldname": "spillover_points", "label": "Spillover Points", "fieldtype": "Float", "width": 140},
 		{"fieldname": "acceptance_rate", "label": "Acceptance Rate Percentage", "fieldtype": "Percent", "width": 150},
 		{"fieldname": "orchestrator_stories", "label": "Orchestrator Stories", "fieldtype": "Int", "width": 100},
+		{"fieldname": "new_work_items", "label": "Work Items Created", "fieldtype": "Int", "width": 120},
 	]
 
 
@@ -96,8 +105,7 @@ def get_data(filters):
 	# whoever happened to be assigned a work item — Administrator, an agent's
 	# login, a manager who picked one up — each given a velocity target.
 	team = development_team_users()
-	selected_developers = as_list(filters.get("developer")) or team
-	selected_developers = [user for user in selected_developers if user in team]
+	selected_developers = [user for user in as_list(filters.get("developer")) or team if user in team]
 	if not selected_developers:
 		return []
 
@@ -163,20 +171,20 @@ def get_data(filters):
 	for user, sprint_dict in dev_sprint_data.items():
 		sprint_names_for_dev = list(sprint_dict.keys())
 
-		# Count distinct sprint periods — sprints sharing the same (start_date, end_date) count as 1
-		unique_periods = set()
-		for s in sprint_names_for_dev:
-			if s in sprint_map:
-				unique_periods.add((sprint_map[s].start_date, sprint_map[s].end_date))
-		no_of_sprints = len(unique_periods)
+		# Every sprint listed in Sprint(s) is counted. Distinct date ranges were
+		# counted before, so three sprints sharing a week read as one.
+		periods = [
+			(sprint_map[s].start_date, sprint_map[s].end_date)
+			for s in sprint_names_for_dev
+			if s in sprint_map
+		]
+		no_of_sprints = len(periods)
 
-		# Target Points = the developer's expected velocity, prorated by the days
-		# they could actually work in each distinct sprint period and summed
-		# across them:
-		#   velocity × (working_days − public_holidays − leave_days) / working_days
+		# Target Points = the developer's velocity over the days they could
+		# actually work, counting each date once however many sprints cover it.
 		employee = employee_map.get(user)
-		factor, working_days, public_holidays, leave_days = get_proration(employee, unique_periods)
-		prorated_target = developer_velocity * factor
+		working_days, public_holidays, leave_days = get_proration(employee, periods)
+		prorated_target = get_target(developer_velocity, working_days)
 
 		target_points = flt(prorated_target, 1)
 
@@ -185,8 +193,8 @@ def get_data(filters):
 		total_accepted_raw = sum(v["accepted_points"] for v in sprint_dict.values())
 		total_rejected_raw = sum(v["rejected_points"] for v in sprint_dict.values())
 
-		# Acceptance Rate = (Accepted Points / Points Scoped) × 100
-		acceptance_rate = (total_accepted_raw / total_scoped_raw * 100) if total_scoped_raw else 0.0
+		# Acceptance Rate = (Accepted Points / Target Points) × 100
+		acceptance_rate = (total_accepted_raw / prorated_target * 100) if prorated_target else 0.0
 
 		# Spillover Points = Points Scoped - Accepted Points - Rejected Points
 		spillover_raw = total_scoped_raw - total_accepted_raw - total_rejected_raw
@@ -220,6 +228,11 @@ def get_data(filters):
 			"sprint_start_date": earliest_start,
 			"sprint_end_date": latest_end,
 			"no_of_sprints": no_of_sprints,
+			"new_work_items": count_new_work_items(
+				user,
+				filters.get("start_date") or earliest_start,
+				filters.get("end_date") or latest_end,
+			),
 			"days": "{0} / {1} / {2}".format(working_days, public_holidays, flt(leave_days, 2)),
 			"target_points": target_points,
 			"points_scoped": total_scoped,

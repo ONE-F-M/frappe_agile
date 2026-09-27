@@ -29,9 +29,15 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_days, flt, getdate
 
-from frappe_agile.frappe_agile.report.proration import get_period_breakdown, get_proration
-from frappe_agile.frappe_agile.report.sprint_report_per_business_analyst.sprint_report_per_business_analyst import (
-	execute as ba_report,
+from frappe_agile.frappe_agile.report.proration import (
+	SPRINT_WORKING_DAYS,
+	get_period_breakdown,
+	get_proration,
+	get_target,
+)
+from frappe_agile.frappe_agile.report.sprint_report_per_scrum_master.sprint_report_per_scrum_master import (
+	execute as scrum_master_report,
+	scrum_master_options,
 )
 from frappe_agile.frappe_agile.report.sprint_report_per_developer.sprint_report_per_developer import (
 	execute as developer_report,
@@ -42,11 +48,13 @@ HOLIDAY_LIST = f"{PREFIX} Holiday List"
 LEAVE_TYPE = f"{PREFIX} Leave"
 LEAVE_TYPE_INCL_HOLIDAY = f"{PREFIX} Leave Incl Holidays"
 PROJECT = f"{PREFIX} Project"
+OFF_ROADMAP_PROJECT = f"{PREFIX} Project Off Roadmap"
+SCRUM_PROJECT_TYPE = "SCRUM Project"
 SPRINT_PREFIX = "PRORATE"
 TITLE_PREFIX = f"{PREFIX} Item"
 
 DEV_USER = "_test_proration_dev@example.com"
-BA_USER = "_test_proration_ba@example.com"
+SM_USER = "_test_proration_sm@example.com"
 # A User with no Employee record at all — nothing to prorate against.
 UNLINKED_USER = "_test_proration_unlinked@example.com"
 
@@ -68,7 +76,7 @@ class TestSprintReportProration(FrappeTestCase):
 		cls._make_holiday_list()
 		cls._make_leave_types()
 		cls.dev_employee = cls._make_employee(DEV_USER)
-		cls.ba_employee = cls._make_employee(BA_USER)
+		cls.sm_employee = cls._make_employee(SM_USER)
 		cls._make_user(UNLINKED_USER)
 		cls.project = cls._make_project()
 		cls.previous_velocities = cls._set_velocities(DEV_VELOCITY, BA_VELOCITY)
@@ -98,7 +106,7 @@ class TestSprintReportProration(FrappeTestCase):
 		cls._delete_sprints()
 		cls._delete_project()
 
-		for user in (DEV_USER, BA_USER, UNLINKED_USER):
+		for user in (DEV_USER, SM_USER, UNLINKED_USER):
 			for name in frappe.get_all("Employee", {"user_id": user}, pluck="name"):
 				frappe.delete_doc("Employee", name, force=True, ignore_permissions=True)
 			if frappe.db.exists("User", user):
@@ -117,7 +125,7 @@ class TestSprintReportProration(FrappeTestCase):
 	@classmethod
 	def _delete_leave_applications(cls):
 		employees = frappe.get_all(
-			"Employee", {"user_id": ("in", [DEV_USER, BA_USER, UNLINKED_USER])}, pluck="name"
+			"Employee", {"user_id": ("in", [DEV_USER, SM_USER, UNLINKED_USER])}, pluck="name"
 		)
 		if employees:
 			frappe.db.delete("Leave Application", {"employee": ("in", employees)})
@@ -136,16 +144,17 @@ class TestSprintReportProration(FrappeTestCase):
 		leaves it behind. A second run then trips over the duplicate email."""
 		# One Contact comes from the User, another from the Employee, and neither
 		# carries a link back — the shared first name is what identifies them.
-		first_names = [user.split("@")[0] for user in (DEV_USER, BA_USER, UNLINKED_USER)]
+		first_names = [user.split("@")[0] for user in (DEV_USER, SM_USER, UNLINKED_USER)]
 		for contact in frappe.get_all("Contact", {"first_name": ("in", first_names)}, pluck="name"):
 			if frappe.db.exists("Contact", contact):
 				frappe.delete_doc("Contact", contact, force=True, ignore_permissions=True)
 
 	@classmethod
 	def _delete_project(cls):
-		project = frappe.db.get_value("Project", {"project_name": PROJECT}, "name")
-		if project:
-			frappe.delete_doc("Project", project, force=True, ignore_permissions=True)
+		for project_name in (PROJECT, OFF_ROADMAP_PROJECT):
+			project = frappe.db.get_value("Project", {"project_name": project_name}, "name")
+			if project:
+				frappe.delete_doc("Project", project, force=True, ignore_permissions=True)
 
 	@classmethod
 	def _make_holiday_list(cls):
@@ -235,16 +244,26 @@ class TestSprintReportProration(FrappeTestCase):
 		return employee.name
 
 	@classmethod
-	def _make_project(cls):
-		"""Sprint.sprint_prefix is fetched from the Project, so the prefix lives here."""
-		existing = frappe.db.get_value("Project", {"project_name": PROJECT}, "name")
+	def _make_project(cls, project_name=PROJECT, on_roadmap=True):
+		"""A roadmap SCRUM project managed by the Scrum Master under test.
+
+		Sprint.sprint_prefix is fetched from the Project, and the Scrum Master
+		report takes its rows from the Project Manager — both come from here.
+		"""
+		values = {
+			"custom_sprint_prefix": SPRINT_PREFIX,
+			"project_type": SCRUM_PROJECT_TYPE,
+			"is_active": "Yes",
+			"custom_show_in_roadmap": "Yes" if on_roadmap else "No",
+			"project_manager": cls.sm_employee,
+		}
+
+		existing = frappe.db.get_value("Project", {"project_name": project_name}, "name")
 		if existing:
-			frappe.db.set_value("Project", existing, "custom_sprint_prefix", SPRINT_PREFIX)
+			frappe.db.set_value("Project", existing, values, update_modified=False)
 			return existing
 
-		project = frappe.get_doc(
-			{"doctype": "Project", "project_name": PROJECT, "custom_sprint_prefix": SPRINT_PREFIX}
-		)
+		project = frappe.get_doc({"doctype": "Project", "project_name": project_name, **values})
 		project.insert(ignore_permissions=True)
 		return project.name
 
@@ -292,17 +311,16 @@ class TestSprintReportProration(FrappeTestCase):
 		leave.submit()
 		return leave
 
-	def _make_sprint(self, period, business_analyst=None):
+	def _make_sprint(self, period, project=None):
 		sprint = frappe.get_doc(
 			{
 				"doctype": "Sprint",
 				"sprint_prefix": SPRINT_PREFIX,
-				"project": self.project,
+				"project": project or self.project,
 				"status": "Draft",
 				"start_date": period[0],
 				"end_date": period[1],
 				"sprint_goal": "Proration test sprint",
-				"business_analyst": business_analyst,
 			}
 		)
 		sprint.insert(ignore_permissions=True)
@@ -352,13 +370,23 @@ class TestSprintReportProration(FrappeTestCase):
 
 	def test_periods_add_up(self):
 		"""Two sprints, one with a holiday: one whole target plus four fifths."""
-		factor, working_days, holiday_days, leave_days = get_proration(
+		working_days, holiday_days, leave_days = get_proration(
 			self.dev_employee, [PERIOD, CLEAN_PERIOD]
 		)
-		self.assertEqual(working_days, 2 * WORKING_DAYS)
+		# Working days are already net of the holiday.
+		self.assertEqual(working_days, 2 * WORKING_DAYS - 1)
 		self.assertEqual(holiday_days, 1)
 		self.assertEqual(leave_days, 0.0)
-		self.assertEqual(flt(DEV_VELOCITY * factor, 1), 144.0)
+		self.assertEqual(flt(get_target(DEV_VELOCITY, working_days), 1), 144.0)
+
+	def test_overlapping_sprints_do_not_charge_a_day_twice(self):
+		"""The defect: a BA on sprints that share a week worked it once."""
+		overlapping = [PERIOD, (PERIOD[0], CLEAN_PERIOD[1])]
+		working_days, _holidays, _leave = get_proration(self.dev_employee, overlapping)
+		merged, _h, _l = get_proration(self.dev_employee, [(PERIOD[0], CLEAN_PERIOD[1])])
+
+		self.assertEqual(working_days, merged)
+		self.assertLess(working_days, 2 * WORKING_DAYS)
 
 	# ------------------------------------------------------------------
 	# Leave, and not charging a day twice
@@ -413,8 +441,11 @@ class TestSprintReportProration(FrappeTestCase):
 		period = get_period_breakdown(None, *PERIOD)
 		self.assertEqual(period["factor"], 1.0)
 		self.assertEqual(period["holiday_days"], 0)
-		# Every calendar day counted as a working day, since there is no calendar.
-		self.assertEqual(period["working_days"], 7)
+		# A whole sprint's working days, so the target comes out at the velocity
+		# itself. Counting calendar days here would have inflated it by the
+		# weekend now that the target is derived from days rather than a ratio.
+		self.assertEqual(period["working_days"], SPRINT_WORKING_DAYS)
+		self.assertEqual(get_target(DEV_VELOCITY, period["working_days"]), DEV_VELOCITY)
 
 	# ------------------------------------------------------------------
 	# End to end, through the reports themselves
@@ -433,8 +464,8 @@ class TestSprintReportProration(FrappeTestCase):
 
 		row = self._row_for(rows, "developer", frappe.db.get_value("User", DEV_USER, "full_name"))
 		self.assertIsNotNone(row, f"no row for {DEV_USER} in {rows}")
-		# Working / Holiday / Leave, as the report renders it.
-		self.assertEqual(row["days"], f"{WORKING_DAYS} / 1 / 0.0")
+		# Working / Holiday / Leave, as Production renders it.
+		self.assertEqual(row["days"], "4.0 / 1 / 0.0")
 		self.assertEqual(row["target_points"], 64.0)
 		self.assertEqual(row["points_scoped"], 12.0)
 		# 12 scoped against a 64-point target, not against 80.
@@ -443,13 +474,13 @@ class TestSprintReportProration(FrappeTestCase):
 	def test_developer_report_reports_only_on_the_development_team(self):
 		"""An assignee who is not on the team is not a developer."""
 		sprint = self._make_sprint(PERIOD)
-		self._make_work_item(sprint.name, "off team", 8, assignee_user=BA_USER)
+		self._make_work_item(sprint.name, "off team", 8, assignee_user=SM_USER)
 		self._make_work_item(sprint.name, "on team", 4, assignee_user=DEV_USER)
 
 		_columns, rows = developer_report({"start_date": PERIOD[0], "end_date": PERIOD[1]})
 		names = [row["developer"] for row in rows]
 		self.assertIn(frappe.db.get_value("User", DEV_USER, "full_name"), names)
-		self.assertNotIn(frappe.db.get_value("User", BA_USER, "full_name"), names)
+		self.assertNotIn(frappe.db.get_value("User", SM_USER, "full_name"), names)
 
 	def test_developer_report_leaves_an_unlinked_user_alone(self):
 		sprint = self._make_sprint(PERIOD)
@@ -462,45 +493,161 @@ class TestSprintReportProration(FrappeTestCase):
 			rows, "developer", frappe.db.get_value("User", UNLINKED_USER, "full_name")
 		)
 		self.assertIsNotNone(row, f"no row for {UNLINKED_USER} in {rows}")
-		# No staff record to look a calendar up against: nothing is lost, so the
-		# whole window counts and the target stands.
-		self.assertEqual(row["days"], "7 / 0 / 0.0")
 		self.assertEqual(row["target_points"], DEV_VELOCITY)
 
-	def test_business_analyst_report_prorates_the_target(self):
-		sprint = self._make_sprint(PERIOD, business_analyst=BA_USER)
-		self._make_work_item(sprint.name, "ba", 10)
+	def test_scrum_master_report_prorates_the_target(self):
+		sprint = self._make_sprint(PERIOD)
+		self._make_work_item(sprint.name, "sm", 10)
 
-		columns, rows = ba_report(
-			{"start_date": PERIOD[0], "end_date": PERIOD[1], "business_analyst": BA_USER}
+		columns, rows = scrum_master_report(
+			{"start_date": PERIOD[0], "end_date": PERIOD[1], "scrum_master": self.sm_employee}
 		)
 		fieldnames = [column["fieldname"] for column in columns]
-		for fieldname in ("working_days", "public_holidays", "leave_days", "expected_velocity"):
+		for fieldname in ("days", "expected_velocity", "new_work_items"):
 			self.assertIn(fieldname, fieldnames)
 
-		row = self._row_for(
-			rows, "business_analyst", frappe.db.get_value("User", BA_USER, "full_name")
-		)
-		self.assertIsNotNone(row, f"no row for {BA_USER} in {rows}")
-		self.assertEqual(row["working_days"], WORKING_DAYS)
-		self.assertEqual(row["public_holidays"], 1)
+		row = self._scrum_master_row(rows)
+		# Net of the public holiday in the window.
+		# Working / Holiday / Leave, as Production renders it.
+		self.assertEqual(row["days"], "4.0 / 1 / 0.0")
 		self.assertEqual(row["expected_velocity"], 80.0)  # 100 × 4/5
 		self.assertEqual(row["points_scoped"], 10.0)
 		self.assertEqual(row["percentage_target"], 12.5)
 
-	def test_business_analyst_report_counts_leave_too(self):
-		"""The BA report had no time-off accounting at all before this."""
-		self._make_leave(LEAVE_TYPE, "2026-08-31", "2026-08-31", employee=self.ba_employee)
+	def test_scrum_master_report_counts_leave_too(self):
+		"""The report had no time-off accounting at all before this."""
+		self._make_leave(LEAVE_TYPE, "2026-08-31", "2026-08-31", employee=self.sm_employee)
 
-		sprint = self._make_sprint(PERIOD, business_analyst=BA_USER)
-		self._make_work_item(sprint.name, "ba leave", 10)
+		sprint = self._make_sprint(PERIOD)
+		self._make_work_item(sprint.name, "sm leave", 10)
 
-		_columns, rows = ba_report(
-			{"start_date": PERIOD[0], "end_date": PERIOD[1], "business_analyst": BA_USER}
+		_columns, rows = scrum_master_report(
+			{"start_date": PERIOD[0], "end_date": PERIOD[1], "scrum_master": self.sm_employee}
 		)
-		row = self._row_for(
-			rows, "business_analyst", frappe.db.get_value("User", BA_USER, "full_name")
-		)
-		self.assertIsNotNone(row, f"no row for {BA_USER} in {rows}")
-		self.assertEqual(row["leave_days"], 1.0)
+		row = self._scrum_master_row(rows)
 		self.assertEqual(row["expected_velocity"], 60.0)  # 100 × 3/5
+
+	# ------------------------------------------------------------------
+	# Which sprints and which people the Scrum Master report reports on
+	# ------------------------------------------------------------------
+
+	def test_a_sprint_overlapping_by_one_day_counts(self):
+		"""One shared day is enough; the next sprint along shares none."""
+		self._make_sprint(PERIOD)
+		# 1 Sep is the last day of the window and the first of this sprint.
+		self._make_sprint(("2026-09-01", "2026-09-07"))
+		# Starts the day after the window ends.
+		self._make_sprint(CLEAN_PERIOD)
+
+		_columns, rows = scrum_master_report({"start_date": PERIOD[0], "end_date": PERIOD[1]})
+		row = self._scrum_master_row(rows)
+		self.assertEqual(row["no_of_sprints"], 2)
+		self.assertNotIn(CLEAN_PERIOD[0], row["sprints"])
+
+	def test_a_project_off_the_roadmap_has_no_row(self):
+		off_roadmap = self._make_project(OFF_ROADMAP_PROJECT, on_roadmap=False)
+		self._make_sprint(PERIOD, project=off_roadmap)
+
+		_columns, rows = scrum_master_report({"start_date": PERIOD[0], "end_date": PERIOD[1]})
+		self.assertIsNone(self._scrum_master_row(rows), f"off-roadmap project reported in {rows}")
+
+	def test_the_project_filter_narrows_to_the_named_projects(self):
+		self._make_sprint(PERIOD)
+
+		_columns, rows = scrum_master_report(
+			{
+				"start_date": PERIOD[0],
+				"end_date": PERIOD[1],
+				"project": [self._make_project(OFF_ROADMAP_PROJECT, on_roadmap=True)],
+			}
+		)
+		self.assertIsNone(self._scrum_master_row(rows), f"unnamed project reported in {rows}")
+
+	def test_scrum_master_options_offer_the_project_managers(self):
+		values = [option["value"] for option in scrum_master_options()]
+		self.assertIn(self.sm_employee, values)
+		self.assertNotIn(self.dev_employee, values)
+
+	# ------------------------------------------------------------------
+	# New Work Items — counted over the filter's dates, whatever the sprint
+	# ------------------------------------------------------------------
+
+	def test_new_work_items_counts_what_the_scrum_master_created_in_range(self):
+		sprint = self._make_sprint(PERIOD)
+		inside = self._make_work_item(sprint.name, "inside", 3)
+		outside = self._make_work_item(sprint.name, "outside", 3)
+		self._set_creator(inside.name, SM_USER, f"{PERIOD[1]} 09:00:00")
+		# Created by the same person, one day after the row's range ends.
+		self._set_creator(outside.name, SM_USER, f"{CLEAN_PERIOD[0]} 09:00:00")
+
+		_columns, rows = scrum_master_report({"start_date": PERIOD[0], "end_date": PERIOD[1]})
+		row = self._scrum_master_row(rows)
+		self.assertEqual(row["new_work_items"], 1)
+
+	def test_new_work_items_counts_a_sprint_the_row_does_not_list(self):
+		"""Created in the range, filed under a sprint outside the reported window.
+
+		The column answers how much this person raised in the period, not where
+		it was filed, so this one counts alongside the item in the listed sprint."""
+		sprint = self._make_sprint(PERIOD)
+		self._make_work_item(sprint.name, "counted", 3)
+		elsewhere = self._make_sprint(CLEAN_PERIOD)
+		theirs = self._make_work_item(elsewhere.name, "other sprint", 3)
+		self._set_creator(theirs.name, SM_USER, f"{PERIOD[1]} 09:00:00")
+		self._set_creator(
+			frappe.db.get_value("Work Item", {"title": f"{TITLE_PREFIX} counted"}),
+			SM_USER,
+			f"{PERIOD[1]} 09:00:00",
+		)
+
+		_columns, rows = scrum_master_report({"start_date": PERIOD[0], "end_date": PERIOD[1]})
+		row = self._scrum_master_row(rows)
+		self.assertEqual(row["new_work_items"], 2)
+
+	def test_new_work_items_ignores_another_persons_items(self):
+		sprint = self._make_sprint(PERIOD)
+		theirs = self._make_work_item(sprint.name, "theirs", 3)
+		self._set_creator(theirs.name, DEV_USER, f"{PERIOD[1]} 09:00:00")
+
+		_columns, rows = scrum_master_report({"start_date": PERIOD[0], "end_date": PERIOD[1]})
+		row = self._scrum_master_row(rows)
+		self.assertEqual(row["new_work_items"], 0)
+
+	def test_developer_report_counts_new_work_items_in_range(self):
+		sprint = self._make_sprint(PERIOD)
+		inside = self._make_work_item(sprint.name, "dev inside", 3, assignee_user=DEV_USER)
+		outside = self._make_work_item(sprint.name, "dev outside", 3, assignee_user=DEV_USER)
+		self._set_creator(inside.name, DEV_USER, f"{PERIOD[1]} 09:00:00")
+		self._set_creator(outside.name, DEV_USER, f"{CLEAN_PERIOD[0]} 09:00:00")
+
+		_columns, rows = developer_report(
+			{"start_date": PERIOD[0], "end_date": PERIOD[1], "developer": DEV_USER}
+		)
+		row = self._row_for(rows, "developer", frappe.db.get_value("User", DEV_USER, "full_name"))
+		self.assertEqual(row["new_work_items"], 1)
+
+	def test_developer_report_counts_done_orchestrator_stories(self):
+		sprint = self._make_sprint(PERIOD)
+		done = self._make_work_item(sprint.name, "orchestrated done", 3, assignee_user=DEV_USER)
+		self._make_work_item(sprint.name, "orchestrated open", 3, assignee_user=DEV_USER)
+		frappe.db.set_value(
+			"Work Item", {"title": ("like", f"{TITLE_PREFIX} orchestrated%")}, "orchestrator", 1
+		)
+		frappe.db.set_value("Sprint Work Item", {"work_item": done.name}, "status", "Done")
+
+		_columns, rows = developer_report(
+			{"start_date": PERIOD[0], "end_date": PERIOD[1], "developer": DEV_USER}
+		)
+		row = self._row_for(rows, "developer", frappe.db.get_value("User", DEV_USER, "full_name"))
+		self.assertEqual(row["orchestrator_stories"], 1)
+
+	def _scrum_master_row(self, rows):
+		full_name = frappe.db.get_value("Employee", self.sm_employee, "employee_name")
+		return self._row_for(rows, "scrum_master", full_name)
+
+	@staticmethod
+	def _set_creator(work_item, user, created_at):
+		"""Who created a work item and when — the report reads owner and creation."""
+		frappe.db.set_value(
+			"Work Item", work_item, {"owner": user, "creation": created_at}, update_modified=False
+		)
