@@ -35,13 +35,15 @@ frappe.ui.form.on("Work Item", {
 		// status or project. _validate_sprint_status() in work_item.py is the single
 		// source of truth for which Sprints a Work Item may actually be saved against.
 
-		apply_project_user_filters(frm);
+		apply_assignee_filter(frm);
+		apply_reviewer_filter(frm);
 	},
 
 	project: function (frm) {
-		// The offered users depend on the project, and setup ran before it was
-		// picked — so the filter has to be built again whenever it changes.
-		apply_project_user_filters(frm);
+		// The offered assignees depend on the project, and setup ran before it was
+		// picked — so that filter has to be built again whenever it changes. The
+		// reviewers do not depend on the project.
+		apply_assignee_filter(frm);
 	},
 
 	onload: function (frm) {
@@ -114,23 +116,15 @@ frappe.ui.form.on("Work Item", {
 
 });
 
-// Offer Assignee User and PR Reviewer User only to the users on the item's
-// project. Without a project yet, to anyone who is on some project.
-function apply_project_user_filters(frm) {
+// Offer Assignee User only to the users on the item's project. Without a
+// project yet, to anyone who is on some project.
+function apply_assignee_filter(frm) {
 	frappe.call({
 		method: "frappe_agile.frappe_agile.doctype.work_item.work_item.get_assignable_users",
 		args: { project: frm.doc.project || "" },
 		callback: function (r) {
 			const users = r.message || [];
-			const query = function () {
-				return {
-					filters: {
-						name: ["in", users],
-					},
-				};
-			};
-			frm.set_query("assignee_user", query);
-			frm.set_query("pr_reviewer_user", query);
+			frm.set_query("assignee_user", () => ({ filters: { name: ["in", users] } }));
 
 			if (users.length) {
 				return;
@@ -138,11 +132,39 @@ function apply_project_user_filters(frm) {
 			// An empty list is a configuration gap, not a state to puzzle over —
 			// name the place to fix.
 			const message = frm.doc.project
-				? __("Project {0} has no users. Add them in its Users table to enable Assignee and PR Reviewer selection.", [
+				? __("Project {0} has no users. Add them in its Users table to enable Assignee selection.", [
 						`<a href="/app/project/${encodeURIComponent(frm.doc.project)}">${frappe.utils.escape_html(frm.doc.project)}</a>`,
 				  ])
-				: __("No project has any users yet. Add users to a project to enable Assignee and PR Reviewer selection.");
+				: __("No project has any users yet. Add users to a project to enable Assignee selection.");
 			frappe.show_alert({ message: message, indicator: "orange" }, 10);
+		},
+	});
+}
+
+// Offer PR Reviewer User only to the Development Team. Reviewing is the team's
+// job wherever the work came from, and the GitHub webhook resolves a reviewer
+// through that same table — so the picker offers what the webhook can write.
+function apply_reviewer_filter(frm) {
+	frappe.call({
+		method: "frappe_agile.frappe_agile.doctype.frappe_agile_settings.frappe_agile_settings.get_development_team_users",
+		callback: function (r) {
+			const users = r.message || [];
+			frm.set_query("pr_reviewer_user", () => ({ filters: { name: ["in", users] } }));
+
+			if (!users.length) {
+				frappe.show_alert(
+					{
+						message: __(
+							"The Development Team is empty. Add its members in {0} to enable PR Reviewer selection.",
+							[
+								`<a href="/app/frappe-agile-settings">${__("Frappe Agile Settings")}</a>`,
+							]
+						),
+						indicator: "orange",
+					},
+					10
+				);
+			}
 		},
 	});
 }

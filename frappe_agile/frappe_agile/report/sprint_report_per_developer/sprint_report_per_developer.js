@@ -46,32 +46,37 @@ frappe.query_reports["Sprint Report per Developer"] = {
 			"label": __("Developer"),
 			"fieldtype": "MultiSelectList",
 			"get_data": function (txt) {
-				return get_options_selected_first("User", "developer", txt);
+				// The Development Team, by name — nobody else can produce a row.
+				// The report defaults to all of them, so the filter starts empty.
+				return get_team_options_selected_first("developer", txt);
 			}
 		}
-	],
-	"onload": function (report) {
-		frappe.call({
-			method: "frappe_agile.frappe_agile.doctype.frappe_agile_settings.frappe_agile_settings.get_development_team_users",
-			callback: function (r) {
-				if (r.message && r.message.length) {
-					report.set_filter_value("developer", r.message);
-				}
-			}
-		});
-	}
+	]
 };
 
 
 // Put selected values first, then the search results.
-function get_options_selected_first(doctype, fieldname, txt) {
+function selected_first(fieldname, options) {
 	const selected = frappe.query_report.get_filter_value(fieldname) || [];
-	return frappe.db.get_link_options(doctype, txt).then((options) => {
-		const by_value = Object.fromEntries(options.map((o) => [o.value, o]));
-		const selected_options = selected.map(
-			(v) => by_value[v] || { value: v, label: v, description: "" }
-		);
-		const rest = options.filter((o) => !selected.includes(o.value));
-		return selected_options.concat(rest);
-	});
+	const by_value = Object.fromEntries(options.map((o) => [o.value, o]));
+	const selected_options = selected.map(
+		(v) => by_value[v] || { value: v, label: v, description: "" }
+	);
+	const rest = options.filter((o) => !selected.includes(o.value));
+	return selected_options.concat(rest);
+}
+
+function get_options_selected_first(doctype, fieldname, txt) {
+	return frappe.db
+		.get_link_options(doctype, txt)
+		.then((options) => selected_first(fieldname, options));
+}
+
+function get_team_options_selected_first(fieldname, txt) {
+	return frappe
+		.xcall(
+			"frappe_agile.frappe_agile.report.sprint_report_per_developer.sprint_report_per_developer.developer_options",
+			{ txt: txt }
+		)
+		.then((options) => selected_first(fieldname, options));
 }
