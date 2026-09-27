@@ -35,8 +35,10 @@ frappe.query_reports["AI Usage Report"] = {
 		{
 			"fieldname": "sprint",
 			"label": __("Sprint"),
-			"fieldtype": "Link",
-			"options": "Sprint"
+			"fieldtype": "MultiSelectList",
+			"get_data": function (txt) {
+				return frappe.db.get_link_options("Sprint", txt);
+			}
 		}
 	],
 	"formatter": function (value, row, column, data, default_formatter) {

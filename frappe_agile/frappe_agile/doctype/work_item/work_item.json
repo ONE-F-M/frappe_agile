@@ -28,6 +28,8 @@
   "research_required",
   "column_break_gxds",
   "epic",
+  "blocked_by",
+  "blocker_status",
   "small_text_yecv",
   "implementation_details_section",
   "orchestrator",
@@ -206,6 +208,20 @@
    "fieldtype": "Link",
    "label": "Epic",
    "options": "Work Item"
+  },
+  {
+   "fieldname": "blocked_by",
+   "fieldtype": "Link",
+   "label": "Blocked By",
+   "options": "Work Item"
+  },
+  {
+   "depends_on": "eval:doc.blocked_by",
+   "fetch_from": "blocked_by.status",
+   "fieldname": "blocker_status",
+   "fieldtype": "Data",
+   "label": "Blocker Status",
+   "read_only": 1
   },
   {
    "fieldname": "implementation_details_section",

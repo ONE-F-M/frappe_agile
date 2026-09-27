@@ -3,11 +3,14 @@
 
 """Who a Work Item may be assigned to.
 
-The project's Users table is the one list. The Development Team in Frappe Agile
-Settings used to be the standing list that a project could only narrow, so a
-project member who was not also on the team could never be assigned; it plays
-no part now. Without a project to go by the answer is everyone on any project,
-because whoever is assigned has to be on the project the item belongs to.
+The project's Users table is the one list. The Development Team in
+Frappe Agile Settings used to be the standing list that a project could only
+narrow, so a project member who was not also on the team could never be
+assigned; it plays no part in assigning now. Without a project to go by the
+answer is everyone on any project, because whoever is assigned has to be on the
+project the item belongs to.
+
+Reviewing is the other way round and lives in test_pr_reviewer_selection.
 """
 
 from __future__ import annotations
@@ -96,3 +99,4 @@ class TestAssigneeSelection(FrappeTestCase):
 
 	def test_an_unknown_project_offers_nobody(self):
 		self.assertEqual(get_assignable_users(project="_Test Assignee Nonexistent"), [])
+

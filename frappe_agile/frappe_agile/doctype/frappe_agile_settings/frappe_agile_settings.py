@@ -57,7 +57,11 @@ def development_team_users():
 
 @frappe.whitelist()
 def get_development_team_users():
-	"""The Development Team, for the Assignee and PR Reviewer pickers."""
+	"""The Development Team, for the PR Reviewer picker.
+
+	Reviewing is the team's job wherever the work came from, and the GitHub
+	webhook already resolves a reviewer through this same table — so the picker
+	offers what the webhook can write.
+	"""
 	frappe.has_permission("Work Item", throw=True)
 	return development_team_users()
-
