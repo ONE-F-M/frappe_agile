@@ -7,6 +7,8 @@ frappe.ui.form.on("Sprint", {
 			frm.set_value("start_date", start);
 			frm.set_value("end_date", frappe.datetime.add_days(start, 6));
 		}
+
+		frm.set_df_property("sprint_goal", "placeholder", __("What should this sprint achieve?"));
 	},
 
 	refresh(frm) {
