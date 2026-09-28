@@ -43,7 +43,9 @@ app_include_css = "/assets/frappe_agile/css/backlog_page.css"
 # page_js = {"page" : "public/js/file.js"}
 
 # include js in doctype views
-# doctype_js = {"doctype" : "public/js/doctype.js"}
+doctype_js = {
+	"Sprint": "frappe_agile/frappe_agile/doctype/sprint/sprint.js",
+}
 doctype_list_js = {
 	"Work Item": "public/js/work_item_list.js",
 	"Sprint": "public/js/sprint_list.js",
@@ -252,4 +254,3 @@ doc_events = {
 # default_log_clearing_doctypes = {
 # 	"Logging DocType Name": 30  # days to retain logs
 # }
-
