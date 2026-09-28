@@ -176,13 +176,8 @@ def get_data(filters):
 			"sprint_start_date": earliest_start,
 			"sprint_end_date": latest_end,
 			"no_of_sprints": len(sprint_docs),
-			# Counted over the reported window, not the row's sprints: it answers
-			# "how much did this person raise in the period", whatever it was
-			# filed under. Falls back to the row's own range on a call with no dates.
 			"new_work_items": count_new_work_items(
-				employee.user_id if employee else None,
-				filters.get("start_date") or earliest_start,
-				filters.get("end_date") or latest_end,
+				employee.user_id if employee else None, earliest_start, latest_end
 			),
 			"days": "{0} / {1} / {2}".format(working_days, public_holidays, flt(leave_days, 2)),
 			"expected_velocity": flt(prorated_target, 1),
@@ -253,12 +248,7 @@ def get_sprint_points(sprint_names):
 
 
 def count_new_work_items(user, start_date, end_date):
-	"""Work items this person created between the two dates, in any sprint or none.
-
-	Deliberately not tied to the row's sprints: an Epic in no sprint, or an item
-	filed under a project the filter left out, is still work this person raised in
-	the period, and that is what the column reports.
-	"""
+	"""Work items this person created between the two dates, in any sprint or none."""
 	if not (user and start_date and end_date):
 		return 0
 
