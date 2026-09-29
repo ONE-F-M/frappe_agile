@@ -6,6 +6,9 @@
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
+  "project_codename",
+  "owner_user",
+  "workflow_state",
   "basic_information_section",
   "naming_series",
   "work_item_type",
@@ -28,15 +31,10 @@
   "research_required",
   "column_break_gxds",
   "epic",
-  "blocked_by",
-  "blocker_status",
   "small_text_yecv",
   "implementation_details_section",
   "orchestrator",
   "assignee_user",
-  "column_break_target_app_branch",
-  "target_app",
-  "git_branch",
   "column_break_xgtd",
   "pr_reviewer_user",
   "column_break_cjav",
@@ -94,17 +92,20 @@
   {
    "fieldname": "status",
    "fieldtype": "Select",
-   "hidden": 1,
    "in_list_view": 1,
    "label": "Status",
-   "options": "Draft\nOpen\nIn Progress\nPR Created\nPending Review\nChanges Requested\nIn Staging\nRejected\nDone"
+   "options": "Draft\nOpen\nIn Progress\nPR Created\nPending Review\nChanges Requested\nIn Staging\nRejected\nDone",
+   "default": "Draft",
+   "in_standard_filter": 1
   },
   {
    "description": "Hand this item to the orchestrator agent instead of a human assignee. The Software Development process reads this flag and takes the orchestrator path when it is set.",
    "fieldname": "orchestrator",
    "fieldtype": "Check",
    "in_standard_filter": 1,
-   "label": "Orchestrator"
+   "label": "Orchestrator",
+   "depends_on": "eval:doc.work_item_type !== 'Epic' && doc.work_item_type !== 'Task'",
+   "default": "0"
   },
   {
    "fieldname": "column_break_target_app_branch",
@@ -168,7 +169,7 @@
   },
   {
    "fieldname": "description",
-   "fieldtype": "Text Editor",
+   "fieldtype": "Text",
    "label": "Description"
   },
   {
@@ -261,7 +262,8 @@
   {
    "fieldname": "labels_section",
    "fieldtype": "Section Break",
-   "label": "AI Feedback"
+   "label": "AI Feedback",
+   "depends_on": "eval:doc.work_item_type !== 'Epic' && doc.work_item_type !== 'Task'"
   },
   {
    "fieldname": "labels",
@@ -298,13 +300,15 @@
    "default": "0",
    "fieldname": "pr_required",
    "fieldtype": "Check",
-   "label": "PR Required"
+   "label": "PR Required",
+   "depends_on": "eval:doc.work_item_type !== 'Epic' && doc.work_item_type !== 'Task'"
   },
   {
    "default": "0",
    "fieldname": "research_required",
    "fieldtype": "Check",
-   "label": "Research Required"
+   "label": "Research Required",
+   "depends_on": "eval:doc.work_item_type !== 'Epic' && doc.work_item_type !== 'Task'"
   },
   {
    "fieldname": "column_break_xgtd",
@@ -317,6 +321,42 @@
   {
    "fieldname": "column_break_nqyd",
    "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "owner_name",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "is_system_generated": 1,
+   "label": "Owner",
+   "options": "User"
+  },
+  {
+   "bold": 1,
+   "fieldname": "project_codename",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "is_system_generated": 1,
+   "label": "Project Codename"
+  },
+  {
+   "fieldname": "owner_user",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "in_list_view": 1,
+   "is_system_generated": 1,
+   "label": "Owner",
+   "options": "User"
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "workflow_state",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Workflow State",
+   "no_copy": 1,
+   "options": "Workflow State"
   }
  ],
  "index_web_pages_for_search": 1,
