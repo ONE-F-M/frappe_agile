@@ -181,3 +181,39 @@ class TestWorkItem(FrappeTestCase):
 		item.sprint = None
 		with self.assertRaises(frappe.ValidationError):
 			item.save(ignore_permissions=True)
+
+	# ------------------------------------------------------------------
+	# pr_required defaults for API / agent-created items
+	# ------------------------------------------------------------------
+
+	def test_new_user_story_defaults_pr_required_on(self):
+		item = self._work_item("pr required user story", work_item_type="User Story")
+		self.assertEqual(item.pr_required, 1)
+
+	def test_new_bug_defaults_pr_required_on(self):
+		item = self._work_item("pr required bug", work_item_type="Bug")
+		self.assertEqual(item.pr_required, 1)
+
+	def test_new_task_defaults_pr_required_off(self):
+		item = self._work_item("pr required task", work_item_type="Task")
+		self.assertEqual(item.pr_required, 0)
+
+	def test_new_epic_defaults_pr_required_off(self):
+		epic = frappe.get_doc(
+			{
+				"doctype": "Work Item",
+				"work_item_type": "Epic",
+				"title": f"{TITLE_PREFIX} pr required epic",
+			}
+		)
+		epic.insert(ignore_permissions=True)
+		self.assertEqual(epic.pr_required, 0)
+
+	def test_existing_user_story_updated_with_pr_required_off_stays_off(self):
+		"""before_insert must only fire on creation, never overriding a later choice."""
+		item = self._work_item("pr required update", work_item_type="User Story")
+		self.assertEqual(item.pr_required, 1)
+		item.pr_required = 0
+		item.save(ignore_permissions=True)
+		item.reload()
+		self.assertEqual(item.pr_required, 0)
