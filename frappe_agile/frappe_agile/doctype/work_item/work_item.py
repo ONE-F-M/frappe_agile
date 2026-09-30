@@ -18,6 +18,19 @@ class WorkItem(Document):
 		self._validate_blocked_by()
 
 
+	def before_insert(self):
+		"""
+		Default PR Required to on for new User Stories and Bugs.
+
+		The JSON default cannot depend on another field, and the client
+		script only runs for forms opened in the UI \u2014 API and agent-created
+		items never touch it. This forces the correct default at creation
+		time for User Story / Bug; the value can still be changed afterwards,
+		and Epic / Task are left untouched.
+		"""
+		if self.work_item_type in ("User Story", "Bug"):
+			self.pr_required = 1
+
 	def before_save(self):
 		"""
 		Ensure workflow_state is kept in sync when `status` is forcefully
