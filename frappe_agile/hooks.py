@@ -46,7 +46,9 @@ app_include_css = [
 # page_js = {"page" : "public/js/file.js"}
 
 # include js in doctype views
-# doctype_js = {"doctype" : "public/js/doctype.js"}
+doctype_js = {
+	"ToDo": "public/js/doctype_js/todo.js",
+}
 doctype_list_js = {
 	"Work Item": "public/js/work_item_list.js",
 	"Sprint": "public/js/sprint_list.js",
