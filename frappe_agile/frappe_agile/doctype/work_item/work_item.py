@@ -11,12 +11,27 @@ from frappe.model.naming import make_autoname
 class WorkItem(Document):
 
 	def validate(self):
+		self._set_pr_required_from_type()
 		self._validate_epic_story_points()
 		self._validate_sprint_required()
 		self._validate_sprint_status()
 		self._validate_orchestrator_target()
 		self._validate_blocked_by()
 
+
+	def _set_pr_required_from_type(self):
+		"""PR Required follows the type: on for User Story and Bug, off for Epic and Task.
+
+		Mirrors the form script for items created or edited through the API, which never
+		run it. Applied on insert and when the type changes, so a manual choice on an item
+		whose type stays the same is kept.
+		"""
+		if not (self.is_new() or self.has_value_changed("work_item_type")):
+			return
+		if self.work_item_type in ("User Story", "Bug"):
+			self.pr_required = 1
+		elif self.work_item_type in ("Epic", "Task"):
+			self.pr_required = 0
 
 	def before_save(self):
 		"""
