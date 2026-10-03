@@ -210,10 +210,26 @@ class TestWorkItem(FrappeTestCase):
 		self.assertEqual(epic.pr_required, 0)
 
 	def test_existing_user_story_updated_with_pr_required_off_stays_off(self):
-		"""before_insert must only fire on creation, never overriding a later choice."""
+		"""With the type unchanged, a manual choice on a saved item is kept."""
 		item = self._work_item("pr required update", work_item_type="User Story")
 		self.assertEqual(item.pr_required, 1)
 		item.pr_required = 0
+		item.save(ignore_permissions=True)
+		item.reload()
+		self.assertEqual(item.pr_required, 0)
+
+	def test_retyping_to_user_story_turns_pr_required_on(self):
+		item = self._work_item("pr required retype on", work_item_type="Task")
+		self.assertEqual(item.pr_required, 0)
+		item.work_item_type = "User Story"
+		item.save(ignore_permissions=True)
+		item.reload()
+		self.assertEqual(item.pr_required, 1)
+
+	def test_retyping_to_task_turns_pr_required_off(self):
+		item = self._work_item("pr required retype off", work_item_type="Bug")
+		self.assertEqual(item.pr_required, 1)
+		item.work_item_type = "Task"
 		item.save(ignore_permissions=True)
 		item.reload()
 		self.assertEqual(item.pr_required, 0)
