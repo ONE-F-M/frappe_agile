@@ -135,14 +135,11 @@ frappe.ui.form.on("Work Item", {
 			frm.set_value("orchestrator", 0);
 		}
 
-		// Smart default for PR Required, new documents only. On a saved document
-		// a manual choice must never be overwritten by switching the type again.
-		if (frm.is_new()) {
-			if (["User Story", "Bug"].includes(frm.doc.work_item_type)) {
-				frm.set_value("pr_required", 1);
-			} else if (["Epic", "Task"].includes(frm.doc.work_item_type)) {
-				frm.set_value("pr_required", 0);
-			}
+		// PR Required follows the type on new and saved documents alike.
+		if (["User Story", "Bug"].includes(frm.doc.work_item_type)) {
+			frm.set_value("pr_required", 1);
+		} else if (["Epic", "Task"].includes(frm.doc.work_item_type)) {
+			frm.set_value("pr_required", 0);
 		}
 	},
 
