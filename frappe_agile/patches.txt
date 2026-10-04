@@ -18,3 +18,4 @@ frappe_agile.patches.v1.create_server_scripts #22-06-2026
 frappe_agile.patches.v1.delete_sprint_summary_party_report
 frappe_agile.patches.v1.delete_sprint_report_and_summary #3
 frappe_agile.patches.v1.rename_ba_report_to_scrum_master
+frappe_agile.patches.v1.rename_scrum_master_report_to_business_analyst
