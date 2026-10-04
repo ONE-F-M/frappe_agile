@@ -35,9 +35,9 @@ from frappe_agile.frappe_agile.report.proration import (
 	get_proration,
 	get_target,
 )
-from frappe_agile.frappe_agile.report.sprint_report_per_scrum_master.sprint_report_per_scrum_master import (
-	execute as scrum_master_report,
-	scrum_master_options,
+from frappe_agile.frappe_agile.report.sprint_report_per_business_analyst.sprint_report_per_business_analyst import (
+	execute as business_analyst_report,
+	business_analyst_options,
 )
 from frappe_agile.frappe_agile.report.sprint_report_per_developer.sprint_report_per_developer import (
 	execute as developer_report,
@@ -245,9 +245,9 @@ class TestSprintReportProration(FrappeTestCase):
 
 	@classmethod
 	def _make_project(cls, project_name=PROJECT, on_roadmap=True):
-		"""A roadmap SCRUM project managed by the Scrum Master under test.
+		"""A roadmap SCRUM project managed by the Business Analyst under test.
 
-		Sprint.sprint_prefix is fetched from the Project, and the Scrum Master
+		Sprint.sprint_prefix is fetched from the Project, and the Business Analyst
 		report takes its rows from the Project Manager — both come from here.
 		"""
 		values = {
@@ -495,18 +495,18 @@ class TestSprintReportProration(FrappeTestCase):
 		self.assertIsNotNone(row, f"no row for {UNLINKED_USER} in {rows}")
 		self.assertEqual(row["target_points"], DEV_VELOCITY)
 
-	def test_scrum_master_report_prorates_the_target(self):
+	def test_business_analyst_report_prorates_the_target(self):
 		sprint = self._make_sprint(PERIOD)
 		self._make_work_item(sprint.name, "sm", 10)
 
-		columns, rows = scrum_master_report(
-			{"start_date": PERIOD[0], "end_date": PERIOD[1], "scrum_master": self.sm_employee}
+		columns, rows = business_analyst_report(
+			{"start_date": PERIOD[0], "end_date": PERIOD[1], "business_analyst": self.sm_employee}
 		)
 		fieldnames = [column["fieldname"] for column in columns]
 		for fieldname in ("days", "expected_velocity", "new_work_items"):
 			self.assertIn(fieldname, fieldnames)
 
-		row = self._scrum_master_row(rows)
+		row = self._business_analyst_row(rows)
 		# Net of the public holiday in the window.
 		# Working / Holiday / Leave, as Production renders it.
 		self.assertEqual(row["days"], "4.0 / 1 / 0.0")
@@ -514,21 +514,21 @@ class TestSprintReportProration(FrappeTestCase):
 		self.assertEqual(row["points_scoped"], 10.0)
 		self.assertEqual(row["percentage_target"], 12.5)
 
-	def test_scrum_master_report_counts_leave_too(self):
+	def test_business_analyst_report_counts_leave_too(self):
 		"""The report had no time-off accounting at all before this."""
 		self._make_leave(LEAVE_TYPE, "2026-08-31", "2026-08-31", employee=self.sm_employee)
 
 		sprint = self._make_sprint(PERIOD)
 		self._make_work_item(sprint.name, "sm leave", 10)
 
-		_columns, rows = scrum_master_report(
-			{"start_date": PERIOD[0], "end_date": PERIOD[1], "scrum_master": self.sm_employee}
+		_columns, rows = business_analyst_report(
+			{"start_date": PERIOD[0], "end_date": PERIOD[1], "business_analyst": self.sm_employee}
 		)
-		row = self._scrum_master_row(rows)
+		row = self._business_analyst_row(rows)
 		self.assertEqual(row["expected_velocity"], 60.0)  # 100 × 3/5
 
 	# ------------------------------------------------------------------
-	# Which sprints and which people the Scrum Master report reports on
+	# Which sprints and which people the Business Analyst report reports on
 	# ------------------------------------------------------------------
 
 	def test_a_sprint_overlapping_by_one_day_counts(self):
@@ -539,8 +539,8 @@ class TestSprintReportProration(FrappeTestCase):
 		# Starts the day after the window ends.
 		self._make_sprint(CLEAN_PERIOD)
 
-		_columns, rows = scrum_master_report({"start_date": PERIOD[0], "end_date": PERIOD[1]})
-		row = self._scrum_master_row(rows)
+		_columns, rows = business_analyst_report({"start_date": PERIOD[0], "end_date": PERIOD[1]})
+		row = self._business_analyst_row(rows)
 		self.assertEqual(row["no_of_sprints"], 2)
 		self.assertNotIn(CLEAN_PERIOD[0], row["sprints"])
 
@@ -548,23 +548,23 @@ class TestSprintReportProration(FrappeTestCase):
 		off_roadmap = self._make_project(OFF_ROADMAP_PROJECT, on_roadmap=False)
 		self._make_sprint(PERIOD, project=off_roadmap)
 
-		_columns, rows = scrum_master_report({"start_date": PERIOD[0], "end_date": PERIOD[1]})
-		self.assertIsNone(self._scrum_master_row(rows), f"off-roadmap project reported in {rows}")
+		_columns, rows = business_analyst_report({"start_date": PERIOD[0], "end_date": PERIOD[1]})
+		self.assertIsNone(self._business_analyst_row(rows), f"off-roadmap project reported in {rows}")
 
 	def test_the_project_filter_narrows_to_the_named_projects(self):
 		self._make_sprint(PERIOD)
 
-		_columns, rows = scrum_master_report(
+		_columns, rows = business_analyst_report(
 			{
 				"start_date": PERIOD[0],
 				"end_date": PERIOD[1],
 				"project": [self._make_project(OFF_ROADMAP_PROJECT, on_roadmap=True)],
 			}
 		)
-		self.assertIsNone(self._scrum_master_row(rows), f"unnamed project reported in {rows}")
+		self.assertIsNone(self._business_analyst_row(rows), f"unnamed project reported in {rows}")
 
-	def test_scrum_master_options_offer_the_project_managers(self):
-		values = [option["value"] for option in scrum_master_options()]
+	def test_business_analyst_options_offer_the_project_managers(self):
+		values = [option["value"] for option in business_analyst_options()]
 		self.assertIn(self.sm_employee, values)
 		self.assertNotIn(self.dev_employee, values)
 
@@ -578,12 +578,12 @@ class TestSprintReportProration(FrappeTestCase):
 		early = self._make_work_item(sprint.name, "before the filter", 3)
 		self._set_creator(early.name, SM_USER, f"{PERIOD[0]} 09:00:00")
 
-		_columns, rows = scrum_master_report({"start_date": "2026-08-28", "end_date": PERIOD[1]})
-		row = self._scrum_master_row(rows)
+		_columns, rows = business_analyst_report({"start_date": "2026-08-28", "end_date": PERIOD[1]})
+		row = self._business_analyst_row(rows)
 		self.assertEqual(row["sprint_start_date"], getdate(PERIOD[0]))
 		self.assertEqual(row["new_work_items"], 1)
 
-	def test_new_work_items_counts_what_the_scrum_master_created_in_range(self):
+	def test_new_work_items_counts_what_the_business_analyst_created_in_range(self):
 		sprint = self._make_sprint(PERIOD)
 		inside = self._make_work_item(sprint.name, "inside", 3)
 		outside = self._make_work_item(sprint.name, "outside", 3)
@@ -591,8 +591,8 @@ class TestSprintReportProration(FrappeTestCase):
 		# Created by the same person, one day after the row's range ends.
 		self._set_creator(outside.name, SM_USER, f"{CLEAN_PERIOD[0]} 09:00:00")
 
-		_columns, rows = scrum_master_report({"start_date": PERIOD[0], "end_date": PERIOD[1]})
-		row = self._scrum_master_row(rows)
+		_columns, rows = business_analyst_report({"start_date": PERIOD[0], "end_date": PERIOD[1]})
+		row = self._business_analyst_row(rows)
 		self.assertEqual(row["new_work_items"], 1)
 
 	def test_new_work_items_counts_a_sprint_the_row_does_not_list(self):
@@ -611,8 +611,8 @@ class TestSprintReportProration(FrappeTestCase):
 			f"{PERIOD[1]} 09:00:00",
 		)
 
-		_columns, rows = scrum_master_report({"start_date": PERIOD[0], "end_date": PERIOD[1]})
-		row = self._scrum_master_row(rows)
+		_columns, rows = business_analyst_report({"start_date": PERIOD[0], "end_date": PERIOD[1]})
+		row = self._business_analyst_row(rows)
 		self.assertEqual(row["new_work_items"], 2)
 
 	def test_new_work_items_ignores_another_persons_items(self):
@@ -620,9 +620,23 @@ class TestSprintReportProration(FrappeTestCase):
 		theirs = self._make_work_item(sprint.name, "theirs", 3)
 		self._set_creator(theirs.name, DEV_USER, f"{PERIOD[1]} 09:00:00")
 
-		_columns, rows = scrum_master_report({"start_date": PERIOD[0], "end_date": PERIOD[1]})
-		row = self._scrum_master_row(rows)
+		_columns, rows = business_analyst_report({"start_date": PERIOD[0], "end_date": PERIOD[1]})
+		row = self._business_analyst_row(rows)
 		self.assertEqual(row["new_work_items"], 0)
+
+	def test_story_points_delivered_sums_done_items_in_sprints_inside_the_row_dates(self):
+		sprint = self._make_sprint(PERIOD)
+		later = self._make_sprint(CLEAN_PERIOD)
+		delivered = self._make_work_item(sprint.name, "delivered", 5, assignee_user=SM_USER)
+		self._make_work_item(sprint.name, "not done", 3, assignee_user=SM_USER)
+		outside = self._make_work_item(later.name, "later sprint", 8, assignee_user=SM_USER)
+		theirs = self._make_work_item(sprint.name, "theirs done", 13, assignee_user=DEV_USER)
+		for name in (delivered.name, outside.name, theirs.name):
+			frappe.db.set_value("Work Item", name, {"workflow_state": "Done", "status": "Done"})
+
+		_columns, rows = business_analyst_report({"start_date": PERIOD[0], "end_date": PERIOD[1]})
+		row = self._business_analyst_row(rows)
+		self.assertEqual(row["story_points_delivered"], 5.0)
 
 	def test_developer_report_counts_new_work_items_in_range(self):
 		sprint = self._make_sprint(PERIOD)
@@ -652,9 +666,9 @@ class TestSprintReportProration(FrappeTestCase):
 		row = self._row_for(rows, "developer", frappe.db.get_value("User", DEV_USER, "full_name"))
 		self.assertEqual(row["orchestrator_stories"], 1)
 
-	def _scrum_master_row(self, rows):
+	def _business_analyst_row(self, rows):
 		full_name = frappe.db.get_value("Employee", self.sm_employee, "employee_name")
-		return self._row_for(rows, "scrum_master", full_name)
+		return self._row_for(rows, "business_analyst", full_name)
 
 	@staticmethod
 	def _set_creator(work_item, user, created_at):
