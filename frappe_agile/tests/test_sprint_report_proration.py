@@ -571,8 +571,19 @@ class TestSprintReportProration(FrappeTestCase):
 		self.assertNotIn(self.dev_employee, values)
 
 	# ------------------------------------------------------------------
-	# New Work Items — counted over the filter's dates, whatever the sprint
+	# New Work Items - counted over the row's sprint dates, whatever the sprint
 	# ------------------------------------------------------------------
+
+	def test_new_work_items_counts_the_rows_sprint_dates_not_the_filters(self):
+		"""The sprint starts before the filter does; an item created in that gap still counts."""
+		sprint = self._make_sprint(PERIOD)
+		early = self._make_work_item(sprint.name, "before the filter", 3)
+		self._set_creator(early.name, SM_USER, f"{PERIOD[0]} 09:00:00")
+
+		_columns, rows = scrum_master_report({"start_date": "2026-08-28", "end_date": PERIOD[1]})
+		row = self._scrum_master_row(rows)
+		self.assertEqual(row["sprint_start_date"], getdate(PERIOD[0]))
+		self.assertEqual(row["new_work_items"], 1)
 
 	def test_new_work_items_counts_what_the_scrum_master_created_in_range(self):
 		sprint = self._make_sprint(PERIOD)

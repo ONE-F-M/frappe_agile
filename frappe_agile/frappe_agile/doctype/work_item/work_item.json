@@ -182,8 +182,8 @@
    "fieldname": "sprint",
    "fieldtype": "Link",
    "label": "Sprint",
-   "mandatory_depends_on": "eval:doc.work_item_type != 'Epic'",
-   "options": "Sprint"
+   "options": "Sprint",
+   "mandatory_depends_on": "eval:doc.work_item_type != 'Epic'"
   },
   {
    "fetch_from": "sprint.status",
