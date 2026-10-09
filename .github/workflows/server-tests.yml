@@ -78,4 +78,4 @@ jobs:
       - name: Run tests
         run: |
           cd ~/frappe-bench
-          bench --site test_site run-tests --app frappe_agile --failfast
+          bench --site test_site run-tests --app frappe_agile
