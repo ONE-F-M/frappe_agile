@@ -66,13 +66,20 @@ jobs:
           bench set-redis-queue-host 127.0.0.1:11000
           bench set-redis-socketio-host 127.0.0.1:12000
           bench get-app erpnext https://github.com/frappe/erpnext --branch version-15
-          # frappe_agile calls one_bpmn at runtime and its tests patch one_bpmn functions.
+          # frappe_agile uses one_bpmn at runtime and one_fm's Project fields and project types; one_fm needs these apps.
           bench get-app --skip-assets one_bpmn https://github.com/ONE-F-M/one_bpmn --branch staging
+          bench get-app --skip-assets telephony https://github.com/frappe/telephony --branch develop
+          bench get-app --skip-assets helpdesk https://github.com/frappe/helpdesk --branch main
+          bench get-app --skip-assets hrms https://github.com/frappe/hrms --branch version-15
+          bench get-app --skip-assets lending https://github.com/frappe/lending --branch version-15
+          bench get-app --skip-assets payments https://github.com/frappe/payments --branch version-15
+          bench get-app --skip-assets one_fm https://github.com/ONE-F-M/one_fm --branch staging
           bench get-app frappe_agile "$GITHUB_WORKSPACE"
           bench new-site --db-root-password root --admin-password admin --mariadb-root-password root test_site
           bench --site test_site install-app erpnext
           # run-tests only calls frappe_agile's before_tests hooks, so finish ERPNext's setup wizard here.
           bench --site test_site execute erpnext.setup.utils.before_tests
+          bench --site test_site install-app telephony helpdesk hrms lending payments one_fm
           bench --site test_site install-app frappe_agile
           bench --site test_site set-config allow_tests true
       - name: Run tests
