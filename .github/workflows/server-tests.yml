@@ -47,7 +47,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.11'
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -59,16 +59,21 @@ jobs:
         run: pip install frappe-bench
       - name: Setup bench
         run: |
-          bench init --skip-redis-config-generation --frappe-branch version-15 --python "$(which python)" ~/frappe-bench
+          # Same Frappe and ERPNext versions as the staging bench.
+          bench init --skip-redis-config-generation --frappe-branch v15.112.0 --python "$(which python)" ~/frappe-bench
           cd ~/frappe-bench
           bench set-mariadb-host 127.0.0.1
           bench set-redis-cache-host 127.0.0.1:13000
           bench set-redis-queue-host 127.0.0.1:11000
           bench set-redis-socketio-host 127.0.0.1:12000
-          bench get-app erpnext https://github.com/frappe/erpnext --branch version-15
+          bench get-app erpnext https://github.com/frappe/erpnext --branch v15.118.3
+          # frappe_agile calls one_bpmn at runtime and its tests patch one_bpmn functions.
+          bench get-app --skip-assets one_bpmn https://github.com/ONE-F-M/one_bpmn --branch staging
           bench get-app frappe_agile "$GITHUB_WORKSPACE"
           bench new-site --db-root-password root --admin-password admin --mariadb-root-password root test_site
           bench --site test_site install-app erpnext
+          # run-tests only calls frappe_agile's before_tests hooks, so finish ERPNext's setup wizard here.
+          bench --site test_site execute erpnext.setup.utils.before_tests
           bench --site test_site install-app frappe_agile
           bench --site test_site set-config allow_tests true
       - name: Run tests
