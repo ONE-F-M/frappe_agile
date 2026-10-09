@@ -69,6 +69,8 @@ jobs:
           bench get-app frappe_agile "$GITHUB_WORKSPACE"
           bench new-site --db-root-password root --admin-password admin --mariadb-root-password root test_site
           bench --site test_site install-app erpnext
+          # ERPNext's setup wizard normally creates this; its test records need it for Company warehouses.
+          bench --site test_site execute frappe.client.insert --args '[{"doctype": "Warehouse Type", "__newname": "Transit"}]'
           bench --site test_site install-app frappe_agile
           bench --site test_site set-config allow_tests true
       - name: Run tests
