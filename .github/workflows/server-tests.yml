@@ -59,18 +59,19 @@ jobs:
         run: pip install frappe-bench
       - name: Setup bench
         run: |
-          bench init --skip-redis-config-generation --frappe-branch version-15 --python "$(which python)" ~/frappe-bench
+          # Same versions as the staging bench; one_fm imports names that later Frappe releases removed.
+          bench init --skip-redis-config-generation --frappe-branch v15.112.0 --python "$(which python)" ~/frappe-bench
           cd ~/frappe-bench
           bench set-mariadb-host 127.0.0.1
           bench set-redis-cache-host 127.0.0.1:13000
           bench set-redis-queue-host 127.0.0.1:11000
           bench set-redis-socketio-host 127.0.0.1:12000
-          bench get-app erpnext https://github.com/frappe/erpnext --branch version-15
+          bench get-app erpnext https://github.com/frappe/erpnext --branch v15.118.3
           # frappe_agile uses one_bpmn at runtime and one_fm's Project fields and project types; one_fm needs these apps.
           bench get-app --skip-assets one_bpmn https://github.com/ONE-F-M/one_bpmn --branch staging
           bench get-app --skip-assets telephony https://github.com/frappe/telephony --branch develop
-          bench get-app --skip-assets helpdesk https://github.com/frappe/helpdesk --branch main
-          bench get-app --skip-assets hrms https://github.com/frappe/hrms --branch version-15
+          bench get-app --skip-assets helpdesk https://github.com/frappe/helpdesk --branch v1.28.1
+          bench get-app --skip-assets hrms https://github.com/frappe/hrms --branch v15.63.2
           bench get-app --skip-assets lending https://github.com/frappe/lending --branch version-15
           bench get-app --skip-assets payments https://github.com/frappe/payments --branch version-15
           bench get-app --skip-assets one_fm https://github.com/ONE-F-M/one_fm --branch staging
