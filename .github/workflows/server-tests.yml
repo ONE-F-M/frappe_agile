@@ -76,6 +76,8 @@ jobs:
           bench get-app --skip-assets payments https://github.com/frappe/payments --branch version-15
           bench get-app --skip-assets one_fm https://github.com/ONE-F-M/one_fm --branch staging
           bench get-app frappe_agile "$GITHUB_WORKSPACE"
+          # The apps' pins leave an older pyOpenSSL beside a newer cryptography; use the pair staging runs.
+          ./env/bin/python -m pip install --quiet "pyOpenSSL==26.0.0" "cryptography==46.0.7"
           bench new-site --db-root-password root --admin-password admin --mariadb-root-password root test_site
           bench --site test_site install-app erpnext
           # run-tests only calls frappe_agile's before_tests hooks, so finish ERPNext's setup wizard here.
