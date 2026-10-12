@@ -268,6 +268,12 @@ def _build_message_payload(event_type: str, payload: dict) -> dict:
 	return result
 
 
+def replay_events(work_item: str, events: list):
+	"""Deliver a pull request's missed events to the Work Item's process, one after another."""
+	for message_name, payload in events:
+		_deliver_bpmn_message(work_item, message_name, payload)
+
+
 # ---------------------------------------------------------------------------
 # BPMN message delivery
 # ---------------------------------------------------------------------------
