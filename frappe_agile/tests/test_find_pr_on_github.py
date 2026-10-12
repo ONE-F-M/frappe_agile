@@ -366,11 +366,28 @@ class TestFindPrOnGithub(FrappeTestCase):
 		self.assertIn("assigned to the orchestrator again", result["fallback_reason"])
 		self.assertEqual([c for c in self._attempt_comments() if "Attempt" in c], [])
 
-	def test_an_item_handed_back_does_not_get_a_pull_request_opened_for_it(self):
+	def test_an_item_handed_back_with_commits_gets_a_draft_pull_request(self):
 		self._hand_back()
 		frappe.db.set_value("Work Item", self.work_item, "git_branch", "staging")
-		self._run(pulls=[], ahead=3)
+		result = self._run(pulls=[], ahead=3)
+		self.assertEqual(result["fallback_outcome"], "pr_found")
+		self.assertTrue(self.created["draft"])
+		self.assertIn("handed the item back", self.created["body"])
+
+	def test_an_item_handed_back_with_nothing_pushed_opens_nothing(self):
+		self._hand_back()
+		frappe.db.set_value("Work Item", self.work_item, "git_branch", "staging")
+		result = self._run(pulls=[], ahead=0)
+		self.assertEqual(result["fallback_outcome"], "handed_back")
 		self.assertIsNone(self.created)
+
+	def test_an_item_with_no_base_branch_uses_the_base_its_sandbox_runs_used(self):
+		frappe.db.set_value("Work Item", self.work_item, "git_branch", None)
+		frappe.get_doc(
+			{"doctype": "Agent Sandbox Run", "state": "completed", "work_item": self.work_item, "git_branch": "staging"}
+		).insert(ignore_permissions=True)
+		self._run(pulls=[], ahead=2)
+		self.assertEqual(self.created["base"], "staging")
 
 	def test_an_item_handed_back_after_a_pull_request_exists_still_gets_it_recorded(self):
 		self._hand_back()
