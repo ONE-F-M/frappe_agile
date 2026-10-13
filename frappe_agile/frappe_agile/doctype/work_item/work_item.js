@@ -123,33 +123,6 @@ frappe.ui.form.on("Work Item", {
 				);
 			});
 		}
-
-		// A Work Item the orchestrator handed back can go back to it, from the branch's last commit.
-		if (!frm.is_new() && !frm.doc.orchestrator && !frm.doc.pr_link) {
-			frappe.call({
-				method: "frappe_agile.api.work_item_retry.get_retry_state",
-				args: { work_item: frm.doc.name },
-				callback: function (r) {
-					if (r.message && !r.message.reason) {
-						frm.add_custom_button(__("Retry from last commit"), function () {
-							frappe.confirm(
-								__("Assign this item to the orchestrator again? It continues from the branch's last commit."),
-								function () {
-									frappe.call({
-										method: "frappe_agile.api.work_item_retry.retry_from_last_commit",
-										args: { work_item: frm.doc.name },
-										freeze: true,
-										callback: function () {
-											frm.reload_doc();
-										},
-									});
-								}
-							);
-						});
-					}
-				},
-			});
-		}
 	},
 
 	work_item_type: function (frm) {
