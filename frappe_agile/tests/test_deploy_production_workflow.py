@@ -30,6 +30,22 @@ class TestDeployProductionWorkflow(FrappeTestCase):
 		self.assertFalse([line for line in self.lines if line.startswith("bench setup requirements")])
 		self.assertFalse([line for line in self.lines if line.endswith(".dist-info") and line.startswith("rm -rf")])
 
+	def test_triggers_and_job_condition_for_labelled_merged_pr(self):
+		text = "\n".join(self.lines)
+		self.assertIn("workflow_dispatch:", self.lines)
+		self.assertIn("pull_request:", self.lines)
+		self.assertIn("branches: [version-15]", self.lines)
+		self.assertIn("types: [closed, labeled]", self.lines)
+
+		start = self.lines.index("if: >-")
+		end = next(i for i, line in enumerate(self.lines[start + 1 :], start + 1) if line.startswith("runs-on:"))
+		condition = " ".join(self.lines[start + 1 : end])
+		self.assertIn("github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/version-15'", condition)
+		self.assertIn("github.event_name == 'pull_request'", condition)
+		self.assertIn("github.event.pull_request.merged == true", condition)
+		self.assertIn("contains(github.event.pull_request.labels.*.name, 'deploy-hotfix')", condition)
+		self.assertIn("group: deploy-production", text)
+
 	def test_trap_is_set_before_the_workers_stop(self):
 		self.assertLess(self.trap_index(), self.lines.index(STOP_WORKERS))
 
