@@ -497,15 +497,17 @@ def _verify_signature(delivery: dict | None = None):
 
 	if not hmac.compare_digest(received_sig, expected_sig):
 		# Log only that a mismatch occurred; avoid logging full digest values.
-		frappe.log_error(
-			title="GitHub Webhook – signature mismatch",
-			message=(
+		_log_webhook_error(
+			"GitHub Webhook – signature mismatch",
+			(
 				f"Signature mismatch for incoming webhook request "
 				f"(received prefix: sha256={received_sig[:8]}...). "
 				"Verify that the webhook secret in Frappe Agile Settings "
 				"(or 'github_webhook_secret' in site_config.json if using legacy fallback) "
 				"matches the secret configured in GitHub."
 			),
+			delivery,
+			defer_insert=True,
 		)
 		frappe.throw(
 			_("GitHub webhook signature verification failed."),
