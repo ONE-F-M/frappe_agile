@@ -419,25 +419,15 @@ def _get_webhook_secret() -> str | None:
 	return frappe.conf.get("github_webhook_secret")
 
 
-def _verify_signature(delivery: dict | None = None):
+def _verify_signature(delivery: dict):
 	"""
-	Validate the X-Hub-Signature-256 header using HMAC-SHA256.
-
-	The secret is resolved via :func:`_get_webhook_secret` (settings first,
-	then site_config.json fallback).
-	Raises ``frappe.AuthenticationError`` if verification fails.
-
-	Error Logs are written with ``defer_insert=True`` because the request is
-	about to raise and Frappe rolls the transaction back; a deferred log is
-	inserted after the rollback and so survives.
+	Validate X-Hub-Signature-256 (HMAC-SHA256); raise AuthenticationError on failure.
+	Error Logs use defer_insert=True so they survive the rollback of the failed request.
 	"""
-	if delivery is None:
-		delivery = _build_delivery_details()
-
 	secret = _get_webhook_secret()
 	if not secret:
 		_log_webhook_error(
-			"GitHub Webhook – configuration error",
+			"GitHub Webhook - configuration error",
 			(
 				"GitHub Webhook Secret is not configured. "
 				"Set it in Frappe Agile Settings → GitHub Integration → GitHub Webhook Secret, "
