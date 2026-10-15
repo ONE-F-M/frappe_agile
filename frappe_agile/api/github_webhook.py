@@ -99,7 +99,7 @@ def handle_github_webhook():
 	try:
 		payload = json.loads(frappe.request.data)
 	except (json.JSONDecodeError, AttributeError) as exc:
-		_log_webhook_error("GitHub Webhook – malformed JSON payload", str(exc), delivery)
+		_log_webhook_error("GitHub Webhook - malformed JSON payload", str(exc), delivery, defer_insert=True)
 		frappe.throw(_("Invalid JSON payload"), frappe.ValidationError)
 
 	# Signature is verified: enrich the delivery details once, reuse everywhere.
