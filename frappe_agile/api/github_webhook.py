@@ -336,7 +336,7 @@ def _deliver_bpmn_message(wi_name: str, message_name: str, payload: dict, delive
 
 	if not frappe.db.exists("Work Item", wi_name):
 		_log_webhook_error(
-			"GitHub Webhook – Work Item not found",
+			"GitHub Webhook - Work Item not found",
 			f"Work Item '{wi_name}' does not exist. Message '{message_name}' not delivered.",
 			delivery,
 		)
