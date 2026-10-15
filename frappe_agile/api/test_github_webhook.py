@@ -11,6 +11,7 @@ Run with:
 import hashlib
 import hmac
 import json
+import sys
 import unittest
 from unittest.mock import ANY, MagicMock, patch
 
