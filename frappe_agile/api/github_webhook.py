@@ -114,19 +114,14 @@ def handle_github_webhook():
 	# ── 2. Extract Work Item ID ──────────────────────────────────────────
 	wi_name = _extract_wi_from_payload(event_type, payload)
 	if not wi_name:
-		if event_type in ("pull_request", "pull_request_review"):
-			pr = payload.get("pull_request", {})
-			searched_branch = pr.get("head", {}).get("ref") or ""
-			searched_title = pr.get("title") or ""
-		else:
-			ref = payload.get("ref", "")
-			searched_branch = ref.replace("refs/heads/", "") if ref.startswith("refs/heads/") else ref
-			searched_title = ""
+		pr = payload.get("pull_request", {})
+		searched_branch = pr.get("head", {}).get("ref") or ""
+		searched_title = pr.get("title") or ""
 		_log_webhook_error(
-			f"GitHub Webhook – no Work Item ID found ({event_type})",
+			f"GitHub Webhook - no Work Item ID found ({event_type})",
 			(
 				f"Event '{message_name}' — could not find a WI-XXXXXX "
-				"reference in the PR body, title, branch name, or commit messages.\n"
+				"reference in the PR branch name, title, or body (searched in that order).\n"
 				f"Branch searched: '{searched_branch}'\n"
 				f"Title searched: '{searched_title}'"
 			),
