@@ -205,9 +205,10 @@ class TestExtractWiName(unittest.TestCase):
 		result = self._mod()._extract_wi_name("", "", "feature/WI-000001-add-login")
 		self.assertEqual(result, "WI-000001")
 
-	def test_priority_body_over_branch(self):
-		result = self._mod()._extract_wi_name("WI-000099 in body", "", "WI-000001-branch")
-		self.assertEqual(result, "WI-000099")
+	def test_priority_branch_over_body(self):
+		"""_extract_wi_name returns the first match in argument order (branch, title, body)."""
+		result = self._mod()._extract_wi_name("WI-000001-branch", "", "WI-000099 in body")
+		self.assertEqual(result, "WI-000001")
 
 	def test_returns_none_when_not_found(self):
 		result = self._mod()._extract_wi_name("no match here", "also nothing", "fix-typo")
