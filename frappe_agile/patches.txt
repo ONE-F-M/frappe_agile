@@ -19,3 +19,4 @@ frappe_agile.patches.v1.delete_sprint_summary_party_report
 frappe_agile.patches.v1.delete_sprint_report_and_summary #3
 frappe_agile.patches.v1.rename_ba_report_to_scrum_master
 frappe_agile.patches.v1.create_find_pr_on_github_script
+frappe_agile.patches.v1.remove_work_item_customizations
