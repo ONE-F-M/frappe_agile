@@ -184,7 +184,7 @@ class TestGithubWebhookSignature(unittest.TestCase):
 		with patch("frappe.request", mock_request):
 			with patch("frappe_agile.api.github_webhook._get_webhook_secret", return_value=None):
 				with self.assertRaises(frappe.exceptions.AuthenticationError):
-					mod._verify_signature()
+					mod._verify_signature({})
 
 
 class TestExtractWiName(unittest.TestCase):
