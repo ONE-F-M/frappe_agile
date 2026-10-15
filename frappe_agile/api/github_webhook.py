@@ -143,11 +143,8 @@ def handle_github_webhook():
 
 def _build_delivery_details(payload: dict | None = None) -> dict:
 	"""
-	Describe the GitHub delivery being processed.
-
-	Called once with no payload (header only, before the signature is
-	trusted) and once with the parsed payload; the result is reused in every
-	Error Log so each entry can be traced back to the exact delivery.
+	Describe the GitHub delivery (headers, plus payload fields when given)
+	so every Error Log can name the exact delivery.
 	"""
 	details = {
 		"delivery_id": frappe.request.headers.get("X-GitHub-Delivery", "") or "",
