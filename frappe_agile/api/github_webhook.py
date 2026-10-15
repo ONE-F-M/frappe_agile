@@ -22,7 +22,7 @@ Payload URL:
 GitHub App/Org Settings → Webhooks
 	Content type : application/json
 	Secret       : <value stored in Frappe Agile Settings → GitHub Webhook Secret>
-	Events       : Pull requests, Pull request reviews, Pushes
+	Events       : Pull requests, Pull request reviews
 
 Message name convention
 -----------------------
