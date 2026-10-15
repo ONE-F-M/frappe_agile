@@ -114,12 +114,23 @@ def handle_github_webhook():
 	# ── 2. Extract Work Item ID ──────────────────────────────────────────
 	wi_name = _extract_wi_from_payload(event_type, payload)
 	if not wi_name:
-		frappe.log_error(
-			title=f"GitHub Webhook – no Work Item ID found ({event_type})",
-			message=(
+		if event_type in ("pull_request", "pull_request_review"):
+			pr = payload.get("pull_request", {})
+			searched_branch = pr.get("head", {}).get("ref") or ""
+			searched_title = pr.get("title") or ""
+		else:
+			ref = payload.get("ref", "")
+			searched_branch = ref.replace("refs/heads/", "") if ref.startswith("refs/heads/") else ref
+			searched_title = ""
+		_log_webhook_error(
+			f"GitHub Webhook – no Work Item ID found ({event_type})",
+			(
 				f"Event '{message_name}' — could not find a WI-XXXXXX "
-				"reference in the PR body, title, branch name, or commit messages."
+				"reference in the PR body, title, branch name, or commit messages.\n"
+				f"Branch searched: '{searched_branch}'\n"
+				f"Title searched: '{searched_title}'"
 			),
+			delivery,
 		)
 		return {"status": "no_work_item"}
 
@@ -127,9 +138,57 @@ def handle_github_webhook():
 	msg_payload = _build_message_payload(event_type, payload)
 
 	# ── 4. Deliver to BPMN engine ────────────────────────────────────────
-	_deliver_bpmn_message(wi_name, message_name, msg_payload)
+	return _deliver_bpmn_message(wi_name, message_name, msg_payload, delivery)
 
-	return {"status": "ok"}
+
+# ---------------------------------------------------------------------------
+# Delivery details / Error Log helpers
+# ---------------------------------------------------------------------------
+
+
+def _build_delivery_details(payload: dict | None = None) -> dict:
+	"""
+	Describe the GitHub delivery being processed.
+
+	Called once with no payload (header only, before the signature is
+	trusted) and once with the parsed payload; the result is reused in every
+	Error Log so each entry can be traced back to the exact delivery.
+	"""
+	details = {
+		"delivery_id": frappe.request.headers.get("X-GitHub-Delivery", "") or "",
+		"event": frappe.request.headers.get("X-GitHub-Event", "") or "",
+	}
+	if payload:
+		pr = payload.get("pull_request") or {}
+		details.update(
+			{
+				"action": payload.get("action", "") or "",
+				"repository": (payload.get("repository") or {}).get("full_name", "") or "",
+				"pr_number": pr.get("number", "") or "",
+				"pr_url": pr.get("html_url", "") or "",
+				"sender": (payload.get("sender") or {}).get("login", "") or "",
+			}
+		)
+	return details
+
+
+def _log_webhook_error(title: str, message: str, delivery: dict, wi_name: str | None = None, **kwargs):
+	"""Write an Error Log that names the delivery, linked to the Work Item when known."""
+	lines = [
+		f"GitHub delivery id: {delivery.get('delivery_id', '')}",
+		f"Event: {delivery.get('event', '')}",
+		f"Action: {delivery.get('action', '')}",
+		f"Repository: {delivery.get('repository', '')}",
+		f"Pull request number: {delivery.get('pr_number', '')}",
+		f"Pull request URL: {delivery.get('pr_url', '')}",
+		f"Sender: {delivery.get('sender', '')}",
+	]
+	log_args = {"title": title, "message": f"{message}\n\n" + "\n".join(lines)}
+	if wi_name:
+		log_args["reference_doctype"] = "Work Item"
+		log_args["reference_name"] = wi_name
+	log_args.update(kwargs)
+	frappe.log_error(**log_args)
 
 
 # ---------------------------------------------------------------------------
