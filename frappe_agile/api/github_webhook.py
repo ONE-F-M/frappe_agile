@@ -377,7 +377,7 @@ def _deliver_bpmn_message(wi_name: str, message_name: str, payload: dict, delive
 		}
 	except Exception as exc:
 		_log_webhook_error(
-			"GitHub Webhook – BPMN message delivery failed",
+			"GitHub Webhook - BPMN message delivery failed",
 			f"Message '{message_name}' to Work Item '{wi_name}' failed.\n{frappe.get_traceback()}",
 			delivery,
 			wi_name,
