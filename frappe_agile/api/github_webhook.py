@@ -373,7 +373,7 @@ def _deliver_bpmn_message(wi_name: str, message_name: str, payload: dict, delive
 		return {
 			"status": "delivered" if result.get("caught") else "not_waiting",
 			**body,
-			"instance": result.get("instance") or instance,
+			"instance": result["instance"],
 		}
 	except Exception as exc:
 		_log_webhook_error(
