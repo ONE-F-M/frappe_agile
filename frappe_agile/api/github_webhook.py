@@ -353,7 +353,7 @@ def _deliver_bpmn_message(wi_name: str, message_name: str, payload: dict, delive
 		)
 		if not instance:
 			_log_webhook_error(
-				"GitHub Webhook – No active BPMN instance found",
+				"GitHub Webhook - No active BPMN instance found",
 				f"Work Item '{wi_name}' has no active BPMN process instance. "
 				f"Message '{message_name}' not delivered.",
 				delivery,
