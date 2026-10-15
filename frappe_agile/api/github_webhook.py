@@ -469,7 +469,7 @@ def _verify_signature(delivery: dict):
 	if not hmac.compare_digest(received_sig, expected_sig):
 		# Log only that a mismatch occurred; avoid logging full digest values.
 		_log_webhook_error(
-			"GitHub Webhook – signature mismatch",
+			"GitHub Webhook - signature mismatch",
 			(
 				f"Signature mismatch for incoming webhook request "
 				f"(received prefix: sha256={received_sig[:8]}...). "
