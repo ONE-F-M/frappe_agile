@@ -12,6 +12,7 @@ that mean "the whole board" tick every status via `_board`.
 from __future__ import annotations
 
 import json
+import re
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
@@ -943,3 +944,18 @@ class TestRoadmapBacklog(FrappeTestCase):
 			frappe.db.get_single_value("Frappe Agile Settings", "backlog_status"),
 			"Draft, In Progress",
 		)
+
+
+class TestRoadmapAddWorkItemButton(FrappeTestCase):
+	"""The "+" next to a sprint is visible without hovering; the page decides where it is drawn."""
+
+	def test_the_add_button_is_not_hidden_until_hover(self):
+		path = frappe.get_app_path(
+			"frappe_agile", "frappe_agile", "page", "roadmap_board", "roadmap_board.css"
+		)
+		with open(path) as f:
+			css = f.read()
+		rule = re.search(r"(?:^|\n)\.rm-add-wi\s*\{([^}]*)\}", css)
+		self.assertIsNotNone(rule, "the .rm-add-wi rule is missing")
+		self.assertNotRegex(rule.group(1), r"opacity\s*:\s*0\b")
+		self.assertNotIn(".rm-cell:hover .rm-add-wi", css)
