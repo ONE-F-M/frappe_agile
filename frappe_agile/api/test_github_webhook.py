@@ -172,7 +172,7 @@ class TestGithubWebhookSignature(unittest.TestCase):
 		with patch("frappe.request", mock_request):
 			with patch("frappe_agile.api.github_webhook._get_webhook_secret", return_value="test-secret"):
 				with self.assertRaises(frappe.exceptions.AuthenticationError):
-					mod._verify_signature()
+					mod._verify_signature({})
 
 	def test_no_secret_configured_raises(self):
 		"""When no secret is configured anywhere, should raise AuthenticationError."""
