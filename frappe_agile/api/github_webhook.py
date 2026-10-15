@@ -92,17 +92,18 @@ def handle_github_webhook():
 	The webhook handler contains **no business logic** — all routing and
 	state transitions are defined in the BPMN process diagram.
 	"""
-	_verify_signature()
+	delivery = _build_delivery_details()
+	_verify_signature(delivery)
 
 	event_type = frappe.request.headers.get("X-GitHub-Event", "")
 	try:
 		payload = json.loads(frappe.request.data)
 	except (json.JSONDecodeError, AttributeError) as exc:
-		frappe.log_error(
-			title="GitHub Webhook – malformed JSON payload",
-			message=str(exc),
-		)
+		_log_webhook_error("GitHub Webhook – malformed JSON payload", str(exc), delivery)
 		frappe.throw(_("Invalid JSON payload"), frappe.ValidationError)
+
+	# Signature is verified: enrich the delivery details once, reuse everywhere.
+	delivery = _build_delivery_details(payload)
 
 	# ── 1. Derive message name ───────────────────────────────────────────
 	message_name = _derive_message_name(event_type, payload)
