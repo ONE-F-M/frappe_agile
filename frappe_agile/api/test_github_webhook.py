@@ -145,7 +145,7 @@ class TestGithubWebhookSignature(unittest.TestCase):
 		with patch("frappe.request", mock_request):
 			with patch("frappe_agile.api.github_webhook._get_webhook_secret", return_value="test-secret"):
 				# Should not raise
-				mod._verify_signature()
+				mod._verify_signature({})
 
 	def test_missing_signature_raises(self):
 		"""Missing header should raise AuthenticationError."""
