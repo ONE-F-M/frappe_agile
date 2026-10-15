@@ -541,7 +541,7 @@ class TestHandlePush(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# WI-003661: branch-first routing, response statuses, traceable Error Logs
+# Branch-first routing, response statuses, traceable Error Logs
 # ---------------------------------------------------------------------------
 
 
