@@ -237,7 +237,7 @@ def _extract_wi_from_payload(event_type: str, payload: dict) -> str | None:
 	"""
 	Extract the Work Item ID from the appropriate fields based on event type.
 
-	- pull_request / pull_request_review → PR body, title, branch name
+	- pull_request / pull_request_review → PR branch name, title, body
 	- push → commit messages, branch name
 	"""
 	if event_type in ("pull_request", "pull_request_review"):
