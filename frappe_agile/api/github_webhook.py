@@ -327,20 +327,9 @@ def _build_message_payload(event_type: str, payload: dict) -> dict:
 
 def _deliver_bpmn_message(wi_name: str, message_name: str, payload: dict, delivery: dict | None = None) -> dict:
 	"""
-	Deliver a BPMN message to the active process instance for a Work Item and
-	return the outcome as the webhook response body.
-
-	Statuses:
-	    - ``delivered``            (200) a waiting task took the message
-	    - ``not_waiting``          (200) active instance, nothing waiting for it
-	    - ``work_item_not_found``  (404) Error Log written
-	    - ``no_active_instance``   (500) Error Log written
-	    - ``failed``               (500) Error Log with traceback written
-
-	The HTTP status code is set through ``frappe.local.response`` rather than
-	raising, so the Error Logs are committed with the request.
-
-	Runs as Administrator since webhooks arrive without a Frappe session.
+	Deliver a BPMN message to the Work Item's active instance as Administrator
+	and return the response body (delivered, not_waiting, work_item_not_found,
+	no_active_instance, failed); 404/500 are set via frappe.local.response.
 	"""
 	delivery = delivery or {}
 	body = {"work_item": wi_name, "message_name": message_name}
