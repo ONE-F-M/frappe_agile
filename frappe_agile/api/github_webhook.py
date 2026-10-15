@@ -333,26 +333,54 @@ def _build_message_payload(event_type: str, payload: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def _deliver_bpmn_message(wi_name: str, message_name: str, payload: dict):
+def _deliver_bpmn_message(wi_name: str, message_name: str, payload: dict, delivery: dict | None = None) -> dict:
 	"""
-	Deliver a BPMN message to the active process instance for a Work Item.
+	Deliver a BPMN message to the active process instance for a Work Item and
+	return the outcome as the webhook response body.
 
-	Best-effort delivery — if there is no active BPMN instance or no task
-	is waiting for this message, the error is logged and the function
-	returns gracefully.
+	Statuses:
+	    - ``delivered``            (200) a waiting task took the message
+	    - ``not_waiting``          (200) active instance, nothing waiting for it
+	    - ``work_item_not_found``  (404) Error Log written
+	    - ``no_active_instance``   (500) Error Log written
+	    - ``failed``               (500) Error Log with traceback written
+
+	The HTTP status code is set through ``frappe.local.response`` rather than
+	raising, so the Error Logs are committed with the request.
 
 	Runs as Administrator since webhooks arrive without a Frappe session.
 	"""
+	delivery = delivery or {}
+	body = {"work_item": wi_name, "message_name": message_name}
+
 	if not frappe.db.exists("Work Item", wi_name):
-		frappe.log_error(
-			title=f"GitHub Webhook – Work Item not found",
-			message=f"Work Item '{wi_name}' does not exist. Message '{message_name}' not delivered.",
+		_log_webhook_error(
+			"GitHub Webhook – Work Item not found",
+			f"Work Item '{wi_name}' does not exist. Message '{message_name}' not delivered.",
+			delivery,
 		)
-		return
+		frappe.local.response["http_status_code"] = 404
+		return {"status": "work_item_not_found", **body}
 
 	original_user = frappe.session.user
 	try:
 		frappe.set_user("Administrator")
+
+		instance = frappe.db.exists(
+			"BPMN Process Instance",
+			{"context_doctype": "Work Item", "context_docname": wi_name, "status": "Active"},
+		)
+		if not instance:
+			_log_webhook_error(
+				"GitHub Webhook – No active BPMN instance found",
+				f"Work Item '{wi_name}' has no active BPMN process instance. "
+				f"Message '{message_name}' not delivered.",
+				delivery,
+				wi_name,
+			)
+			frappe.local.response["http_status_code"] = 500
+			return {"status": "no_active_instance", **body}
+
 		from one_bpmn.api.instance_api import send_message
 
 		result = send_message(
@@ -361,16 +389,20 @@ def _deliver_bpmn_message(wi_name: str, message_name: str, payload: dict):
 			context_docname=wi_name,
 			payload=json.dumps(payload),
 		)
-		print(f"GitHub Webhook → BPMN: '{message_name}' → {wi_name} → {result.get('status', '?')}")
-	except Exception:
-		# Best-effort: log and continue.
-		frappe.log_error(
-			title=f"GitHub Webhook – BPMN message delivery failed",
-			message=(
-				f"Message '{message_name}' to Work Item '{wi_name}' failed.\n"
-				f"{frappe.get_traceback()}"
-			),
+		return {
+			"status": "delivered" if result.get("caught") else "not_waiting",
+			**body,
+			"instance": result.get("instance") or instance,
+		}
+	except Exception as exc:
+		_log_webhook_error(
+			"GitHub Webhook – BPMN message delivery failed",
+			f"Message '{message_name}' to Work Item '{wi_name}' failed.\n{frappe.get_traceback()}",
+			delivery,
+			wi_name,
 		)
+		frappe.local.response["http_status_code"] = 500
+		return {"status": "failed", **body, "error": str(exc)}
 	finally:
 		frappe.set_user(original_user)
 
