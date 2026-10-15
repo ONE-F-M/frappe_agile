@@ -789,7 +789,7 @@ class TestVerifySignatureDeferredLog(unittest.TestCase):
 			mod, "_get_webhook_secret", return_value=None
 		), patch("frappe.log_error") as log:
 			with self.assertRaises(frappe.exceptions.AuthenticationError):
-				mod._verify_signature()
+				mod._verify_signature({"delivery_id": "delivery-cfg-1"})
 		self.assertIs(log.call_args[1].get("defer_insert"), True)
 
 
