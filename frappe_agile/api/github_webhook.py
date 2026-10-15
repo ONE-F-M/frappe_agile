@@ -251,9 +251,9 @@ def _extract_wi_from_payload(event_type: str, payload: dict) -> str | None:
 	if event_type in ("pull_request", "pull_request_review"):
 		pr = payload.get("pull_request", {})
 		return _extract_wi_name(
-			pr.get("body") or "",
-			pr.get("title") or "",
 			pr.get("head", {}).get("ref") or "",
+			pr.get("title") or "",
+			pr.get("body") or "",
 		)
 	elif event_type == "push":
 		ref = payload.get("ref", "")
