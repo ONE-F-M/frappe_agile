@@ -25,7 +25,7 @@ class TestRemoveWorkItemCustomizations(FrappeTestCase):
 				"fieldtype": "Data",
 				"label": "Test Patch Custom Field",
 			}
-		).insert(ignore_permissions=True)
+		).insert()
 		frappe.get_doc(
 			{
 				"doctype": "Property Setter",
@@ -36,7 +36,7 @@ class TestRemoveWorkItemCustomizations(FrappeTestCase):
 				"property_type": "Data",
 				"value": "Test Patch Label",
 			}
-		).insert(ignore_permissions=True)
+		).insert()
 
 		self.assertTrue(frappe.db.exists("Custom Field", {"dt": "Work Item"}))
 		self.assertTrue(frappe.db.exists("Property Setter", {"doc_type": "Work Item"}))
