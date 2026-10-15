@@ -448,7 +448,7 @@ def _verify_signature(delivery: dict):
 	signature_header = frappe.request.headers.get("X-Hub-Signature-256", "")
 	if not signature_header.startswith("sha256="):
 		_log_webhook_error(
-			"GitHub Webhook – signature mismatch",
+			"GitHub Webhook - signature mismatch",
 			"Missing or malformed X-Hub-Signature-256 header.",
 			delivery,
 			defer_insert=True,
