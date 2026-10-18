@@ -13,7 +13,7 @@ from frappe_agile.frappe_agile.report.proration import (
 	get_proration,
 	get_target,
 )
-from frappe_agile.frappe_agile.report.sprint_report_per_scrum_master.sprint_report_per_scrum_master import (
+from frappe_agile.frappe_agile.report.sprint_report_per_business_analyst.sprint_report_per_business_analyst import (
 	count_new_work_items,
 )
 
