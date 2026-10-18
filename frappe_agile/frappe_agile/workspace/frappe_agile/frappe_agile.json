@@ -132,7 +132,7 @@
             "type": "Link"
         }
     ],
-    "modified": "2026-09-30 12:00:00.000000",
+    "modified": "2026-10-18 12:00:00.000000",
     "modified_by": "Administrator",
     "module": "Frappe Agile",
     "name": "Frappe Agile",
@@ -144,6 +144,15 @@
     "roles": [
         {
             "role": "System Manager"
+        },
+        {
+            "role": "Process Owner"
+        },
+        {
+            "role": "Business Analyst"
+        },
+        {
+            "role": "Developer"
         }
     ],
     "sequence_id": 4.0,
