@@ -1,7 +1,7 @@
 // Copyright (c) 2026, One FM and contributors
 // For license information, please see license.txt
 
-const REPORT_METHOD = "frappe_agile.frappe_agile.report.sprint_report_per_scrum_master.sprint_report_per_scrum_master";
+const REPORT_METHOD = "frappe_agile.frappe_agile.report.sprint_report_per_business_analyst.sprint_report_per_business_analyst";
 
 // A project is only on the report once it is on the Roadmap, which is the
 // Roadmap board's own membership rule.
@@ -11,7 +11,7 @@ const ROADMAP_PROJECT_FILTERS = {
 	custom_show_in_roadmap: "Yes",
 };
 
-frappe.query_reports["Sprint Report per Scrum Master"] = {
+frappe.query_reports["Sprint Report per Business Analyst"] = {
 	"filters": [
 		{
 			"fieldname": "start_date",
@@ -85,12 +85,12 @@ frappe.query_reports["Sprint Report per Scrum Master"] = {
 			}
 		},
 		{
-			"fieldname": "scrum_master",
-			"label": __("Scrum Master"),
+			"fieldname": "business_analyst",
+			"label": __("Business Analyst"),
 			"fieldtype": "MultiSelectList",
 			"get_data": function (txt) {
 				// Only the Employees who are Project Manager on a roadmap SCRUM project.
-				return get_options_selected_first("scrum_master", txt, `${REPORT_METHOD}.scrum_master_options`);
+				return get_options_selected_first("business_analyst", txt, `${REPORT_METHOD}.business_analyst_options`);
 			}
 		}
 	],

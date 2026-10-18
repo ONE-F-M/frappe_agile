@@ -104,9 +104,9 @@
         {
             "hidden": 0,
             "is_query_report": 1,
-            "label": "Sprint Report per Scrum Master",
+            "label": "Sprint Report per Business Analyst",
             "link_count": 0,
-            "link_to": "Sprint Report per Scrum Master",
+            "link_to": "Sprint Report per Business Analyst",
             "link_type": "Report",
             "onboard": 0,
             "type": "Link"
@@ -132,7 +132,7 @@
             "type": "Link"
         }
     ],
-    "modified": "2026-09-30 12:00:00.000000",
+    "modified": "2026-10-18 12:00:00.000000",
     "modified_by": "Administrator",
     "module": "Frappe Agile",
     "name": "Frappe Agile",
@@ -144,6 +144,15 @@
     "roles": [
         {
             "role": "System Manager"
+        },
+        {
+            "role": "Process Owner"
+        },
+        {
+            "role": "Business Analyst"
+        },
+        {
+            "role": "Developer"
         }
     ],
     "sequence_id": 4.0,

@@ -1,9 +1,9 @@
 # Copyright (c) 2026, One FM and contributors
 # For license information, please see license.txt
 
-"""Sprint performance per Scrum Master.
+"""Sprint performance per Business Analyst.
 
-A Scrum Master here is an Employee set as Project Manager on a roadmap SCRUM
+A Business Analyst here is an Employee set as Project Manager on a roadmap SCRUM
 project, so the row axis comes from the Project rather than from the Sprint. The
 sprints on a row are the sprints of the projects that person manages which
 overlap the reported window by at least one day, and the money columns are those
@@ -16,6 +16,8 @@ what the person created in the reported window, whichever sprint it went to.
 """
 
 import frappe
+from frappe import _
+from frappe.query_builder.functions import Sum
 from frappe.utils import flt, getdate
 
 from frappe_agile.frappe_agile.page.roadmap_board.roadmap_board import (
@@ -41,7 +43,7 @@ def execute(filters=None):
 
 def get_columns():
 	return [
-		{"fieldname": "scrum_master", "label": "Scrum Master", "fieldtype": "Data", "width": 180},
+		{"fieldname": "business_analyst", "label": _("Business Analyst"), "fieldtype": "Data", "width": 180},
 		{"fieldname": "sprints", "label": "Sprint(s)", "fieldtype": "HTML", "width": 200},
 		{"fieldname": "sprint_start_date", "label": "Start Date", "fieldtype": "Date", "width": 150},
 		{"fieldname": "sprint_end_date", "label": "End Date", "fieldtype": "Date", "width": 150},
@@ -55,10 +57,11 @@ def get_columns():
 		{"fieldname": "rejected_points", "label": "Rejected Points", "fieldtype": "Float", "width": 140},
 		{"fieldname": "spillover_points", "label": "Spillover Points", "fieldtype": "Float", "width": 140},
 		{"fieldname": "acceptance_rate", "label": "Acceptance Rate %", "fieldtype": "Percent", "width": 150},
+		{"fieldname": "story_points_delivered", "label": _("Story Points Delivered"), "fieldtype": "Float", "width": 170},
 	]
 
 
-def get_scrum_master_projects(selected_projects=None, selected_masters=None):
+def get_business_analyst_projects(selected_projects=None, selected_masters=None):
 	"""Roadmap SCRUM projects that have a Project Manager, keyed by project.
 
 	Membership is the Roadmap board's rule and the user cannot widen it: Project
@@ -80,14 +83,14 @@ def get_scrum_master_projects(selected_projects=None, selected_masters=None):
 
 
 @frappe.whitelist()
-def scrum_master_options(txt=None):
+def business_analyst_options(txt: str | None = None):
 	"""The Employees who are Project Manager on a roadmap SCRUM project.
 
 	The filter offers only these, because nobody else can produce a row.
 	"""
 	frappe.has_permission("Project", "read", throw=True)
 
-	employees = set(get_scrum_master_projects().values())
+	employees = set(get_business_analyst_projects().values())
 	if not employees:
 		return []
 
@@ -108,11 +111,11 @@ def get_data(filters):
 		filters = {}
 
 	# ------------------------------------------------------------------
-	# 1. The Scrum Masters and the projects they manage
+	# 1. The Business Analysts and the projects they manage
 	# ------------------------------------------------------------------
-	project_master = get_scrum_master_projects(
+	project_master = get_business_analyst_projects(
 		selected_projects=as_list(filters.get("project")),
-		selected_masters=as_list(filters.get("scrum_master")),
+		selected_masters=as_list(filters.get("business_analyst")),
 	)
 	if not project_master:
 		return []
@@ -124,7 +127,7 @@ def get_data(filters):
 	if not sprints:
 		return []
 
-	# scrum master -> { sprint name -> sprint }, so a sprint is counted once
+	# business analyst -> { sprint name -> sprint }, so a sprint is counted once
 	master_sprints = {}
 	for sprint in sprints:
 		master_sprints.setdefault(project_master[sprint.project], {})[sprint.name] = sprint
@@ -146,7 +149,7 @@ def get_data(filters):
 	velocity = flt(frappe.db.get_single_value("Frappe Agile Settings", "ba_velocity"))
 
 	# ------------------------------------------------------------------
-	# 5. One row per Scrum Master, aggregated across their sprints
+	# 5. One row per Business Analyst, aggregated across their sprints
 	# ------------------------------------------------------------------
 	data = []
 
@@ -171,18 +174,13 @@ def get_data(filters):
 
 		employee = employee_map.get(master)
 		data.append({
-			"scrum_master": (employee.employee_name if employee else None) or master,
+			"business_analyst": (employee.employee_name if employee else None) or master,
 			"sprints": get_sprint_links(sprint_docs),
 			"sprint_start_date": earliest_start,
 			"sprint_end_date": latest_end,
 			"no_of_sprints": len(sprint_docs),
-			# Counted over the reported window, not the row's sprints: it answers
-			# "how much did this person raise in the period", whatever it was
-			# filed under. Falls back to the row's own range on a call with no dates.
 			"new_work_items": count_new_work_items(
-				employee.user_id if employee else None,
-				filters.get("start_date") or earliest_start,
-				filters.get("end_date") or latest_end,
+				employee.user_id if employee else None, earliest_start, latest_end
 			),
 			"days": "{0} / {1} / {2}".format(working_days, public_holidays, flt(leave_days, 2)),
 			"expected_velocity": flt(prorated_target, 1),
@@ -192,9 +190,12 @@ def get_data(filters):
 			"rejected_points": flt(rejected, 1),
 			"spillover_points": flt(spillover, 1),
 			"acceptance_rate": flt((accepted / prorated_target * 100) if prorated_target else 0.0, 2),
+			"story_points_delivered": flt(
+				sum_points_delivered(employee.user_id if employee else None, earliest_start, latest_end), 1
+			),
 		})
 
-	data.sort(key=lambda row: row.get("scrum_master") or "")
+	data.sort(key=lambda row: row.get("business_analyst") or "")
 	return data
 
 
@@ -253,12 +254,7 @@ def get_sprint_points(sprint_names):
 
 
 def count_new_work_items(user, start_date, end_date):
-	"""Work items this person created between the two dates, in any sprint or none.
-
-	Deliberately not tied to the row's sprints: an Epic in no sprint, or an item
-	filed under a project the filter left out, is still work this person raised in
-	the period, and that is what the column reports.
-	"""
+	"""Work items this person created between the two dates, in any sprint or none."""
 	if not (user and start_date and end_date):
 		return 0
 
@@ -274,6 +270,26 @@ def count_new_work_items(user, start_date, end_date):
 			],
 		},
 	)
+
+
+def sum_points_delivered(user, start_date, end_date):
+	"""Story points on this person's Done work items whose sprint lies wholly inside the dates."""
+	if not (user and start_date and end_date):
+		return 0.0
+
+	WorkItem = frappe.qb.DocType("Work Item")
+	Sprint = frappe.qb.DocType("Sprint")
+	total = (
+		frappe.qb.from_(WorkItem)
+		.join(Sprint)
+		.on(WorkItem.sprint == Sprint.name)
+		.select(Sum(WorkItem.story_points))
+		.where(WorkItem.assignee_user == user)
+		.where(WorkItem.workflow_state == "Done")
+		.where(Sprint.start_date >= start_date)
+		.where(Sprint.end_date <= end_date)
+	).run()
+	return flt(total[0][0])
 
 
 def get_sprint_links(sprint_docs):
