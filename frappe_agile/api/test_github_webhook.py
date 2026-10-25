@@ -11,6 +11,7 @@ Run with:
 import hashlib
 import hmac
 import json
+import sys
 import unittest
 from unittest.mock import ANY, MagicMock, patch
 
@@ -144,7 +145,7 @@ class TestGithubWebhookSignature(unittest.TestCase):
 		with patch("frappe.request", mock_request):
 			with patch("frappe_agile.api.github_webhook._get_webhook_secret", return_value="test-secret"):
 				# Should not raise
-				mod._verify_signature()
+				mod._verify_signature({})
 
 	def test_missing_signature_raises(self):
 		"""Missing header should raise AuthenticationError."""
@@ -156,7 +157,7 @@ class TestGithubWebhookSignature(unittest.TestCase):
 		with patch("frappe.request", mock_request):
 			with patch("frappe_agile.api.github_webhook._get_webhook_secret", return_value="test-secret"):
 				with self.assertRaises(frappe.exceptions.AuthenticationError):
-					mod._verify_signature()
+					mod._verify_signature({})
 
 	def test_wrong_signature_raises(self):
 		"""A tampered payload should raise AuthenticationError."""
@@ -171,7 +172,7 @@ class TestGithubWebhookSignature(unittest.TestCase):
 		with patch("frappe.request", mock_request):
 			with patch("frappe_agile.api.github_webhook._get_webhook_secret", return_value="test-secret"):
 				with self.assertRaises(frappe.exceptions.AuthenticationError):
-					mod._verify_signature()
+					mod._verify_signature({})
 
 	def test_no_secret_configured_raises(self):
 		"""When no secret is configured anywhere, should raise AuthenticationError."""
@@ -183,7 +184,7 @@ class TestGithubWebhookSignature(unittest.TestCase):
 		with patch("frappe.request", mock_request):
 			with patch("frappe_agile.api.github_webhook._get_webhook_secret", return_value=None):
 				with self.assertRaises(frappe.exceptions.AuthenticationError):
-					mod._verify_signature()
+					mod._verify_signature({})
 
 
 class TestExtractWiName(unittest.TestCase):
@@ -205,9 +206,10 @@ class TestExtractWiName(unittest.TestCase):
 		result = self._mod()._extract_wi_name("", "", "feature/WI-000001-add-login")
 		self.assertEqual(result, "WI-000001")
 
-	def test_priority_body_over_branch(self):
-		result = self._mod()._extract_wi_name("WI-000099 in body", "", "WI-000001-branch")
-		self.assertEqual(result, "WI-000099")
+	def test_priority_branch_over_body(self):
+		"""_extract_wi_name returns the first match in argument order (branch, title, body)."""
+		result = self._mod()._extract_wi_name("WI-000001-branch", "", "WI-000099 in body")
+		self.assertEqual(result, "WI-000001")
 
 	def test_returns_none_when_not_found(self):
 		result = self._mod()._extract_wi_name("no match here", "also nothing", "fix-typo")
@@ -536,6 +538,259 @@ class TestHandlePush(unittest.TestCase):
 		mock_apply.assert_not_called()
 		mock_log.assert_called_once()
 		self.assertIn("WI-000099", mock_log.call_args[1].get("message", ""))
+
+
+# ---------------------------------------------------------------------------
+# Branch-first routing, response statuses, traceable Error Logs
+# ---------------------------------------------------------------------------
+
+
+def _mock_request(payload: dict, event: str = "pull_request", delivery_id: str = "delivery-abc-123"):
+	req = MagicMock()
+	req.headers = {"X-GitHub-Event": event, "X-GitHub-Delivery": delivery_id}
+	req.data = json.dumps(payload).encode("utf-8")
+	return req
+
+
+def _full_pr_payload(branch: str, title: str, body: str, action: str = "opened") -> dict:
+	payload = _build_pr_payload(action=action, body=body, title=title, branch=branch)
+	payload["pull_request"]["number"] = 17
+	payload["repository"] = {"full_name": "one-fm/frappe_agile"}
+	payload["sender"] = {"login": "octocat"}
+	return payload
+
+
+def _mock_one_bpmn(send_message: MagicMock) -> dict:
+	"""sys.modules entries so `from one_bpmn.api.instance_api import send_message` is mocked."""
+	instance_api = MagicMock()
+	instance_api.send_message = send_message
+	return {
+		"one_bpmn": MagicMock(),
+		"one_bpmn.api": MagicMock(),
+		"one_bpmn.api.instance_api": instance_api,
+	}
+
+
+class TestBranchFirstRouting(unittest.TestCase):
+	"""PR events are routed by branch, then title, then body."""
+
+	def _mod(self):
+		from frappe_agile.api import github_webhook
+		return github_webhook
+
+	def _wi(self, n: int) -> str:
+		return "WI-" + str(n).zfill(6)
+
+	def test_branch_wins_over_body_for_pull_request(self):
+		wi_a, wi_b = self._wi(11), self._wi(22)
+		payload = _full_pr_payload(f"feature/{wi_a}-x", "no id here", f"Mentions {wi_b}")
+		self.assertEqual(self._mod()._extract_wi_from_payload("pull_request", payload), wi_a)
+
+	def test_title_wins_over_body_when_branch_has_no_id(self):
+		wi_a, wi_b = self._wi(11), self._wi(22)
+		payload = _full_pr_payload("feature/plain", f"[{wi_a}] fix", f"Mentions {wi_b}")
+		self.assertEqual(self._mod()._extract_wi_from_payload("pull_request", payload), wi_a)
+
+	def test_body_used_when_branch_and_title_have_no_id(self):
+		wi_b = self._wi(22)
+		payload = _full_pr_payload("feature/plain", "plain title", f"Mentions {wi_b}")
+		self.assertEqual(self._mod()._extract_wi_from_payload("pull_request", payload), wi_b)
+
+	def test_branch_wins_over_body_for_review(self):
+		wi_a, wi_b = self._wi(11), self._wi(22)
+		payload = _build_review_payload("approved", body=f"Mentions {wi_b}", branch=f"feature/{wi_a}-x")
+		self.assertEqual(self._mod()._extract_wi_from_payload("pull_request_review", payload), wi_a)
+
+	def test_message_goes_to_branch_work_item(self):
+		"""End to end through the handler: delivery targets the branch's Work Item."""
+		mod = self._mod()
+		wi_a, wi_b = self._wi(11), self._wi(22)
+		payload = _full_pr_payload(f"feature/{wi_a}-x", "title", f"Mentions {wi_b}")
+		with patch("frappe.request", _mock_request(payload)), patch.object(
+			mod, "_verify_signature"
+		), patch.object(mod, "_deliver_bpmn_message", return_value={"status": "delivered"}) as deliver:
+			mod.handle_github_webhook()
+		self.assertEqual(deliver.call_args[0][0], wi_a)
+
+
+class TestWebhookResponseStatuses(unittest.TestCase):
+	"""One test per response status."""
+
+	def _mod(self):
+		from frappe_agile.api import github_webhook
+		return github_webhook
+
+	def _wi(self) -> str:
+		return "WI-" + str(5001).zfill(6)
+
+	def _deliver(self, exists, send_message=None, delivery=None):
+		mod = self._mod()
+		send_message = send_message or MagicMock(return_value={})
+		response = {}
+		with patch("frappe.db.exists", side_effect=exists), patch("frappe.set_user"), patch(
+			"frappe.session", MagicMock(user="Guest")
+		), patch("frappe.local.response", response, create=True), patch(
+			"frappe.log_error"
+		) as log, patch(
+			"frappe.get_traceback", return_value="TRACEBACK-TEXT"
+		), patch.dict(sys.modules, _mock_one_bpmn(send_message)):
+			body = mod._deliver_bpmn_message(
+				self._wi(), "github:pull_request:opened", {"a": 1}, delivery or {"delivery_id": "d-1"}
+			)
+		return body, response, log, send_message
+
+	@staticmethod
+	def _exists_ok(doctype, filters=None):
+		return "found"
+
+	def test_delivered(self):
+		sm = MagicMock(return_value={"instance": "INST-1", "caught": True})
+		body, response, log, _ = self._deliver(self._exists_ok, sm)
+		self.assertEqual(body["status"], "delivered")
+		self.assertEqual(body["work_item"], self._wi())
+		self.assertEqual(body["message_name"], "github:pull_request:opened")
+		self.assertEqual(body["instance"], "INST-1")
+		self.assertNotIn("http_status_code", response)
+		log.assert_not_called()
+
+	def test_not_waiting(self):
+		sm = MagicMock(return_value={"instance": "INST-1", "caught": False})
+		body, response, log, _ = self._deliver(self._exists_ok, sm)
+		self.assertEqual(body["status"], "not_waiting")
+		self.assertEqual(body["instance"], "INST-1")
+		self.assertEqual(body["work_item"], self._wi())
+		self.assertNotIn("http_status_code", response)
+		log.assert_not_called()
+
+	def test_active_instance_check_uses_expected_filters(self):
+		calls = []
+
+		def exists(doctype, filters=None):
+			calls.append((doctype, filters))
+			return "found"
+
+		self._deliver(exists, MagicMock(return_value={"instance": "I", "caught": True}))
+		self.assertIn(
+			(
+				"BPMN Process Instance",
+				{"context_doctype": "Work Item", "context_docname": self._wi(), "status": "Active"},
+			),
+			calls,
+		)
+
+	def test_work_item_not_found(self):
+		sm = MagicMock()
+		body, response, log, _ = self._deliver(lambda doctype, filters=None: None, sm)
+		self.assertEqual(body["status"], "work_item_not_found")
+		self.assertEqual(body["work_item"], self._wi())
+		self.assertIn("message_name", body)
+		self.assertEqual(response["http_status_code"], 404)
+		log.assert_called_once()
+		sm.assert_not_called()
+
+	def test_no_active_instance(self):
+		def exists(doctype, filters=None):
+			return "found" if doctype == "Work Item" else None
+
+		sm = MagicMock()
+		body, response, log, _ = self._deliver(exists, sm)
+		self.assertEqual(body["status"], "no_active_instance")
+		self.assertEqual(body["work_item"], self._wi())
+		self.assertIn("message_name", body)
+		self.assertEqual(response["http_status_code"], 500)
+		log.assert_called_once()
+		self.assertEqual(log.call_args[1]["reference_name"], self._wi())
+		sm.assert_not_called()
+
+	def test_failed(self):
+		sm = MagicMock(side_effect=RuntimeError("boom"))
+		body, response, log, _ = self._deliver(self._exists_ok, sm)
+		self.assertEqual(body["status"], "failed")
+		self.assertEqual(body["error"], "boom")
+		self.assertEqual(body["work_item"], self._wi())
+		self.assertEqual(response["http_status_code"], 500)
+		log.assert_called_once()
+		self.assertIn("TRACEBACK-TEXT", log.call_args[1]["message"])
+
+	def test_no_work_item(self):
+		mod = self._mod()
+		payload = _full_pr_payload("feature/plain-branch", "Plain title", "no reference")
+		with patch("frappe.request", _mock_request(payload)), patch.object(
+			mod, "_verify_signature"
+		), patch("frappe.log_error") as log:
+			body = mod.handle_github_webhook()
+		self.assertEqual(body["status"], "no_work_item")
+		log.assert_called_once()
+		message = log.call_args[1]["message"]
+		self.assertIn("feature/plain-branch", message)
+		self.assertIn("Plain title", message)
+
+
+class TestWebhookErrorLogDetails(unittest.TestCase):
+	"""Error Logs name the delivery and are linked to the Work Item."""
+
+	def _mod(self):
+		from frappe_agile.api import github_webhook
+		return github_webhook
+
+	def test_error_log_has_delivery_id_repository_and_reference(self):
+		mod = self._mod()
+		wi_name = "WI-" + str(77).zfill(6)
+		payload = _full_pr_payload(f"feature/{wi_name}-x", "title", "body")
+		response = {}
+		with patch("frappe.request", _mock_request(payload, delivery_id="delivery-xyz-789")), patch.object(
+			mod, "_verify_signature"
+		), patch("frappe.db.exists", side_effect=lambda doctype, filters=None: "x" if doctype == "Work Item" else None), patch(
+			"frappe.set_user"
+		), patch("frappe.session", MagicMock(user="Guest")), patch(
+			"frappe.local.response", response, create=True
+		), patch("frappe.log_error") as log, patch.dict(
+			sys.modules, _mock_one_bpmn(MagicMock())
+		):
+			body = mod.handle_github_webhook()
+
+		self.assertEqual(body["status"], "no_active_instance")
+		log.assert_called_once()
+		kwargs = log.call_args[1]
+		self.assertIn("delivery-xyz-789", kwargs["message"])
+		self.assertIn("one-fm/frappe_agile", kwargs["message"])
+		self.assertIn("octocat", kwargs["message"])
+		self.assertEqual(kwargs["reference_doctype"], "Work Item")
+		self.assertEqual(kwargs["reference_name"], wi_name)
+
+
+class TestVerifySignatureDeferredLog(unittest.TestCase):
+	"""Signature Error Logs survive the rollback of the failed request."""
+
+	def _mod(self):
+		from frappe_agile.api import github_webhook
+		return github_webhook
+
+	def test_signature_mismatch_logs_with_defer_insert(self):
+		mod = self._mod()
+		req = MagicMock()
+		req.headers = {"X-Hub-Signature-256": "sha256=deadbeef", "X-GitHub-Delivery": "delivery-sig-1"}
+		req.data = b"{}"
+		with patch("frappe.request", req), patch.object(
+			mod, "_get_webhook_secret", return_value="test-secret"
+		), patch("frappe.log_error") as log:
+			with self.assertRaises(frappe.exceptions.AuthenticationError):
+				mod._verify_signature({"delivery_id": "delivery-sig-1"})
+		log.assert_called_once()
+		self.assertIs(log.call_args[1].get("defer_insert"), True)
+		self.assertIn("delivery-sig-1", log.call_args[1]["message"])
+
+	def test_configuration_error_logs_with_defer_insert(self):
+		mod = self._mod()
+		req = MagicMock()
+		req.headers = {"X-GitHub-Delivery": "delivery-cfg-1"}
+		req.data = b"{}"
+		with patch("frappe.request", req), patch.object(
+			mod, "_get_webhook_secret", return_value=None
+		), patch("frappe.log_error") as log:
+			with self.assertRaises(frappe.exceptions.AuthenticationError):
+				mod._verify_signature({"delivery_id": "delivery-cfg-1"})
+		self.assertIs(log.call_args[1].get("defer_insert"), True)
 
 
 if __name__ == "__main__":
