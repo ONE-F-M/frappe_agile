@@ -96,7 +96,6 @@
    "label": "Status",
    "options": "Draft\nOpen\nIn Progress\nPR Created\nPending Review\nChanges Requested\nIn Staging\nRejected\nDone",
    "default": "Draft",
-   "in_standard_filter": 1,
    "hidden": 1
   },
   {
