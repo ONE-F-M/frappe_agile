@@ -38,7 +38,7 @@ that project/window, named from the project's Sprint Prefix.
 
 import frappe
 from frappe import _
-from frappe.utils import add_days, cint, flt, getdate
+from frappe.utils import add_days, cint, flt, get_fullname, getdate
 
 # A work item is considered "accepted" when it reaches this status.
 ACCEPTED_STATUS = "Done"
@@ -69,7 +69,14 @@ from frappe_agile.frappe_agile.doctype.sprint.sprint import (  # noqa: E402
 
 
 @frappe.whitelist()
-def get_roadmap_data(project_status=None, lane=None, sprint_status=None, search=None, future_count=None):
+def get_roadmap_data(
+	project_status=None,
+	lane=None,
+	sprint_status=None,
+	search=None,
+	future_count=None,
+	assignee: str | None = None,
+):
 	"""Return the roadmap grid, one row per selected active SCRUM Project.
 
 	The board is empty until the Projects filter names something: an unset filter
@@ -130,7 +137,7 @@ def get_roadmap_data(project_status=None, lane=None, sprint_status=None, search=
 	work_items = (
 		frappe.get_list(
 			"Work Item",
-			filters={"sprint": ["in", sprint_names]},
+			filters=_with_assignee_filter({"sprint": ["in", sprint_names]}, assignee),
 			fields=[
 				"name",
 				"title",
@@ -258,7 +265,7 @@ def get_backlog_statuses():
 
 
 @frappe.whitelist()
-def get_unassigned_work_items(limit=200, project_status=None, lane=None):
+def get_unassigned_work_items(limit=200, project_status=None, lane=None, assignee: str | None = None):
 	"""Return Work Items not attached to any Sprint, newest-modified first.
 
 	These populate the Roadmap's backlog panel so a Business Analyst can drag
@@ -289,7 +296,7 @@ def get_unassigned_work_items(limit=200, project_status=None, lane=None):
 
 	rows = frappe.get_list(
 		"Work Item",
-		filters=filters,
+		filters=_with_assignee_filter(filters, assignee),
 		or_filters=[["project", "in", projects], ["project", "is", "not set"]],
 		fields=[
 			"name",
@@ -335,6 +342,49 @@ def get_scrum_projects():
 		{"name": p.name, "label": p.project_name or p.name, "status": p.status}
 		for p in _scrum_projects()
 	]
+
+
+@frappe.whitelist()
+def get_project_assignees(project_status: str | None = None, lane: str | None = None):
+	"""Users of the selected projects: their Users table plus everyone assigned a Work Item there."""
+	frappe.has_permission("Work Item", "read", throw=True)
+
+	if not _has_project_selection(project_status, lane):
+		return []
+	projects = [p.name for p in _scrum_projects(project_status=project_status, lane=lane)]
+	if not projects:
+		return []
+
+	users = set(
+		frappe.get_list(
+			"Project User", parent_doctype="Project", filters={"parent": ["in", projects]}, pluck="user"
+		)
+	)
+	in_scope = [["project", "in", projects]]
+	sprints = frappe.get_list(
+		"Sprint", filters={"project": ["in", projects]}, pluck="name", limit_page_length=0
+	)
+	if sprints:
+		in_scope.append(["sprint", "in", sprints])
+	users.update(
+		frappe.get_list(
+			"Work Item",
+			filters={"assignee_user": ["is", "set"]},
+			or_filters=in_scope,
+			pluck="assignee_user",
+			limit_page_length=0,
+		)
+	)
+	options = [{"value": user, "label": get_fullname(user)} for user in users]
+	return sorted(options, key=lambda option: option["label"].lower())
+
+
+def _with_assignee_filter(filters: dict, assignee) -> dict:
+	"""Narrow Work Item filters to the picked assignees; an empty pick leaves them as they are."""
+	assignees = _parse_lane_filter(assignee)
+	if assignees:
+		filters["assignee_user"] = ["in", assignees]
+	return filters
 
 
 def _scrum_projects(project_status=None, lane=None):

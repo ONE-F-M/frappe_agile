@@ -12,6 +12,7 @@ that mean "the whole board" tick every status via `_board`.
 from __future__ import annotations
 
 import json
+import re
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
@@ -24,6 +25,7 @@ from frappe_agile.frappe_agile.page.roadmap_board.roadmap_board import (
 	DEFAULT_BACKLOG_STATUSES,
 	get_backlog_statuses,
 	get_scrum_projects,
+	get_project_assignees,
 	get_unassigned_work_items,
 	move_work_item,
 )
@@ -498,6 +500,69 @@ class TestRoadmapBoard(FrappeTestCase):
 
 		self.assertFalse(items[wi]["assigned"])
 
+	def test_the_assignee_filter_shows_only_their_work_items(self):
+		start = align_to_sprint_start(getdate())
+		sprint = self._make_sprint("OPEN", start)
+		other = _other_user()
+		mine = self._make_work_item(f"{TEST_PREFIX} mine", sprint, assignee_user="Administrator")
+		theirs = self._make_work_item(f"{TEST_PREFIX} theirs", sprint, assignee_user=other)
+		nobodys = self._make_work_item(f"{TEST_PREFIX} nobody", sprint)
+
+		data = get_roadmap_data(
+			lane=json.dumps([self.projects["OPEN"]]), assignee=json.dumps(["Administrator"])
+		)
+		cell = data["cells"][f"{self.projects['OPEN']}::{getdate(start).isoformat()}"]
+		names = {wi["name"] for wi in cell["work_items"]}
+
+		self.assertIn(mine, names)
+		self.assertNotIn(theirs, names)
+		self.assertNotIn(nobodys, names)
+
+	def test_several_assignees_and_no_assignee_filter(self):
+		start = align_to_sprint_start(getdate())
+		sprint = self._make_sprint("OPEN", start)
+		other = _other_user()
+		mine = self._make_work_item(f"{TEST_PREFIX} mine", sprint, assignee_user="Administrator")
+		theirs = self._make_work_item(f"{TEST_PREFIX} theirs", sprint, assignee_user=other)
+		nobodys = self._make_work_item(f"{TEST_PREFIX} nobody", sprint)
+
+		both = get_roadmap_data(
+			lane=json.dumps([self.projects["OPEN"]]), assignee=json.dumps(["Administrator", other])
+		)
+		_, everyone = self._cell_items("OPEN", start)
+		cell = both["cells"][f"{self.projects['OPEN']}::{getdate(start).isoformat()}"]
+
+		self.assertEqual({wi["name"] for wi in cell["work_items"]}, {mine, theirs})
+		self.assertEqual(set(everyone), {mine, theirs, nobodys})
+
+	def test_assignee_options_are_the_picked_projects_users(self):
+		start = align_to_sprint_start(getdate())
+		other = _other_user()
+		project = frappe.get_doc("Project", self.projects["OPEN"])
+		project.append("users", {"user": other})
+		project.save()
+		self._make_work_item(
+			f"{TEST_PREFIX} mine", self._make_sprint("OPEN", start), assignee_user="Administrator"
+		)
+		self._make_work_item(
+			f"{TEST_PREFIX} elsewhere", self._make_sprint("COMPLETED", start), assignee_user="Guest"
+		)
+
+		offered = {u["value"] for u in get_project_assignees(lane=json.dumps([self.projects["OPEN"]]))}
+
+		self.assertEqual(offered, {"Administrator", other})
+
+	def test_no_assignee_options_without_a_project_selection(self):
+		self.assertEqual(get_project_assignees(project_status="[]", lane="[]"), [])
+
+	def test_assignee_options_need_work_item_read(self):
+		frappe.set_user("Guest")
+		try:
+			with self.assertRaises(frappe.PermissionError):
+				get_project_assignees(lane=json.dumps([self.projects["OPEN"]]))
+		finally:
+			frappe.set_user("Administrator")
+
 	# ------------------------------------------------------------------
 	# Create missing sprints
 	# ------------------------------------------------------------------
@@ -943,3 +1008,36 @@ class TestRoadmapBacklog(FrappeTestCase):
 			frappe.db.get_single_value("Frappe Agile Settings", "backlog_status"),
 			"Draft, In Progress",
 		)
+
+	def test_the_assignee_filter_narrows_the_backlog(self):
+		mine = self._unsprinted("mine")
+		theirs = self._unsprinted("theirs")
+		frappe.db.set_value("Work Item", mine, "assignee_user", "Administrator", update_modified=False)
+		frappe.db.set_value("Work Item", theirs, "assignee_user", _other_user(), update_modified=False)
+
+		names = self._backlog_names(assignee=json.dumps(["Administrator"]))
+
+		self.assertIn(mine, names)
+		self.assertNotIn(theirs, names)
+
+
+def _other_user():
+	"""An enabled System User other than Administrator, to assign the second Work Item to."""
+	return frappe.db.get_value(
+		"User", {"enabled": 1, "user_type": "System User", "name": ["not in", ["Administrator", "Guest"]]}
+	)
+
+
+class TestRoadmapAddWorkItemButton(FrappeTestCase):
+	"""The "+" next to a sprint is visible without hovering; the page decides where it is drawn."""
+
+	def test_the_add_button_is_not_hidden_until_hover(self):
+		path = frappe.get_app_path(
+			"frappe_agile", "frappe_agile", "page", "roadmap_board", "roadmap_board.css"
+		)
+		with open(path) as f:
+			css = f.read()
+		rule = re.search(r"(?:^|\n)\.rm-add-wi\s*\{([^}]*)\}", css)
+		self.assertIsNotNone(rule, "the .rm-add-wi rule is missing")
+		self.assertNotRegex(rule.group(1), r"opacity\s*:\s*0\b")
+		self.assertNotIn(".rm-cell:hover .rm-add-wi", css)
