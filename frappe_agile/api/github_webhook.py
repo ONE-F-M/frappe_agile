@@ -22,7 +22,7 @@ Payload URL:
 GitHub App/Org Settings → Webhooks
 	Content type : application/json
 	Secret       : <value stored in Frappe Agile Settings → GitHub Webhook Secret>
-	Events       : Pull requests, Pull request reviews, Pushes
+	Events       : Pull requests, Pull request reviews
 
 Message name convention
 -----------------------
@@ -92,17 +92,18 @@ def handle_github_webhook():
 	The webhook handler contains **no business logic** — all routing and
 	state transitions are defined in the BPMN process diagram.
 	"""
-	_verify_signature()
+	delivery = _build_delivery_details()
+	_verify_signature(delivery)
 
 	event_type = frappe.request.headers.get("X-GitHub-Event", "")
 	try:
 		payload = json.loads(frappe.request.data)
 	except (json.JSONDecodeError, AttributeError) as exc:
-		frappe.log_error(
-			title="GitHub Webhook – malformed JSON payload",
-			message=str(exc),
-		)
+		_log_webhook_error("GitHub Webhook - malformed JSON payload", str(exc), delivery, defer_insert=True)
 		frappe.throw(_("Invalid JSON payload"), frappe.ValidationError)
+
+	# Signature is verified: enrich the delivery details once, reuse everywhere.
+	delivery = _build_delivery_details(payload)
 
 	# ── 1. Derive message name ───────────────────────────────────────────
 	message_name = _derive_message_name(event_type, payload)
@@ -113,12 +114,18 @@ def handle_github_webhook():
 	# ── 2. Extract Work Item ID ──────────────────────────────────────────
 	wi_name = _extract_wi_from_payload(event_type, payload)
 	if not wi_name:
-		frappe.log_error(
-			title=f"GitHub Webhook – no Work Item ID found ({event_type})",
-			message=(
+		pr = payload.get("pull_request", {})
+		searched_branch = pr.get("head", {}).get("ref") or ""
+		searched_title = pr.get("title") or ""
+		_log_webhook_error(
+			f"GitHub Webhook - no Work Item ID found ({event_type})",
+			(
 				f"Event '{message_name}' — could not find a WI-XXXXXX "
-				"reference in the PR body, title, branch name, or commit messages."
+				"reference in the PR branch name, title, or body (searched in that order).\n"
+				f"Branch searched: '{searched_branch}'\n"
+				f"Title searched: '{searched_title}'"
 			),
+			delivery,
 		)
 		return {"status": "no_work_item"}
 
@@ -126,9 +133,54 @@ def handle_github_webhook():
 	msg_payload = _build_message_payload(event_type, payload)
 
 	# ── 4. Deliver to BPMN engine ────────────────────────────────────────
-	_deliver_bpmn_message(wi_name, message_name, msg_payload)
+	return _deliver_bpmn_message(wi_name, message_name, msg_payload, delivery)
 
-	return {"status": "ok"}
+
+# ---------------------------------------------------------------------------
+# Delivery details / Error Log helpers
+# ---------------------------------------------------------------------------
+
+
+def _build_delivery_details(payload: dict | None = None) -> dict:
+	"""
+	Describe the GitHub delivery (headers, plus payload fields when given)
+	so every Error Log can name the exact delivery.
+	"""
+	details = {
+		"delivery_id": frappe.request.headers.get("X-GitHub-Delivery", "") or "",
+		"event": frappe.request.headers.get("X-GitHub-Event", "") or "",
+	}
+	if payload:
+		pr = payload.get("pull_request") or {}
+		details.update(
+			{
+				"action": payload.get("action", "") or "",
+				"repository": (payload.get("repository") or {}).get("full_name", "") or "",
+				"pr_number": pr.get("number", "") or "",
+				"pr_url": pr.get("html_url", "") or "",
+				"sender": (payload.get("sender") or {}).get("login", "") or "",
+			}
+		)
+	return details
+
+
+def _log_webhook_error(title: str, message: str, delivery: dict, wi_name: str | None = None, **kwargs):
+	"""Write an Error Log that names the delivery, linked to the Work Item when known."""
+	lines = [
+		f"GitHub delivery id: {delivery.get('delivery_id', '')}",
+		f"Event: {delivery.get('event', '')}",
+		f"Action: {delivery.get('action', '')}",
+		f"Repository: {delivery.get('repository', '')}",
+		f"Pull request number: {delivery.get('pr_number', '')}",
+		f"Pull request URL: {delivery.get('pr_url', '')}",
+		f"Sender: {delivery.get('sender', '')}",
+	]
+	log_args = {"title": title, "message": f"{message}\n\n" + "\n".join(lines)}
+	if wi_name:
+		log_args["reference_doctype"] = "Work Item"
+		log_args["reference_name"] = wi_name
+	log_args.update(kwargs)
+	frappe.log_error(**log_args)
 
 
 # ---------------------------------------------------------------------------
@@ -185,15 +237,15 @@ def _extract_wi_from_payload(event_type: str, payload: dict) -> str | None:
 	"""
 	Extract the Work Item ID from the appropriate fields based on event type.
 
-	- pull_request / pull_request_review → PR body, title, branch name
+	- pull_request / pull_request_review → PR branch name, title, body
 	- push → commit messages, branch name
 	"""
 	if event_type in ("pull_request", "pull_request_review"):
 		pr = payload.get("pull_request", {})
 		return _extract_wi_name(
-			pr.get("body") or "",
-			pr.get("title") or "",
 			pr.get("head", {}).get("ref") or "",
+			pr.get("title") or "",
+			pr.get("body") or "",
 		)
 	elif event_type == "push":
 		ref = payload.get("ref", "")
@@ -279,26 +331,43 @@ def replay_events(work_item: str, events: list):
 # ---------------------------------------------------------------------------
 
 
-def _deliver_bpmn_message(wi_name: str, message_name: str, payload: dict):
+def _deliver_bpmn_message(wi_name: str, message_name: str, payload: dict, delivery: dict | None = None) -> dict:
 	"""
-	Deliver a BPMN message to the active process instance for a Work Item.
-
-	Best-effort delivery — if there is no active BPMN instance or no task
-	is waiting for this message, the error is logged and the function
-	returns gracefully.
-
-	Runs as Administrator since webhooks arrive without a Frappe session.
+	Deliver a BPMN message to the Work Item's active instance as Administrator
+	and return the response body (delivered, not_waiting, work_item_not_found,
+	no_active_instance, failed); 404/500 are set via frappe.local.response.
 	"""
+	delivery = delivery or {}
+	body = {"work_item": wi_name, "message_name": message_name}
+
 	if not frappe.db.exists("Work Item", wi_name):
-		frappe.log_error(
-			title=f"GitHub Webhook – Work Item not found",
-			message=f"Work Item '{wi_name}' does not exist. Message '{message_name}' not delivered.",
+		_log_webhook_error(
+			"GitHub Webhook - Work Item not found",
+			f"Work Item '{wi_name}' does not exist. Message '{message_name}' not delivered.",
+			delivery,
 		)
-		return
+		frappe.local.response["http_status_code"] = 404
+		return {"status": "work_item_not_found", **body}
 
 	original_user = frappe.session.user
 	try:
 		frappe.set_user("Administrator")
+
+		instance = frappe.db.exists(
+			"BPMN Process Instance",
+			{"context_doctype": "Work Item", "context_docname": wi_name, "status": "Active"},
+		)
+		if not instance:
+			_log_webhook_error(
+				"GitHub Webhook - No active BPMN instance found",
+				f"Work Item '{wi_name}' has no active BPMN process instance. "
+				f"Message '{message_name}' not delivered.",
+				delivery,
+				wi_name,
+			)
+			frappe.local.response["http_status_code"] = 500
+			return {"status": "no_active_instance", **body}
+
 		from one_bpmn.api.instance_api import send_message
 
 		result = send_message(
@@ -307,16 +376,20 @@ def _deliver_bpmn_message(wi_name: str, message_name: str, payload: dict):
 			context_docname=wi_name,
 			payload=json.dumps(payload),
 		)
-		print(f"GitHub Webhook → BPMN: '{message_name}' → {wi_name} → {result.get('status', '?')}")
-	except Exception:
-		# Best-effort: log and continue.
-		frappe.log_error(
-			title=f"GitHub Webhook – BPMN message delivery failed",
-			message=(
-				f"Message '{message_name}' to Work Item '{wi_name}' failed.\n"
-				f"{frappe.get_traceback()}"
-			),
+		return {
+			"status": "delivered" if result.get("caught") else "not_waiting",
+			**body,
+			"instance": result["instance"],
+		}
+	except Exception as exc:
+		_log_webhook_error(
+			"GitHub Webhook - BPMN message delivery failed",
+			f"Message '{message_name}' to Work Item '{wi_name}' failed.\n{frappe.get_traceback()}",
+			delivery,
+			wi_name,
 		)
+		frappe.local.response["http_status_code"] = 500
+		return {"status": "failed", **body, "error": str(exc)}
 	finally:
 		frappe.set_user(original_user)
 
@@ -352,23 +425,22 @@ def _get_webhook_secret() -> str | None:
 	return frappe.conf.get("github_webhook_secret")
 
 
-def _verify_signature():
+def _verify_signature(delivery: dict):
 	"""
-	Validate the X-Hub-Signature-256 header using HMAC-SHA256.
-
-	The secret is resolved via :func:`_get_webhook_secret` (settings first,
-	then site_config.json fallback).
-	Raises ``frappe.AuthenticationError`` if verification fails.
+	Validate X-Hub-Signature-256 (HMAC-SHA256); raise AuthenticationError on failure.
+	Error Logs use defer_insert=True so they survive the rollback of the failed request.
 	"""
 	secret = _get_webhook_secret()
 	if not secret:
-		frappe.log_error(
-			title="GitHub Webhook – configuration error",
-			message=(
+		_log_webhook_error(
+			"GitHub Webhook - configuration error",
+			(
 				"GitHub Webhook Secret is not configured. "
 				"Set it in Frappe Agile Settings → GitHub Integration → GitHub Webhook Secret, "
 				"or add 'github_webhook_secret' to site_config.json (legacy)."
 			),
+			delivery,
+			defer_insert=True,
 		)
 		frappe.throw(
 			_(
@@ -381,6 +453,12 @@ def _verify_signature():
 
 	signature_header = frappe.request.headers.get("X-Hub-Signature-256", "")
 	if not signature_header.startswith("sha256="):
+		_log_webhook_error(
+			"GitHub Webhook - signature mismatch",
+			"Missing or malformed X-Hub-Signature-256 header.",
+			delivery,
+			defer_insert=True,
+		)
 		frappe.throw(
 			_("Missing or malformed X-Hub-Signature-256 header."),
 			frappe.AuthenticationError,
@@ -396,15 +474,17 @@ def _verify_signature():
 
 	if not hmac.compare_digest(received_sig, expected_sig):
 		# Log only that a mismatch occurred; avoid logging full digest values.
-		frappe.log_error(
-			title="GitHub Webhook – signature mismatch",
-			message=(
+		_log_webhook_error(
+			"GitHub Webhook - signature mismatch",
+			(
 				f"Signature mismatch for incoming webhook request "
 				f"(received prefix: sha256={received_sig[:8]}...). "
 				"Verify that the webhook secret in Frappe Agile Settings "
 				"(or 'github_webhook_secret' in site_config.json if using legacy fallback) "
 				"matches the secret configured in GitHub."
 			),
+			delivery,
+			defer_insert=True,
 		)
 		frappe.throw(
 			_("GitHub webhook signature verification failed."),
