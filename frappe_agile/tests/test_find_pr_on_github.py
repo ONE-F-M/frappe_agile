@@ -102,7 +102,7 @@ class TestFindPrOnGithub(FrappeTestCase):
 		).insert(ignore_permissions=True)
 
 	def test_the_script_passes_the_engines_permission_screen(self):
-		from one_bpmn.one_bpmn.engine import _check_script_permissions
+		from processa.processa_engine.engine.script_engine import _check_script_permissions
 
 		_check_script_permissions(self.script, SCRIPT)
 
@@ -315,7 +315,7 @@ class TestFindPrOnGithub(FrappeTestCase):
 
 	def test_a_new_attempt_is_announced_on_the_work_item_with_the_last_failure(self):
 		failed = frappe.get_doc({
-			"doctype": "Agent Sandbox Run", "state": "failed", "target_app": "one_bpmn", "work_item": self.work_item,
+			"doctype": "Agent Sandbox Run", "state": "failed", "target_app": "processa", "work_item": self.work_item,
 			"failure_class": "code", "error_message": "AssertionError: 2 != 3",
 		}).insert(ignore_permissions=True)
 		self.assertTrue(failed.name)
@@ -337,7 +337,7 @@ class TestFindPrOnGithub(FrappeTestCase):
 		self.assertEqual([c for c in self._attempt_comments() if "Attempt" in c], [])
 
 	def test_a_found_pull_request_gets_its_acceptance_criteria_published(self):
-		with patch("one_bpmn.one_bpmn.connectors.agent_criteria.publish_criteria", return_value={"criteria_unmet": ["AC2"]}) as publish:
+		with patch("processa.agents_sandbox.criteria.publish_criteria", return_value={"criteria_unmet": ["AC2"]}) as publish:
 			result = self._run(pulls=[_pull()])
 		publish.assert_called_once()
 		self.assertEqual(publish.call_args.args[0], self.work_item)
@@ -345,13 +345,13 @@ class TestFindPrOnGithub(FrappeTestCase):
 		self.assertEqual(result["criteria_unmet"], ["AC2"])
 
 	def test_a_publishing_failure_is_reported_and_does_not_lose_the_pull_request(self):
-		with patch("one_bpmn.one_bpmn.connectors.agent_criteria.publish_criteria", side_effect=Exception("422 body too long")):
+		with patch("processa.agents_sandbox.criteria.publish_criteria", side_effect=Exception("422 body too long")):
 			result = self._run(pulls=[_pull()])
 		self.assertEqual(result["fallback_outcome"], "pr_found")
 		self.assertIn("422", result["criteria_error"])
 
 	def test_no_pull_request_publishes_nothing(self):
-		with patch("one_bpmn.one_bpmn.connectors.agent_criteria.publish_criteria") as publish:
+		with patch("processa.agents_sandbox.criteria.publish_criteria") as publish:
 			self._run(pulls=[])
 		publish.assert_not_called()
 
