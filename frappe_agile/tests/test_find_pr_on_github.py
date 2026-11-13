@@ -104,7 +104,7 @@ class TestFindPrOnGithub(FrappeTestCase):
 	def test_the_script_passes_the_engines_permission_screen(self):
 		from processa.processa_engine.engine.script_engine import _check_script_permissions
 
-		_check_script_permissions(self.script, SCRIPT)
+		_check_script_permissions(self.script, SCRIPT, frozenset({"frappe.enqueue"}))
 
 	def test_an_open_pull_request_is_found_with_the_webhook_keys(self):
 		result = self._run(pulls=[_pull(reviewers=["reviewer-one"])])
