@@ -4,12 +4,10 @@
 target_app Link field always offers whatever repos actually exist instead
 of a hardcoded list that drifts the moment a new one is created.
 
-frappe_agile has no GitHub credential of its own — this calls one_bpmn's
-list_org_repos (a plain Python call, both apps share one site/process),
-which resolves the token already configured on Processa Settings for the
-Dev Agent sandbox, rather than a second token existing purely to duplicate
-it. Manual only ("Sync GitHub Repositories" button on Frappe Agile
-Settings) — no scheduled job.
+frappe_agile has no GitHub credential of its own, so it uses the token
+already configured on Processa Settings for the Dev Agent sandbox rather
+than a second token existing purely to duplicate it. Manual only ("Sync
+GitHub Repositories" button on Frappe Agile Settings) - no scheduled job.
 """
 
 import frappe
@@ -23,9 +21,13 @@ def sync_github_repositories() -> dict:
 
 	Returns a summary dict (created/updated counts) so the calling button
 	can tell a person something happened, not just "done"."""
-	from one_bpmn.api.github_sync import list_org_repos
+	token = frappe.get_cached_doc("Processa Settings").get_password("github_token", raise_exception=False) or ""
+	if not token:
+		frappe.throw(_("Processa Settings has no GitHub token configured."))
 
-	repos = list_org_repos()
+	from processa.agents_sandbox.customization import github_sync as processa_github
+
+	repos = processa_github.org_repos(token, "ONE-F-M")
 	synced_on = now_datetime()
 
 	created = 0
