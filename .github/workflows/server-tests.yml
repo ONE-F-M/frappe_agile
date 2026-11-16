@@ -15,7 +15,7 @@ concurrency:
 jobs:
   tests:
     name: Server Tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
 
     services:
@@ -68,7 +68,7 @@ jobs:
           bench set-redis-socketio-host 127.0.0.1:12000
           bench get-app erpnext https://github.com/frappe/erpnext --branch v15.118.3
           # frappe_agile calls processa at runtime and its tests patch processa functions.
-          bench get-app --skip-assets processa https://github.com/ONE-F-M/one_bpmn --branch processa-refactor
+          bench get-app --skip-assets processa https://github.com/ONE-F-M/processa --branch staging
           bench get-app frappe_agile "$GITHUB_WORKSPACE"
           bench new-site --db-root-password root --admin-password admin --mariadb-root-password root test_site
           bench --site test_site install-app erpnext
