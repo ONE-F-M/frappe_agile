@@ -74,6 +74,7 @@ jobs:
           bench --site test_site install-app erpnext
           # run-tests only calls frappe_agile's before_tests hooks, so finish ERPNext's setup wizard here.
           bench --site test_site execute erpnext.setup.utils.before_tests
+          bench --site test_site install-app processa
           bench --site test_site install-app frappe_agile
           bench --site test_site set-config allow_tests true
       - name: Run tests
