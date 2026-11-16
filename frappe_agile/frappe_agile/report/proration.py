@@ -79,6 +79,25 @@ def merge_periods(periods):
 	return [(start, end) for start, end in merged]
 
 
+def as_list(value):
+	"""A filter value as a list of names.
+
+	A MultiSelectList sends a JSON array, but a saved filter, a direct API call
+	or a link from elsewhere may still send a single name. Production's parse
+	assumes the array and raises on the bare string.
+	"""
+	if not value:
+		return []
+	if isinstance(value, str):
+		try:
+			value = frappe.parse_json(value)
+		except Exception:
+			return [value]
+	if isinstance(value, (list, tuple, set)):
+		return [v for v in value if v]
+	return [value]
+
+
 def get_employee_map(users):
 	"""Map each User to their linked Employee record.
 

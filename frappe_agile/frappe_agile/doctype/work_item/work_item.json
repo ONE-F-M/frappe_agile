@@ -100,7 +100,7 @@
    "label": "Status",
    "options": "Draft\nOpen\nIn Progress\nPR Created\nIn Testing\nPending Review\nChanges Requested\nIn Staging\nRejected\nDone",
    "default": "Draft",
-   "in_standard_filter": 1
+   "hidden": 1
   },
   {
    "description": "Hand this item to the orchestrator agent instead of a human assignee. The Software Development process reads this flag and takes the orchestrator path when it is set.",
@@ -173,7 +173,7 @@
   },
   {
    "fieldname": "description",
-   "fieldtype": "Text",
+   "fieldtype": "Text Editor",
    "label": "Description"
   },
   {
@@ -186,8 +186,8 @@
    "fieldname": "sprint",
    "fieldtype": "Link",
    "label": "Sprint",
-   "mandatory_depends_on": "eval:doc.work_item_type != 'Epic'",
-   "options": "Sprint"
+   "options": "Sprint",
+   "mandatory_depends_on": "eval:doc.work_item_type != 'Epic'"
   },
   {
    "fetch_from": "sprint.status",

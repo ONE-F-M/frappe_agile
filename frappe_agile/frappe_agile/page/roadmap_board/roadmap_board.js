@@ -23,6 +23,7 @@ const API_GET = "frappe_agile.frappe_agile.page.roadmap_board.roadmap_board.get_
 const API_MOVE = "frappe_agile.frappe_agile.page.roadmap_board.roadmap_board.move_work_item";
 const API_CREATE_MISSING = "frappe_agile.frappe_agile.page.roadmap_board.roadmap_board.create_missing_sprints";
 const API_BACKLOG = "frappe_agile.frappe_agile.page.roadmap_board.roadmap_board.get_unassigned_work_items";
+const API_ASSIGNEES = "frappe_agile.frappe_agile.page.roadmap_board.roadmap_board.get_project_assignees";
 const API_PROJECTS = "frappe_agile.frappe_agile.page.roadmap_board.roadmap_board.get_scrum_projects";
 const SORTABLE_ASSET = "/assets/frappe_agile/js/vendor/sortable.min.js";
 const MAX_ITEMS_VISIBLE = 6; // collapse longer item lists behind a "+N more"
@@ -60,6 +61,7 @@ class RoadmapBoard {
 		this.filters = {
 			project_status: [],
 			lane: [],
+			assignee: [],
 			sprint_status: "",
 			search: "",
 			future_count: 8,
@@ -147,6 +149,10 @@ class RoadmapBoard {
 				<div id="rm-project-filter" class="rm-multiselect"></div>
 			</div>
 			<div class="rm-filter-group">
+				<span class="rm-filter-label">${__("Assignee")}</span>
+				<div id="rm-assignee-filter" class="rm-multiselect"></div>
+			</div>
+			<div class="rm-filter-group">
 				<span class="rm-filter-label">${__("Sprint Status")}</span>
 				<select id="rm-status" class="form-control input-xs">
 					<option value="">${__("All Statuses")}</option>
@@ -194,6 +200,7 @@ class RoadmapBoard {
 		`);
 
 		this._make_project_filter();
+		this._make_assignee_filter();
 		this.$filters.find("#rm-status").on("change", (e) => {
 			this.filters.sprint_status = e.target.value;
 			this.refresh({ scrollToCurrent: true });
@@ -254,6 +261,36 @@ class RoadmapBoard {
 		});
 
 		this._decorate_filter_groups(this.project_filter_control);
+	}
+
+	// Narrows the board and backlog to the picked users, offered from the picked projects.
+	_make_assignee_filter() {
+		this.assignee_filter_control = frappe.ui.form.make_control({
+			parent: this.$filters.find("#rm-assignee-filter")[0],
+			only_input: true,
+			render_input: true,
+			df: {
+				fieldtype: "MultiSelectList",
+				fieldname: "assignee_filter",
+				placeholder: __("Select assignees…"),
+				get_data: (txt) => this._assignee_options(txt),
+				change: () => {
+					this.filters.assignee = this.assignee_filter_control.get_value();
+					this.refresh({ preserveScroll: true });
+				},
+			},
+		});
+	}
+
+	async _assignee_options(txt) {
+		const term = (txt || "").toLowerCase();
+		const users = await frappe.xcall(API_ASSIGNEES, {
+			project_status: JSON.stringify(this.filters.project_status || []),
+			lane: this._lane_arg(),
+		});
+		return users
+			.filter((u) => `${u.label} ${u.value}`.toLowerCase().includes(term))
+			.map((u) => ({ ...u, description: u.label === u.value ? "" : u.value }));
 	}
 
 	// Options for that filter: the statuses, then one entry per SCRUM project.
@@ -427,6 +464,7 @@ class RoadmapBoard {
 			args: {
 				project_status: JSON.stringify(this.filters.project_status || []),
 				lane: this._lane_arg(),
+				assignee: JSON.stringify(this.filters.assignee),
 				sprint_status: this.filters.sprint_status || undefined,
 				search: this.filters.search || undefined,
 				future_count: this.filters.future_count,
@@ -902,6 +940,7 @@ class RoadmapBoard {
 			args: {
 				project_status: JSON.stringify(this.filters.project_status || []),
 				lane: this._lane_arg(),
+				assignee: JSON.stringify(this.filters.assignee),
 			},
 			callback: (r) => {
 				this.backlog = (r && r.message) || [];

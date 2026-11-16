@@ -386,9 +386,8 @@
 .rm-add-wi {
 	flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
 	width: 16px; height: 16px; border-radius: 4px; font-size: 10px;
-	color: #94a3b8; text-decoration: none; opacity: 0; transition: opacity 0.12s, background 0.12s, color 0.12s;
+	color: #94a3b8; text-decoration: none; transition: background 0.12s, color 0.12s;
 }
-.rm-cell:hover .rm-add-wi { opacity: 1; }
 .rm-add-wi:hover { background: #dbeafe; color: #2563eb; }
 
 .rm-badge { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
