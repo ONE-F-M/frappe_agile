@@ -233,3 +233,85 @@ class TestWorkItem(FrappeTestCase):
 		item.save(ignore_permissions=True)
 		item.reload()
 		self.assertEqual(item.pr_required, 0)
+
+
+STATUS_BEFORE_TESTING = [
+	"Draft", "Open", "In Progress", "PR Created", "Pending Review", "Changes Requested", "In Staging", "Rejected", "Done",
+]
+# The Work Item workflow is inactive and must stay exactly as it is: In Testing is a status, not a workflow transition.
+WORKFLOW_TRANSITIONS = [
+	("Changes Requested", "Restart Work", "Pending Action Plan"),
+	("In Progress", "Create Action Plan", "Pending Action Plan"),
+	("In Staging", "Accept", "Done"),
+	("In Staging", "Reject", "Rejected"),
+	("Open", "Start Work", "In Progress"),
+	("Open", "Start Work", "In Progress"),
+	("Pending Action Plan", "Approve Plan", "Pending Execution"),
+	("Pending Execution", "Execute Work Item", "Pending PR"),
+	("Pending PR", "Assign Reviewer", "Pending Review"),
+	("Pending Review", "Merge PR", "In Staging"),
+	("Pending Review", "Request Changes", "Changes Requested"),
+	("Rejected", "Restart Work", "In Progress"),
+]
+
+
+class TestWorkItemTesting(FrappeTestCase):
+	"""The In Testing status and the test result fields (the Testing section) of the Work Item form."""
+
+	def test_the_status_select_has_in_testing_and_keeps_every_other_option(self):
+		options = [o.strip() for o in frappe.get_meta("Work Item").get_field("status").options.split("\n") if o.strip()]
+		self.assertIn("In Testing", options)
+		self.assertEqual(sorted(set(options) - {"In Testing"}), sorted(STATUS_BEFORE_TESTING))
+
+	def test_the_testing_section_holds_the_two_read_only_result_fields(self):
+		fields = frappe.get_meta("Work Item").fields
+		names = [f.fieldname for f in fields]
+		start = names.index("testing_section")
+		end = next((i for i in range(start + 1, len(fields)) if fields[i].fieldtype == "Section Break"), len(fields))
+		self.assertEqual(fields[start].label, "Testing")
+		self.assertEqual([f.fieldname for f in fields[start + 1 : end] if f.fieldtype != "Column Break"], ["test_verdict", "test_run"])
+		verdict, run = frappe.get_meta("Work Item").get_field("test_verdict"), frappe.get_meta("Work Item").get_field("test_run")
+		self.assertEqual((verdict.fieldtype, run.fieldtype, run.options), ("Select", "Link", "A2A Task"))
+		self.assertEqual((verdict.read_only, run.read_only), (1, 1))
+		self.assertEqual([o for o in verdict.options.split("\n") if o], ["Pass", "Fail", "Could not test", "Error"])
+
+	def test_the_testing_section_uses_a_column_break_so_it_stacks_on_a_phone(self):
+		"""Frappe lays a Section Break's columns side by side on a desktop and stacks them below 768px, with no width of their own."""
+		fields = frappe.get_meta("Work Item").fields
+		names = [f.fieldname for f in fields]
+		block = fields[names.index("testing_section") : names.index("test_run") + 1]
+		self.assertEqual([f.fieldtype for f in block], ["Section Break", "Select", "Column Break", "Link"])
+
+	def test_the_in_testing_workflow_state_exists_after_the_migrate_hook_runs(self):
+		from frappe_agile.setup.workflow import create_workflows
+
+		frappe.db.delete("Workflow State", {"name": "In Testing"})
+		create_workflows()
+		self.assertTrue(frappe.db.exists("Workflow State", "In Testing"))
+
+	def test_a_work_item_whose_workflow_state_is_in_testing_gets_that_status(self):
+		from frappe_agile.frappe_agile.doctype.work_item.work_item import sync_status_from_workflow
+
+		doc = frappe._dict(workflow_state="In Testing", status="PR Created")
+		sync_status_from_workflow(doc)
+		self.assertEqual(doc.status, "In Testing")
+
+	def test_the_migrate_hook_changes_no_existing_work_item(self):
+		from frappe_agile.setup.workflow import create_workflows
+
+		def snapshot():
+			return frappe.db.sql("select name, status, workflow_state from `tabWork Item` order by name")
+
+		before = snapshot()
+		create_workflows()
+		self.assertEqual(snapshot(), before)
+
+	def test_the_work_item_workflow_is_still_inactive_with_the_same_transitions(self):
+		from frappe_agile.frappe_agile.custom.workflow.workflow import get_workflow_json_file
+
+		workflow = get_workflow_json_file("work_item.json")
+		self.assertEqual(workflow["is_active"], 0)
+		self.assertEqual(
+			sorted((t["state"], t["action"], t["next_state"]) for t in workflow["transitions"]), sorted(WORKFLOW_TRANSITIONS)
+		)
+		self.assertNotIn("In Testing", [state["state"] for state in workflow["states"]])
