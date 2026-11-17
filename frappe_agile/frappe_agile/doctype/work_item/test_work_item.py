@@ -275,6 +275,10 @@ class TestWorkItemTesting(FrappeTestCase):
 		self.assertEqual((verdict.read_only, run.read_only), (1, 1))
 		self.assertEqual([o for o in verdict.options.split("\n") if o], ["Pass", "Fail", "Could not test", "Error"])
 
+	def test_the_test_verdict_field_shows_the_testing_agent_help_text(self):
+		verdict = frappe.get_meta("Work Item").get_field("test_verdict")
+		self.assertEqual(verdict.description, "Set by the Testing Agent after it checks the pull request.")
+
 	def test_the_testing_section_uses_a_column_break_so_it_stacks_on_a_phone(self):
 		"""Frappe lays a Section Break's columns side by side on a desktop and stacks them below 768px, with no width of their own."""
 		fields = frappe.get_meta("Work Item").fields
