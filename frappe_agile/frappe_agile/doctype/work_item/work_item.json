@@ -269,6 +269,7 @@
    "label": "Testing"
   },
   {
+   "description": "Set by the Testing Agent after it checks the pull request.",
    "fieldname": "test_verdict",
    "fieldtype": "Select",
    "label": "Test Verdict",
