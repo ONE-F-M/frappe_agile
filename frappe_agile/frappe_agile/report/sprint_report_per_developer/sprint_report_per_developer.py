@@ -13,9 +13,6 @@ from frappe_agile.frappe_agile.report.proration import (
 	get_proration,
 	get_target,
 )
-from frappe_agile.frappe_agile.report.sprint_report_per_business_analyst.sprint_report_per_business_analyst import (
-	count_new_work_items,
-)
 
 
 def execute(filters=None):
@@ -42,7 +39,9 @@ def get_columns():
 		{"fieldname": "rejected_points", "label": "Rejected Points", "fieldtype": "Float", "width": 140},
 		{"fieldname": "spillover_points", "label": "Spillover Points", "fieldtype": "Float", "width": 140},
 		{"fieldname": "acceptance_rate", "label": "Acceptance Rate Percentage", "fieldtype": "Percent", "width": 150},
+		{"fieldname": "work_items_assigned", "label": "Work Items Assigned", "fieldtype": "Int", "width": 120},
 		{"fieldname": "orchestrator_stories", "label": "Orchestrator Stories", "fieldtype": "Int", "width": 100},
+		{"fieldname": "orchestrator_usage", "label": "Orchestrator Usage Percentage", "fieldtype": "Percent", "width": 150},
 		{"fieldname": "new_work_items", "label": "Work Items Created", "fieldtype": "Int", "width": 120},
 	]
 
@@ -86,10 +85,13 @@ def get_data(filters):
 		.left_join(WorkItem).on(SprintItem.work_item == WorkItem.name)
 		.select(
 			SprintItem.parent.as_("sprint"),
+			SprintItem.work_item,
+			SprintItem.work_item_type,
 			SprintItem.assignee_user,
 			SprintItem.story_points,
 			SprintItem.status,
 			WorkItem.orchestrator,
+			WorkItem.owner,
 		)
 		.where(SprintItem.parent.isin(sprint_names))
 		.where(SprintItem.work_item_type.isin(["User Story", "Task", "Bug"]))
@@ -114,8 +116,13 @@ def get_data(filters):
 	# ------------------------------------------------------------------
 	# developer -> { sprint -> {scoped, accepted, rejected} }
 	dev_sprint_data = {}
+	# developer -> { sprint -> work items they created there, whoever is assigned }
+	created_in_sprint = {}
 
 	for wi in work_items:
+		if wi.owner in selected_developers:
+			created_in_sprint.setdefault(wi.owner, {}).setdefault(wi.sprint, set()).add(wi.work_item)
+
 		user = wi.assignee_user
 		if not user:
 			continue
@@ -132,6 +139,8 @@ def get_data(filters):
 				"accepted_points": 0.0,
 				"rejected_points": 0.0,
 				"orchestrator_stories": 0,
+				"work_items": set(),
+				"orchestrator_items": set(),
 			}
 
 		points = flt(wi.story_points)
@@ -146,6 +155,10 @@ def get_data(filters):
 
 		if wi.status == "Rejected":
 			dev_sprint_data[user][sprint_name]["rejected_points"] += points
+
+		dev_sprint_data[user][sprint_name]["work_items"].add(wi.work_item)
+		if wi.orchestrator:
+			dev_sprint_data[user][sprint_name]["orchestrator_items"].add(wi.work_item)
 
 	if not dev_sprint_data:
 		return []
@@ -205,6 +218,11 @@ def get_data(filters):
 		total_rejected = flt(total_rejected_raw, 1)
 		spillover = flt(spillover_raw, 1)
 
+		# Sets, so an item brought forward into a second sprint counts once
+		assigned = set().union(*(v["work_items"] for v in sprint_dict.values()))
+		orchestrated = set().union(*(v["orchestrator_items"] for v in sprint_dict.values()))
+		created = set().union(*(created_in_sprint.get(user, {}).get(s, set()) for s in sprint_names_for_dev))
+
 		# Date range across all sprints for this developer
 		sprint_docs = [sprint_map[s] for s in sprint_names_for_dev if s in sprint_map]
 		earliest_start = min((s.start_date for s in sprint_docs if s.start_date), default=None)
@@ -228,11 +246,9 @@ def get_data(filters):
 			"sprint_start_date": earliest_start,
 			"sprint_end_date": latest_end,
 			"no_of_sprints": no_of_sprints,
-			"new_work_items": count_new_work_items(
-				user,
-				filters.get("start_date") or earliest_start,
-				filters.get("end_date") or latest_end,
-			),
+			"new_work_items": len(created),
+			"work_items_assigned": len(assigned),
+			"orchestrator_usage": flt(len(orchestrated) / len(assigned) * 100, 2) if assigned else 0.0,
 			"days": "{0} / {1} / {2}".format(working_days, public_holidays, flt(leave_days, 2)),
 			"target_points": target_points,
 			"points_scoped": total_scoped,
