@@ -328,11 +328,11 @@ class TestSprintReportProration(FrappeTestCase):
 		sprint.insert(ignore_permissions=True)
 		return sprint
 
-	def _make_work_item(self, sprint, title, story_points, assignee_user=None):
+	def _make_work_item(self, sprint, title, story_points, assignee_user=None, work_item_type="User Story"):
 		return frappe.get_doc(
 			{
 				"doctype": "Work Item",
-				"work_item_type": "User Story",
+				"work_item_type": work_item_type,
 				"title": f"{TITLE_PREFIX} {title}",
 				"sprint": sprint,
 				"status": "Open",
@@ -640,18 +640,43 @@ class TestSprintReportProration(FrappeTestCase):
 		row = self._business_analyst_row(rows)
 		self.assertEqual(row["story_points_delivered"], 5.0)
 
-	def test_developer_report_counts_new_work_items_in_range(self):
+	def test_developer_report_counts_work_items_created_in_the_rows_sprints(self):
+		"""Created by the developer and in the row's sprint, whoever is assigned and whenever created."""
 		sprint = self._make_sprint(PERIOD)
-		inside = self._make_work_item(sprint.name, "dev inside", 3, assignee_user=DEV_USER)
-		outside = self._make_work_item(sprint.name, "dev outside", 3, assignee_user=DEV_USER)
-		self._set_creator(inside.name, DEV_USER, f"{PERIOD[1]} 09:00:00")
-		self._set_creator(outside.name, DEV_USER, f"{CLEAN_PERIOD[0]} 09:00:00")
+		later = self._make_sprint(CLEAN_PERIOD)
+		own = self._make_work_item(sprint.name, "dev own", 3, assignee_user=DEV_USER)
+		for_other = self._make_work_item(sprint.name, "dev for other", 3, assignee_user=UNLINKED_USER)
+		task = self._make_work_item(sprint.name, "dev task", 1, assignee_user=DEV_USER, work_item_type="Task")
+		by_other = self._make_work_item(sprint.name, "by other", 3, assignee_user=DEV_USER)
+		elsewhere = self._make_work_item(later.name, "dev elsewhere", 3, assignee_user=DEV_USER)
+		self._set_creator(own.name, DEV_USER, f"{CLEAN_PERIOD[1]} 09:00:00")
+		for name in (for_other.name, task.name, elsewhere.name):
+			self._set_creator(name, DEV_USER, f"{PERIOD[1]} 09:00:00")
+		self._set_creator(by_other.name, SM_USER, f"{PERIOD[1]} 09:00:00")
 
-		_columns, rows = developer_report(
-			{"start_date": PERIOD[0], "end_date": PERIOD[1], "developer": DEV_USER}
+		self.assertEqual(self._developer_row()["new_work_items"], 3)
+
+	def test_developer_report_counts_stories_bugs_and_tasks_assigned(self):
+		sprint = self._make_sprint(PERIOD)
+		self._make_work_item(sprint.name, "dev story", 3, assignee_user=DEV_USER)
+		self._make_work_item(sprint.name, "dev bug", 2, assignee_user=DEV_USER, work_item_type="Bug")
+		self._make_work_item(sprint.name, "dev task", 1, assignee_user=DEV_USER, work_item_type="Task")
+		self._make_work_item(sprint.name, "other story", 3, assignee_user=UNLINKED_USER)
+
+		self.assertEqual(self._developer_row()["work_items_assigned"], 3)
+
+	def test_developer_report_orchestrator_usage_counts_every_status(self):
+		sprint = self._make_sprint(PERIOD)
+		done = self._make_work_item(sprint.name, "orchestrated done", 3, assignee_user=DEV_USER)
+		self._make_work_item(sprint.name, "orchestrated open", 3, assignee_user=DEV_USER)
+		self._make_work_item(sprint.name, "manual one", 3, assignee_user=DEV_USER)
+		self._make_work_item(sprint.name, "manual two", 3, assignee_user=DEV_USER)
+		frappe.db.set_value(
+			"Work Item", {"title": ("like", f"{TITLE_PREFIX} orchestrated%")}, "orchestrator", 1
 		)
-		row = self._row_for(rows, "developer", frappe.db.get_value("User", DEV_USER, "full_name"))
-		self.assertEqual(row["new_work_items"], 1)
+		frappe.db.set_value("Sprint Work Item", {"work_item": done.name}, "status", "Done")
+
+		self.assertEqual(self._developer_row()["orchestrator_usage"], 50.0)
 
 	def test_developer_report_counts_done_orchestrator_stories(self):
 		sprint = self._make_sprint(PERIOD)
@@ -667,6 +692,12 @@ class TestSprintReportProration(FrappeTestCase):
 		)
 		row = self._row_for(rows, "developer", frappe.db.get_value("User", DEV_USER, "full_name"))
 		self.assertEqual(row["orchestrator_stories"], 1)
+
+	def _developer_row(self):
+		_columns, rows = developer_report(
+			{"start_date": PERIOD[0], "end_date": PERIOD[1], "developer": DEV_USER}
+		)
+		return self._row_for(rows, "developer", frappe.db.get_value("User", DEV_USER, "full_name"))
 
 	def _business_analyst_row(self, rows):
 		full_name = frappe.db.get_value("Employee", self.sm_employee, "employee_name")
