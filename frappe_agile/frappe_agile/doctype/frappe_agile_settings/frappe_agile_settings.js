@@ -3,6 +3,8 @@
 
 frappe.ui.form.on("Frappe Agile Settings", {
 	refresh(frm) {
+		frm.set_intro(__("Settings for Frappe Agile work items and sprints."));
+
 		// Manual only, no scheduled job — target_app's repo picker (GitHub
 		// Repository) only ever reflects the org as of the last click here.
 		frm.add_custom_button(__("Sync GitHub Repositories"), () => {
