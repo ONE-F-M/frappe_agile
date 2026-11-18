@@ -9,27 +9,45 @@ frappe.query_reports["Sprint Report per Developer"] = {
 			"label": __("Start Date"),
 			"fieldtype": "Date",
 			"default": (function () {
-				let d = new Date();
-				d.setDate(1);
-				while (d.getDay() !== 3) {
-					d.setDate(d.getDate() + 1);
-				}
-				return frappe.datetime.obj_to_str(d);
+				// Wednesday that started the last completed sprint (sprints run Wednesday to Tuesday)
+				let today = new Date();
+				let day = today.getDay();
+				let daysSinceTue = (day + 7 - 2) % 7 || 7;
+				let lastTuesday = new Date(today);
+				lastTuesday.setDate(today.getDate() - daysSinceTue);
+				let startWed = new Date(lastTuesday);
+				startWed.setDate(lastTuesday.getDate() - 6);
+				return frappe.datetime.obj_to_str(startWed);
 			})(),
-			"reqd": 1
+			"reqd": 1,
+			"on_change": function () {
+				// Move End Date to the Tuesday that closes the sprint starting on the chosen date
+				let start = frappe.query_report.get_filter_value("start_date");
+				if (start) {
+					let d = new Date(start);
+					let day = d.getDay();
+					let daysToTue = (2 - day + 7) % 7;
+					if (daysToTue === 0) daysToTue = 7;
+					if (day === 3) {
+						daysToTue = 6;
+					}
+					d.setDate(d.getDate() + daysToTue);
+					frappe.query_report.set_filter_value("end_date", frappe.datetime.obj_to_str(d));
+				}
+			}
 		},
 		{
 			"fieldname": "end_date",
 			"label": __("End Date"),
 			"fieldtype": "Date",
 			"default": (function () {
-				let d = new Date();
-				d.setMonth(d.getMonth() + 1);
-				d.setDate(0);
-				while (d.getDay() !== 2) {
-					d.setDate(d.getDate() - 1);
-				}
-				return frappe.datetime.obj_to_str(d);
+				// Tuesday that ended the last completed sprint
+				let today = new Date();
+				let day = today.getDay();
+				let daysSinceTue = (day + 7 - 2) % 7 || 7;
+				let lastTuesday = new Date(today);
+				lastTuesday.setDate(today.getDate() - daysSinceTue);
+				return frappe.datetime.obj_to_str(lastTuesday);
 			})(),
 			"reqd": 1
 		},
