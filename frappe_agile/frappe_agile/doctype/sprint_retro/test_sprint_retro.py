@@ -54,6 +54,15 @@ class TestSprintRetro(FrappeTestCase):
 		labels = {c["fieldname"]: c["label"] for c in report.get_columns()}
 		self.assertEqual(labels["kudos"], frappe.get_meta("Sprint Retro").get_label("kudos"))
 
+	def test_form_script_shows_period_intro(self):
+		# Source-level check: the desk form script is not executable from the Python suite.
+		path = frappe.get_app_path("frappe_agile", "frappe_agile", "doctype", "sprint_retro", "sprint_retro.js")
+		with open(path) as f:
+			source = f.read()
+		self.assertIn("function show_period_intro(frm)", source)
+		self.assertIn("This retro covers {0} to {1}.", source)
+		self.assertGreaterEqual(source.count("show_period_intro(frm);"), 3)
+
 	def test_submitted_by_options_needs_read_permission(self):
 		with self.set_user("Guest"):
 			self.assertRaises(frappe.PermissionError, report.submitted_by_options)
