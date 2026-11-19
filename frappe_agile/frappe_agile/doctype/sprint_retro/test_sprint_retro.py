@@ -54,6 +54,21 @@ class TestSprintRetro(FrappeTestCase):
 		labels = {c["fieldname"]: c["label"] for c in report.get_columns()}
 		self.assertEqual(labels["kudos"], frappe.get_meta("Sprint Retro").get_label("kudos"))
 
+	def test_form_script_shows_single_period_intro(self):
+		path = os.path.join(os.path.dirname(__file__), "sprint_retro.js")
+		with open(path) as f:
+			source = f.read()
+		body = source.split("function show_period_intro(frm)", 1)
+		self.assertEqual(len(body), 2, "show_period_intro(frm) is missing")
+		# the old line must be cleared before a new one is added
+		self.assertLess(body[1].index('frm.set_intro("")'), body[1].index('"blue"'))
+		self.assertIn("This retro covers {0} to {1}.", body[1])
+		# refresh, from_date and to_date all show the line
+		handlers = source.split("function show_period_intro(frm)", 1)[0]
+		self.assertGreaterEqual(handlers.count("show_period_intro(frm)"), 3)
+		self.assertIn("refresh(frm)", handlers)
+		self.assertIn("to_date(frm)", handlers)
+
 	def test_submitted_by_options_needs_read_permission(self):
 		with self.set_user("Guest"):
 			self.assertRaises(frappe.PermissionError, report.submitted_by_options)
