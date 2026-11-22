@@ -127,7 +127,7 @@
    "fieldtype": "Select",
    "label": "Branch",
    "mandatory_depends_on": "eval:doc.orchestrator==1",
-   "options": "\nstaging\ntest-production\nversion-15"
+   "options": "\nstaging\ntest-production\nversion-15\nversion-16\nprocessa-refactor"
   },
   {
    "fieldname": "assignee_user",
