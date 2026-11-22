@@ -376,6 +376,18 @@
 
 .rm-cell-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 8px; }
 .rm-cell-head-name { display: flex; align-items: center; gap: 4px; min-width: 0; flex: 1 1 auto; }
+.rm-cell-goal {
+	font-size: 11px;
+	line-height: 1.4;
+	color: var(--text-muted, #6b7280);
+	margin: -4px 0 8px;
+	display: -webkit-box;
+	-webkit-line-clamp: 2;
+	line-clamp: 2;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+	word-break: break-word;
+}
 
 .rm-sprint-name {
 	font-size: 12px; font-weight: 600; color: var(--text-color, #374151);
