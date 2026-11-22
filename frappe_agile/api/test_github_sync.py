@@ -8,12 +8,27 @@ Run with:
 		--module frappe_agile.api.test_github_sync
 """
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
 from frappe_agile.api import github_sync
+
+ORG_REPOS = "processa.agents_sandbox.customization.github_sync.org_repos"
+_real_get_cached_doc = frappe.get_cached_doc
+
+
+def _settings_with_token(token):
+	settings = MagicMock()
+	settings.get_password.return_value = token
+
+	def get_cached_doc(doctype, *args, **kwargs):
+		if doctype == "Processa Settings":
+			return settings
+		return _real_get_cached_doc(doctype, *args, **kwargs)
+
+	return patch("frappe.get_cached_doc", side_effect=get_cached_doc)
 
 
 class TestSyncGithubRepositories(FrappeTestCase):
@@ -32,9 +47,10 @@ class TestSyncGithubRepositories(FrappeTestCase):
 			{"name": "_test_repo_b", "description": "", "html_url": "https://github.com/ONE-F-M/_test_repo_b"},
 		]
 		self._created += ["_test_repo_a", "_test_repo_b"]
-		with patch("one_bpmn.api.github_sync.list_org_repos", return_value=repos):
+		with _settings_with_token("tok"), patch(ORG_REPOS, return_value=repos) as org_repos:
 			summary = github_sync.sync_github_repositories()
 
+		org_repos.assert_called_once_with("tok", "ONE-F-M")
 		self.assertEqual(summary, {"created": 2, "updated": 0, "total": 2})
 		doc = frappe.get_doc("GitHub Repository", "_test_repo_a")
 		self.assertEqual(doc.description, "desc a")
@@ -49,7 +65,7 @@ class TestSyncGithubRepositories(FrappeTestCase):
 		self._created.append("_test_repo_a")
 
 		repos = [{"name": "_test_repo_a", "description": "fresh", "html_url": "https://new"}]
-		with patch("one_bpmn.api.github_sync.list_org_repos", return_value=repos):
+		with _settings_with_token("tok"), patch(ORG_REPOS, return_value=repos):
 			summary = github_sync.sync_github_repositories()
 
 		self.assertEqual(summary, {"created": 0, "updated": 1, "total": 1})
@@ -59,6 +75,12 @@ class TestSyncGithubRepositories(FrappeTestCase):
 		self.assertEqual(doc.html_url, "https://new")
 
 	def test_empty_org_result_is_a_no_op(self):
-		with patch("one_bpmn.api.github_sync.list_org_repos", return_value=[]):
+		with _settings_with_token("tok"), patch(ORG_REPOS, return_value=[]):
 			summary = github_sync.sync_github_repositories()
 		self.assertEqual(summary, {"created": 0, "updated": 0, "total": 0})
+
+	def test_missing_token_throws_without_calling_github(self):
+		with _settings_with_token(""), patch(ORG_REPOS) as org_repos:
+			with self.assertRaises(frappe.ValidationError):
+				github_sync.sync_github_repositories()
+		org_repos.assert_not_called()

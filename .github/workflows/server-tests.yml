@@ -15,7 +15,7 @@ concurrency:
 jobs:
   tests:
     name: Server Tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
 
     services:
@@ -67,13 +67,14 @@ jobs:
           bench set-redis-queue-host 127.0.0.1:11000
           bench set-redis-socketio-host 127.0.0.1:12000
           bench get-app erpnext https://github.com/frappe/erpnext --branch v15.118.3
-          # frappe_agile calls one_bpmn at runtime and its tests patch one_bpmn functions.
-          bench get-app --skip-assets one_bpmn https://github.com/ONE-F-M/one_bpmn --branch staging
+          # frappe_agile calls processa at runtime and its tests patch processa functions.
+          bench get-app --skip-assets processa https://github.com/ONE-F-M/processa --branch staging
           bench get-app frappe_agile "$GITHUB_WORKSPACE"
           bench new-site --db-root-password root --admin-password admin --mariadb-root-password root test_site
           bench --site test_site install-app erpnext
           # run-tests only calls frappe_agile's before_tests hooks, so finish ERPNext's setup wizard here.
           bench --site test_site execute erpnext.setup.utils.before_tests
+          bench --site test_site install-app processa
           bench --site test_site install-app frappe_agile
           bench --site test_site set-config allow_tests true
       - name: Run tests

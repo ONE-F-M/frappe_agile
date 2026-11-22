@@ -560,14 +560,14 @@ def _full_pr_payload(branch: str, title: str, body: str, action: str = "opened")
 	return payload
 
 
-def _mock_one_bpmn(send_message: MagicMock) -> dict:
-	"""sys.modules entries so `from one_bpmn.api.instance_api import send_message` is mocked."""
-	instance_api = MagicMock()
-	instance_api.send_message = send_message
+def _mock_processa(send_message: MagicMock) -> dict:
+	"""sys.modules entries so `from processa.api.instances import send_message` is mocked."""
+	instances = MagicMock()
+	instances.send_message = send_message
 	return {
-		"one_bpmn": MagicMock(),
-		"one_bpmn.api": MagicMock(),
-		"one_bpmn.api.instance_api": instance_api,
+		"processa": MagicMock(),
+		"processa.api": MagicMock(),
+		"processa.api.instances": instances,
 	}
 
 
@@ -633,7 +633,7 @@ class TestWebhookResponseStatuses(unittest.TestCase):
 			"frappe.log_error"
 		) as log, patch(
 			"frappe.get_traceback", return_value="TRACEBACK-TEXT"
-		), patch.dict(sys.modules, _mock_one_bpmn(send_message)):
+		), patch.dict(sys.modules, _mock_processa(send_message)):
 			body = mod._deliver_bpmn_message(
 				self._wi(), "github:pull_request:opened", {"a": 1}, delivery or {"delivery_id": "d-1"}
 			)
@@ -745,7 +745,7 @@ class TestWebhookErrorLogDetails(unittest.TestCase):
 		), patch("frappe.session", MagicMock(user="Guest")), patch(
 			"frappe.local.response", response, create=True
 		), patch("frappe.log_error") as log, patch.dict(
-			sys.modules, _mock_one_bpmn(MagicMock())
+			sys.modules, _mock_processa(MagicMock())
 		):
 			body = mod.handle_github_webhook()
 
