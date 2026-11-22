@@ -734,6 +734,11 @@ class RoadmapBoard {
 					title="${__("Create a work item in this sprint")}"><i class="fa fa-plus"></i></a>`
 			: "";
 
+		const goal_text = frappe.utils.escape_html(cell.sprint_goal || "");
+		const goal = goal_text
+			? `<div class="rm-cell-goal" title="${goal_text}">${goal_text}</div>`
+			: "";
+
 		return `
 		<div class="rm-cell ${matched} ${locked ? "rm-locked" : ""}" ${this._cell_attrs(cell, row, col)}>
 			<div class="rm-cell-head">
@@ -744,6 +749,7 @@ class RoadmapBoard {
 				</div>
 				<span class="rm-badge ${status_class}">${frappe.utils.escape_html(cell.status || "—")}</span>
 			</div>
+			${goal}
 			${epics.length ? `<div class="rm-epics">${epics_html}</div>` : ""}
 			<div class="rm-items rm-loose" data-droppable="1">${loose_html}</div>
 			<div class="rm-cell-foot">
