@@ -9,7 +9,7 @@ This is a **thin, generic router** with zero business logic.  It receives
 GitHub webhook events, verifies the HMAC signature, extracts the linked
 Work Item, derives a convention-based BPMN message name from the event
 data, and delivers it to the active BPMN process instance via
-``one_bpmn.api.instance_api.send_message``.
+``processa.api.instances.send_message``.
 
 All business logic (state transitions, assignments, notifications) lives
 in the BPMN process diagram — not here.
@@ -368,7 +368,7 @@ def _deliver_bpmn_message(wi_name: str, message_name: str, payload: dict, delive
 			frappe.local.response["http_status_code"] = 500
 			return {"status": "no_active_instance", **body}
 
-		from one_bpmn.api.instance_api import send_message
+		from processa.api.instances import send_message
 
 		result = send_message(
 			message_name=message_name,
