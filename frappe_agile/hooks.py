@@ -5,6 +5,9 @@ app_description = "Agile project management for Frappe"
 app_email = "s.shariff@one-fm.com"
 app_license = "mit"
 
+# MCP discovery tools may show the source of this app's whitelisted methods.
+expose_discovery_source = True
+
 # Apps
 # ------------------
 
