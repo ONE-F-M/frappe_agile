@@ -234,6 +234,29 @@ class TestWorkItem(FrappeTestCase):
 		item.reload()
 		self.assertEqual(item.pr_required, 0)
 
+	def test_a_developer_can_read_a_work_item(self):
+		"""The Developer role reads Work Items but cannot change them."""
+		if not frappe.db.exists("Role", "Developer"):
+			frappe.get_doc({"doctype": "Role", "role_name": "Developer"}).insert(ignore_permissions=True)
+
+		email = "test.work.item.developer@example.com"
+		if frappe.db.exists("User", email):
+			frappe.delete_doc("User", email, force=True, ignore_permissions=True)
+		user = frappe.get_doc(
+			{
+				"doctype": "User",
+				"email": email,
+				"first_name": "Test Work Item Developer",
+				"send_welcome_email": 0,
+				"roles": [{"role": "Developer"}],
+			}
+		)
+		user.insert(ignore_permissions=True)
+		self.addCleanup(frappe.delete_doc, "User", email, force=True, ignore_permissions=True)
+
+		self.assertIs(frappe.has_permission("Work Item", "read", user=email), True)
+		self.assertIs(frappe.has_permission("Work Item", "write", user=email), False)
+
 
 STATUS_BEFORE_TESTING = [
 	"Draft", "Open", "In Progress", "PR Created", "Pending Review", "Changes Requested", "In Staging", "Rejected", "Done",
