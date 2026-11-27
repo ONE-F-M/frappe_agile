@@ -34,6 +34,8 @@ const MAX_ITEMS_VISIBLE = 6; // collapse longer item lists behind a "+N more"
 const PROJECT_STATUSES = ["Open", "Completed", "Cancelled"];
 const STATUS_PREFIX = "status:";
 const is_status_option = (value) => (value || "").startsWith(STATUS_PREFIX);
+// Assignee filter option meaning "no assignee user"; the server maps it to "is not set".
+const UNASSIGNED_ASSIGNEE = "__unassigned__";
 
 frappe.pages["roadmap-board"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({
@@ -288,9 +290,11 @@ class RoadmapBoard {
 			project_status: JSON.stringify(this.filters.project_status || []),
 			lane: this._lane_arg(),
 		});
-		return users
-			.filter((u) => `${u.label} ${u.value}`.toLowerCase().includes(term))
-			.map((u) => ({ ...u, description: u.label === u.value ? "" : u.value }));
+		const unassigned = { value: UNASSIGNED_ASSIGNEE, label: __("Unassigned"), description: "" };
+		return [
+			unassigned,
+			...users.map((u) => ({ ...u, description: u.label === u.value ? "" : u.value })),
+		].filter((u) => `${u.label} ${u.description || u.value}`.toLowerCase().includes(term));
 	}
 
 	// Options for that filter: the statuses, then one entry per SCRUM project.

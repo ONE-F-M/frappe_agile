@@ -25,6 +25,7 @@ from frappe_agile.frappe_agile.page.roadmap_board.roadmap_board import (
 	DEFAULT_BACKLOG_STATUSES,
 	get_backlog_statuses,
 	get_scrum_projects,
+	UNASSIGNED_ASSIGNEE,
 	get_project_assignees,
 	get_unassigned_work_items,
 	move_work_item,
@@ -534,6 +535,22 @@ class TestRoadmapBoard(FrappeTestCase):
 
 		self.assertEqual({wi["name"] for wi in cell["work_items"]}, {mine, theirs})
 		self.assertEqual(set(everyone), {mine, theirs, nobodys})
+
+	def test_the_unassigned_option_shows_only_work_items_without_an_assignee(self):
+		start = align_to_sprint_start(getdate())
+		sprint = self._make_sprint("OPEN", start)
+		mine = self._make_work_item(f"{TEST_PREFIX} mine", sprint, assignee_user="Administrator")
+		nobodys = self._make_work_item(f"{TEST_PREFIX} nobody", sprint)
+		blank = self._make_work_item(f"{TEST_PREFIX} blank", sprint)
+		frappe.db.set_value("Work Item", blank, "assignee_user", "", update_modified=False)
+		lane = json.dumps([self.projects["OPEN"]])
+		key = f"{self.projects['OPEN']}::{getdate(start).isoformat()}"
+
+		only = get_roadmap_data(lane=lane, assignee=json.dumps([UNASSIGNED_ASSIGNEE]))
+		mixed = get_roadmap_data(lane=lane, assignee=json.dumps([UNASSIGNED_ASSIGNEE, "Administrator"]))
+
+		self.assertEqual({wi["name"] for wi in only["cells"][key]["work_items"]}, {nobodys, blank})
+		self.assertEqual({wi["name"] for wi in mixed["cells"][key]["work_items"]}, {mine, nobodys, blank})
 
 	def test_assignee_options_are_the_picked_projects_users(self):
 		start = align_to_sprint_start(getdate())

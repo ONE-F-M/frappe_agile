@@ -56,6 +56,10 @@ SCRUM_PROJECT_TYPE = "SCRUM Project"
 ROADMAP_FLAG_FIELD = "custom_show_in_roadmap"
 ROADMAP_FLAG_ON = "Yes"
 
+# Option value the Assignee filter sends for "Unassigned" (Work Items with no
+# assignee user). Not a valid User name, so it cannot clash with a real assignee.
+UNASSIGNED_ASSIGNEE = "__unassigned__"
+
 # The Project statuses the multi-select filter may narrow the board to.
 PROJECT_STATUSES = ("Open", "Completed", "Cancelled")
 
@@ -380,9 +384,19 @@ def get_project_assignees(project_status: str | None = None, lane: str | None = 
 
 
 def _with_assignee_filter(filters: dict, assignee) -> dict:
-	"""Narrow Work Item filters to the picked assignees; an empty pick leaves them as they are."""
+	"""Narrow Work Item filters to the picked assignees; an empty pick leaves them as they are.
+
+	The UNASSIGNED_ASSIGNEE sentinel stands for "assignee user is not set". On its
+	own it becomes an "is not set" filter; next to real users, frappe's `in` filter
+	treats a blank value as matching null/empty columns, so both halves are kept.
+	"""
 	assignees = _parse_lane_filter(assignee)
-	if assignees:
+	if not assignees:
+		return filters
+	if UNASSIGNED_ASSIGNEE in assignees:
+		users = [a for a in assignees if a != UNASSIGNED_ASSIGNEE]
+		filters["assignee_user"] = ["in", users + [""]] if users else ["is", "not set"]
+	else:
 		filters["assignee_user"] = ["in", assignees]
 	return filters
 
